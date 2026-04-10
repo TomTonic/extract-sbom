@@ -169,6 +169,10 @@ add one or more optional provenance references such as
 `sbom-sentry:evidence-path` for the specific internal files or archive members
 that support the identification.
 
+Such optional evidence references are required only where sbom-sentry itself can
+deterministically name the supporting internal file or archive member. Generic
+package inferences without a defensible 1:1 evidence pointer may omit them.
+
 This model ensures:
 - Every component has a stable, defensible pointer back into the original delivery
 - File and container components point to the exact physical artifact in question
@@ -246,6 +250,10 @@ the final SBOM and audit report. The affected subtree is then represented as
 incomplete or security-blocked, and the process exits with a non-success status.
 The audit report must always document the exact offending path or archive member
 that caused the block.
+
+Normative finalization rule: once input validation has succeeded and the root
+processing state has been initialized, any later hard security event must not by
+itself suppress final SBOM or report generation.
 
 ### 6.4 Explicit Unsafe Override Mode
 If the preferred technical isolation mechanism is unavailable, the operator may explicitly opt into
@@ -370,6 +378,8 @@ sbom-sentry is complete when:
   possible
 - Hard security findings still produce a final SBOM and report whenever overall
   orchestration can continue, with affected subtrees marked incomplete
+- Once root processing state exists, later hard security findings no longer
+  suppress final output generation
 - Limits and policies are enforced and documented
 - Native Linux execution is fully supported
 - Results are reproducible and defensible
