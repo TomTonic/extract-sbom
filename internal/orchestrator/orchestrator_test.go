@@ -314,6 +314,74 @@ func TestRunWithDeniedSandboxReportsToolMissing(t *testing.T) {
 	}
 }
 
+// TestRunWithMissingExternalToolExitsPartial verifies that a delivery requiring
+// 7zz does not end in success when the tool is unavailable.
+func TestRunWithMissingExternalToolExitsPartial(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "payload.cab")
+	if err := os.WriteFile(inputPath, []byte{'M', 'S', 'C', 'F', 0, 0, 0, 0}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", "")
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.ReportMode = config.ReportHuman
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode != ExitPartial {
+		t.Fatalf("ExitCode = %d, want %d", result.ExitCode, ExitPartial)
+	}
+	if result.ReportPath == "" {
+		t.Fatal("ReportPath is empty for tool-missing run")
+	}
+}
+
+// TestRunWithExternalToolFailureExitsPartial verifies that a non-zero 7zz run
+// produces an incomplete result rather than a false success.
+func TestRunWithExternalToolFailureExitsPartial(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	sevenZipPath := filepath.Join(binDir, "7zz")
+	sevenZipScript := []byte("#!/bin/sh\nexit 42\n")
+	if err := os.WriteFile(sevenZipPath, sevenZipScript, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G302 -- test fixture must be executable to simulate 7zz at runtime.
+	if err := os.Chmod(sevenZipPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	inputPath := filepath.Join(dir, "payload.cab")
+	if err := os.WriteFile(inputPath, []byte{'M', 'S', 'C', 'F', 0, 0, 0, 0}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.ReportMode = config.ReportHuman
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode != ExitPartial {
+		t.Fatalf("ExitCode = %d, want %d", result.ExitCode, ExitPartial)
+	}
+	if result.ReportPath == "" {
+		t.Fatal("ReportPath is empty for external-tool failure run")
+	}
+}
+
 // TestRunExitCodeOnHardSecurityIsNonZero verifies that when a hard security
 // block occurs in strict policy mode, the exit code is ExitHardSecurity.
 func TestRunExitCodeOnHardSecurityIsNonZero(t *testing.T) {
