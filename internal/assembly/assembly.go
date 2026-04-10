@@ -17,13 +17,11 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
-
-// ToolVersion is the extract-sbom version string, set at build time.
-var ToolVersion = "dev"
 
 // Assemble builds the final, unified CycloneDX BOM from the extraction tree
 // and per-node scan results. It creates container-as-module components,
@@ -37,6 +35,8 @@ var ToolVersion = "dev"
 //
 // Returns the consolidated CycloneDX BOM or an error if assembly fails.
 func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cdx.BOM, error) {
+	generatorInfo := buildinfo.Read()
+
 	bom := cdx.NewBOM()
 	bom.BOMFormat = "CycloneDX"
 	bom.SpecVersion = cdx.SpecVersion1_6
@@ -55,7 +55,13 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 				{
 					Type:    cdx.ComponentTypeApplication,
 					Name:    "extract-sbom",
-					Version: ToolVersion,
+					Version: generatorInfo.Version,
+					Properties: &[]cdx.Property{
+						{Name: "extract-sbom:build", Value: generatorInfo.String()},
+						{Name: "extract-sbom:vcs-revision", Value: generatorInfo.Revision},
+						{Name: "extract-sbom:vcs-time", Value: generatorInfo.Time},
+						{Name: "extract-sbom:vcs-modified", Value: fmt.Sprintf("%t", generatorInfo.Modified)},
+					},
 				},
 				{
 					Type:    cdx.ComponentTypeApplication,
@@ -94,6 +100,8 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	rootProps := []cdx.Property{
 		{Name: "extract-sbom:delivery-path", Value: tree.Path},
 		{Name: "extract-sbom:interpret-mode", Value: cfg.InterpretMode.String()},
+		{Name: "extract-sbom:generator-version", Value: generatorInfo.Version},
+		{Name: "extract-sbom:generator-build", Value: generatorInfo.String()},
 	}
 
 	if cfg.RootMetadata.DeliveryDate != "" {

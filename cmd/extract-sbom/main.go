@@ -27,12 +27,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/orchestrator"
 )
-
-// scriptVersion is set at build time via -ldflags.
-var scriptVersion = "dev"
 
 func main() {
 	if err := rootCmd().Execute(); err != nil {
@@ -41,6 +39,8 @@ func main() {
 }
 
 func rootCmd() *cobra.Command {
+	bi := buildinfo.Read()
+
 	var (
 		configPath string
 		outputDir  string
@@ -80,13 +80,15 @@ Configuration can be set via:
   - Environment variables (EXTRACT_SBOM_<FLAG_NAME>)
   - Configuration file (YAML format)
   - Built-in defaults (lowest precedence)`,
-		Version: scriptVersion,
+		Version: bi.Version,
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd, args)
 			if err != nil {
 				return err
 			}
+
+			fmt.Fprintf(os.Stderr, "Generator: extract-sbom %s\n", bi.String())
 
 			// Print unsafe warning.
 			if cfg.Unsafe {

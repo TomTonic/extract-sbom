@@ -11,6 +11,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/identify"
@@ -80,6 +81,69 @@ func TestAssembleProducesValidBOM(t *testing.T) {
 	// Verify hash was computed.
 	if bom.Metadata.Component.Hashes == nil || len(*bom.Metadata.Component.Hashes) == 0 {
 		t.Error("root component has no hashes")
+	}
+}
+
+// TestAssembleIncludesGeneratorVersionInMetadata verifies that the
+// extract-sbom tool entry in metadata.tools reflects release build version
+// metadata and that root properties include the generator version.
+func TestAssembleIncludesGeneratorVersionInMetadata(t *testing.T) {
+	old := buildinfo.ReleaseVersion
+	buildinfo.ReleaseVersion = "v2.3.4"
+	t.Cleanup(func() { buildinfo.ReleaseVersion = old })
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK fake zip content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+
+	tree := &extract.ExtractionNode{
+		Path:         "delivery.zip",
+		OriginalPath: inputPath,
+		Status:       extract.StatusExtracted,
+		Format:       identify.FormatInfo{Format: identify.ZIP},
+	}
+
+	bom, err := Assemble(tree, nil, cfg)
+	if err != nil {
+		t.Fatalf("Assemble error: %v", err)
+	}
+
+	if bom.Metadata == nil || bom.Metadata.Tools == nil || bom.Metadata.Tools.Components == nil {
+		t.Fatal("metadata tools are missing")
+	}
+
+	var foundExtractSBOM bool
+	for _, comp := range *bom.Metadata.Tools.Components {
+		if comp.Name != "extract-sbom" {
+			continue
+		}
+		foundExtractSBOM = true
+		if comp.Version != "v2.3.4" {
+			t.Fatalf("extract-sbom tool version = %q, want %q", comp.Version, "v2.3.4")
+		}
+	}
+	if !foundExtractSBOM {
+		t.Fatal("extract-sbom tool metadata component not found")
+	}
+
+	if bom.Metadata.Component == nil || bom.Metadata.Component.Properties == nil {
+		t.Fatal("root component properties are missing")
+	}
+
+	var foundGeneratorVersion bool
+	for _, p := range *bom.Metadata.Component.Properties {
+		if p.Name == "extract-sbom:generator-version" && p.Value == "v2.3.4" {
+			foundGeneratorVersion = true
+			break
+		}
+	}
+	if !foundGeneratorVersion {
+		t.Fatal("extract-sbom:generator-version property missing or incorrect")
 	}
 }
 

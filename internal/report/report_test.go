@@ -15,6 +15,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/identify"
@@ -30,6 +31,12 @@ func makeTestReportData() ReportData {
 			Size:     1024,
 			SHA256:   "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 			SHA512:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		Generator: buildinfo.Info{
+			Version:  "v1.2.3",
+			Revision: "0123456789abcdef",
+			Time:     "2026-04-11T12:34:56Z",
+			Modified: true,
 		},
 		Config: config.DefaultConfig(),
 		Tree: &extract.ExtractionNode{
@@ -47,6 +54,24 @@ func makeTestReportData() ReportData {
 		StartTime: time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
 		EndTime:   time.Date(2025, 1, 15, 10, 0, 5, 0, time.UTC),
 		SBOMPath:  "/output/test.cdx.json",
+	}
+}
+
+// TestGenerateHumanIncludesGeneratorBuildInfo verifies that build metadata
+// for the generator is visible in the human-readable report.
+func TestGenerateHumanIncludesGeneratorBuildInfo(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "| Generator | v1.2.3 rev 0123456789ab 2026-04-11T12:34:56Z dirty |") {
+		t.Fatal("report does not contain generator build info")
 	}
 }
 
@@ -486,6 +511,14 @@ func TestGenerateMachineProducesValidJSON(t *testing.T) {
 
 	if report["extraction"] == nil {
 		t.Error("missing 'extraction' field in JSON report")
+	}
+
+	generator, ok := report["generator"].(map[string]interface{})
+	if !ok {
+		t.Fatal("missing or invalid 'generator' field in JSON report")
+	}
+	if generator["version"] != "v1.2.3" {
+		t.Fatalf("generator.version = %v, want %q", generator["version"], "v1.2.3")
 	}
 }
 
