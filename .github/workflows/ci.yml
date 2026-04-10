@@ -38,6 +38,18 @@ jobs:
       - name: Show coverage
         run: go tool cover -func=coverage.out
 
+      - name: Enforce coverage threshold
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/{gsub(/%/,""); print $3}')
+          echo "Total coverage: ${total}%"
+          awk -v t="$total" 'BEGIN {
+            if (t+0 < 60) {
+              printf "FAIL: coverage %.1f%% is below the 60%% minimum threshold\n", t+0
+              exit 1
+            }
+            printf "PASS: coverage %.1f%% meets threshold (>= 60%%)\n", t+0
+          }'
+
   lint:
     runs-on: ubuntu-latest
     steps:
