@@ -58,6 +58,15 @@ type Result struct {
 // Returns a Result containing the exit code, output paths, and any fatal error.
 func Run(ctx context.Context, cfg config.Config) Result {
 	startTime := time.Now()
+	issues := make([]report.ProcessingIssue, 0)
+	addIssue := func(stage string, err error) {
+		if err == nil {
+			return
+		}
+		issues = append(issues, report.ProcessingIssue{Stage: stage, Message: err.Error()})
+	}
+
+	var fatalErr error
 
 	// Step 1: Validate configuration.
 	if err := cfg.Validate(); err != nil {
@@ -71,7 +80,8 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	}
 
 	// Step 3: Resolve sandbox.
-	sb := sandbox.Resolve(cfg)
+	sb, resolveErr := sandbox.Resolve(cfg)
+	addIssue("sandbox-resolve", resolveErr)
 	sandboxInfo := report.SandboxSummary{
 		UnsafeOvr: cfg.Unsafe,
 		Name:      sb.Name(),
@@ -83,6 +93,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	tree, extractErr := extract.Extract(ctx, cfg.InputPath, cfg, sb)
 	if extractErr != nil {
+		addIssue("extract", extractErr)
 		// Record the policy decision.
 		decision := policyEngine.Evaluate(policy.Violation{
 			Type:     "extraction",
@@ -100,6 +111,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	if tree != nil {
 		scans, err = scan.ScanAll(ctx, tree, cfg)
 		if err != nil {
+			addIssue("scan", err)
 			// Non-fatal: proceed with whatever we have.
 			policyEngine.Evaluate(policy.Violation{
 				Type:     "scan",
@@ -114,6 +126,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	if tree != nil {
 		bom, asmErr := assembly.Assemble(tree, scans, cfg)
 		if asmErr != nil {
+			addIssue("assembly", asmErr)
 			policyEngine.Evaluate(policy.Violation{
 				Type:     "assembly",
 				NodePath: "root",
@@ -122,9 +135,19 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		} else {
 			// Write SBOM.
 			inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
-			sbomPath = filepath.Join(cfg.OutputDir, inputBase+".cdx.json")
+			sbomCandidate := filepath.Join(cfg.OutputDir, inputBase+".cdx.json")
+			sbomPath = sbomCandidate
 			if writeErr := assembly.WriteSBOM(bom, sbomPath); writeErr != nil {
-				return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("write SBOM: %w", writeErr)}
+				addIssue("write-sbom", writeErr)
+				policyEngine.Evaluate(policy.Violation{
+					Type:     "write-sbom",
+					NodePath: "root",
+					Error:    writeErr,
+				})
+				sbomPath = ""
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("write SBOM: %w", writeErr)
+				}
 			}
 		}
 	}
@@ -132,15 +155,16 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	// Step 7: Generate report.
 	endTime := time.Now()
 	reportData := report.ReportData{
-		Input:           inputSummary,
-		Config:          cfg,
-		Tree:            tree,
-		Scans:           scans,
-		PolicyDecisions: policyEngine.Decisions(),
-		SandboxInfo:     sandboxInfo,
-		StartTime:       startTime,
-		EndTime:         endTime,
-		SBOMPath:        sbomPath,
+		Input:            inputSummary,
+		Config:           cfg,
+		Tree:             tree,
+		Scans:            scans,
+		PolicyDecisions:  policyEngine.Decisions(),
+		SandboxInfo:      sandboxInfo,
+		ProcessingIssues: issues,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		SBOMPath:         sbomPath,
 	}
 
 	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
@@ -148,17 +172,28 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	switch cfg.ReportMode {
 	case config.ReportHuman, config.ReportBoth:
-		reportPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
-		f, ferr := os.Create(reportPath)
+		humanPath := filepath.Join(cfg.OutputDir, inputBase+".report.md")
+		f, ferr := os.Create(humanPath)
 		if ferr != nil {
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("create report: %w", ferr)}
-		}
-		if werr := report.GenerateHuman(reportData, cfg.Language, f); werr != nil {
-			_ = f.Close()
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("write report: %w", werr)}
-		}
-		if cerr := f.Close(); cerr != nil {
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("close report: %w", cerr)}
+			addIssue("create-report-human", ferr)
+			if fatalErr == nil {
+				fatalErr = fmt.Errorf("create report: %w", ferr)
+			}
+		} else {
+			if werr := report.GenerateHuman(reportData, cfg.Language, f); werr != nil {
+				_ = f.Close()
+				addIssue("write-report-human", werr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("write report: %w", werr)
+				}
+			} else if cerr := f.Close(); cerr != nil {
+				addIssue("close-report-human", cerr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("close report: %w", cerr)
+				}
+			} else {
+				reportPath = humanPath
+			}
 		}
 	}
 
@@ -167,17 +202,25 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		jsonPath := filepath.Join(cfg.OutputDir, inputBase+".report.json")
 		f, ferr := os.Create(jsonPath)
 		if ferr != nil {
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("create JSON report: %w", ferr)}
-		}
-		if werr := report.GenerateMachine(reportData, f); werr != nil {
-			_ = f.Close()
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("write JSON report: %w", werr)}
-		}
-		if cerr := f.Close(); cerr != nil {
-			return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("close JSON report: %w", cerr)}
-		}
-		if reportPath == "" {
-			reportPath = jsonPath
+			addIssue("create-report-machine", ferr)
+			if fatalErr == nil {
+				fatalErr = fmt.Errorf("create JSON report: %w", ferr)
+			}
+		} else {
+			if werr := report.GenerateMachine(reportData, f); werr != nil {
+				_ = f.Close()
+				addIssue("write-report-machine", werr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("write JSON report: %w", werr)
+				}
+			} else if cerr := f.Close(); cerr != nil {
+				addIssue("close-report-machine", cerr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("close JSON report: %w", cerr)
+				}
+			} else if reportPath == "" {
+				reportPath = jsonPath
+			}
 		}
 	}
 
@@ -193,10 +236,14 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	} else if policyEngine.HasSkip() || policyEngine.HasAbort() {
 		exitCode = ExitPartial
 	}
+	if fatalErr != nil {
+		exitCode = ExitHardSecurity
+	}
 
 	return Result{
 		ExitCode:   exitCode,
 		SBOMPath:   sbomPath,
 		ReportPath: reportPath,
+		Error:      fatalErr,
 	}
 }

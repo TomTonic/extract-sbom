@@ -99,7 +99,10 @@ func TestResolveReturnsPassthroughWhenUnsafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Unsafe = true
 
-	sb := Resolve(cfg)
+	sb, err := Resolve(cfg)
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
 
 	if sb.Name() != "passthrough" {
 		t.Errorf("Resolve returned %q, want passthrough", sb.Name())
@@ -118,7 +121,10 @@ func TestResolveReturnsDeniedWhenNotUnsafeAndNoBwrap(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Unsafe = false
 
-	sb := Resolve(cfg)
+	sb, err := Resolve(cfg)
+	if err == nil {
+		t.Fatal("expected Resolve to return error when bwrap is unavailable and --unsafe=false")
+	}
 	if sb.Name() != "denied" {
 		t.Errorf("Resolve returned %q, want denied", sb.Name())
 	}
@@ -127,7 +133,7 @@ func TestResolveReturnsDeniedWhenNotUnsafeAndNoBwrap(t *testing.T) {
 	}
 
 	// Verify that Run returns an error.
-	err := sb.Run(context.Background(), "7zz", nil, "/tmp/input", "/tmp/output")
+	err = sb.Run(context.Background(), "7zz", nil, "/tmp/input", "/tmp/output")
 	if err == nil {
 		t.Error("DeniedSandbox.Run should always return an error")
 	}

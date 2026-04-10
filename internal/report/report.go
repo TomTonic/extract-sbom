@@ -37,19 +37,27 @@ type SandboxSummary struct {
 	UnsafeOvr bool // whether --unsafe was used
 }
 
+// ProcessingIssue captures a non-nil error encountered in a pipeline stage.
+// The orchestrator collects these so reports document failures deterministically.
+type ProcessingIssue struct {
+	Stage   string `json:"stage"`
+	Message string `json:"message"`
+}
+
 // ReportData holds all information needed to generate the audit report.
 // It is a read-only snapshot of the processing state taken after all
 // extraction, scanning, and assembly is complete.
 type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
-	Input           InputSummary
-	Config          config.Config
-	Tree            *extract.ExtractionNode
-	Scans           []scan.ScanResult
-	PolicyDecisions []policy.Decision
-	SandboxInfo     SandboxSummary
-	StartTime       time.Time
-	EndTime         time.Time
-	SBOMPath        string
+	Input            InputSummary
+	Config           config.Config
+	Tree             *extract.ExtractionNode
+	Scans            []scan.ScanResult
+	PolicyDecisions  []policy.Decision
+	SandboxInfo      SandboxSummary
+	ProcessingIssues []ProcessingIssue
+	StartTime        time.Time
+	EndTime          time.Time
+	SBOMPath         string
 }
 
 // ComputeInputSummary computes the file hashes and metadata for the input file.
@@ -179,6 +187,14 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	duration := data.EndTime.Sub(data.StartTime)
 	fmt.Fprintf(w, "%s: %s\n\n", t.processingTime, duration.Round(time.Millisecond))
 
+	if len(data.ProcessingIssues) > 0 {
+		fmt.Fprintf(w, "## %s\n\n", t.processingIssuesSection)
+		for _, issue := range data.ProcessingIssues {
+			fmt.Fprintf(w, "- **%s**: %s\n", issue.Stage, issue.Message)
+		}
+		fmt.Fprintln(w)
+	}
+
 	// Residual risk.
 	fmt.Fprintf(w, "## %s\n\n", t.residualRiskSection)
 	writeResidualRisk(w, data, t)
@@ -227,6 +243,7 @@ func GenerateMachine(data ReportData, w io.Writer) error {
 		Extraction: buildMachineTree(data.Tree),
 		Scans:      buildMachineScans(data.Scans),
 		Decisions:  buildMachineDecisions(data.PolicyDecisions),
+		Issues:     data.ProcessingIssues,
 		StartTime:  data.StartTime.UTC().Format(time.RFC3339),
 		EndTime:    data.EndTime.UTC().Format(time.RFC3339),
 		Duration:   data.EndTime.Sub(data.StartTime).String(),
@@ -248,6 +265,7 @@ type machineReport struct {
 	Extraction    *machineNode        `json:"extraction"`
 	Scans         []machineScan       `json:"scans"`
 	Decisions     []machineDecision   `json:"decisions"`
+	Issues        []ProcessingIssue   `json:"issues,omitempty"`
 	StartTime     string              `json:"startTime"`
 	EndTime       string              `json:"endTime"`
 	Duration      string              `json:"duration"`
@@ -366,132 +384,135 @@ func buildMachineDecisions(decisions []policy.Decision) []machineDecision {
 // --- Translation support ---
 
 type translations struct {
-	title               string
-	inputSection        string
-	configSection       string
-	rootMetadataSection string
-	sandboxSection      string
-	extractionSection   string
-	scanSection         string
-	policySection       string
-	summarySection      string
-	residualRiskSection string
-	field               string
-	value               string
-	setting             string
-	filename            string
-	filesize            string
-	policyMode          string
-	interpretMode       string
-	language            string
-	maxDepth            string
-	maxFiles            string
-	maxTotalSize        string
-	maxEntrySize        string
-	maxRatio            string
-	timeout             string
-	sandboxName         string
-	sandboxAvail        string
-	unsafeWarning       string
-	unsafeActive        string
-	processingTime      string
-	scanError           string
-	componentsFound     string
-	noComponents        string
-	deliveryPath        string
-	status              string
-	tool                string
-	duration            string
-	suppliedBy          string
-	derived             string
-	residualRiskText    string
+	title                   string
+	inputSection            string
+	configSection           string
+	rootMetadataSection     string
+	sandboxSection          string
+	extractionSection       string
+	scanSection             string
+	policySection           string
+	summarySection          string
+	residualRiskSection     string
+	processingIssuesSection string
+	field                   string
+	value                   string
+	setting                 string
+	filename                string
+	filesize                string
+	policyMode              string
+	interpretMode           string
+	language                string
+	maxDepth                string
+	maxFiles                string
+	maxTotalSize            string
+	maxEntrySize            string
+	maxRatio                string
+	timeout                 string
+	sandboxName             string
+	sandboxAvail            string
+	unsafeWarning           string
+	unsafeActive            string
+	processingTime          string
+	scanError               string
+	componentsFound         string
+	noComponents            string
+	deliveryPath            string
+	status                  string
+	tool                    string
+	duration                string
+	suppliedBy              string
+	derived                 string
+	residualRiskText        string
 }
 
 func getTranslations(lang string) translations {
 	switch lang {
 	case "de":
 		return translations{
-			title:               "sbom-sentry Prüfbericht",
-			inputSection:        "Eingabedatei",
-			configSection:       "Konfiguration",
-			rootMetadataSection: "SBOM Stammdaten",
-			sandboxSection:      "Sandbox-Konfiguration",
-			extractionSection:   "Extraktionsprotokoll",
-			scanSection:         "Scan-Ergebnisse",
-			policySection:       "Richtlinienentscheidungen",
-			summarySection:      "Zusammenfassung",
-			residualRiskSection: "Restrisiko und Einschränkungen",
-			field:               "Feld",
-			value:               "Wert",
-			setting:             "Einstellung",
-			filename:            "Dateiname",
-			filesize:            "Dateigröße",
-			policyMode:          "Richtlinienmodus",
-			interpretMode:       "Interpretationsmodus",
-			language:            "Sprache",
-			maxDepth:            "Maximale Tiefe",
-			maxFiles:            "Maximale Dateien",
-			maxTotalSize:        "Maximale Gesamtgröße",
-			maxEntrySize:        "Maximale Eintragsgröße",
-			maxRatio:            "Maximales Verhältnis",
-			timeout:             "Zeitlimit",
-			sandboxName:         "Sandbox",
-			sandboxAvail:        "Verfügbar",
-			unsafeWarning:       "WARNUNG",
-			unsafeActive:        "Unsicherer Modus aktiv — keine Sandbox-Isolation",
-			processingTime:      "Verarbeitungszeit",
-			scanError:           "Fehler:",
-			componentsFound:     "Komponenten gefunden",
-			noComponents:        "keine Komponenten gefunden",
-			deliveryPath:        "Lieferpfad",
-			status:              "Status",
-			tool:                "Werkzeug",
-			duration:            "Dauer",
-			suppliedBy:          "Durch Benutzer angegeben",
-			derived:             "Automatisch abgeleitet",
-			residualRiskText:    "Die folgenden Einschränkungen können die Vollständigkeit der Ergebnisse beeinflussen:",
+			title:                   "sbom-sentry Prüfbericht",
+			inputSection:            "Eingabedatei",
+			configSection:           "Konfiguration",
+			rootMetadataSection:     "SBOM Stammdaten",
+			sandboxSection:          "Sandbox-Konfiguration",
+			extractionSection:       "Extraktionsprotokoll",
+			scanSection:             "Scan-Ergebnisse",
+			policySection:           "Richtlinienentscheidungen",
+			summarySection:          "Zusammenfassung",
+			residualRiskSection:     "Restrisiko und Einschränkungen",
+			processingIssuesSection: "Verarbeitungsfehler",
+			field:                   "Feld",
+			value:                   "Wert",
+			setting:                 "Einstellung",
+			filename:                "Dateiname",
+			filesize:                "Dateigröße",
+			policyMode:              "Richtlinienmodus",
+			interpretMode:           "Interpretationsmodus",
+			language:                "Sprache",
+			maxDepth:                "Maximale Tiefe",
+			maxFiles:                "Maximale Dateien",
+			maxTotalSize:            "Maximale Gesamtgröße",
+			maxEntrySize:            "Maximale Eintragsgröße",
+			maxRatio:                "Maximales Verhältnis",
+			timeout:                 "Zeitlimit",
+			sandboxName:             "Sandbox",
+			sandboxAvail:            "Verfügbar",
+			unsafeWarning:           "WARNUNG",
+			unsafeActive:            "Unsicherer Modus aktiv — keine Sandbox-Isolation",
+			processingTime:          "Verarbeitungszeit",
+			scanError:               "Fehler:",
+			componentsFound:         "Komponenten gefunden",
+			noComponents:            "keine Komponenten gefunden",
+			deliveryPath:            "Lieferpfad",
+			status:                  "Status",
+			tool:                    "Werkzeug",
+			duration:                "Dauer",
+			suppliedBy:              "Durch Benutzer angegeben",
+			derived:                 "Automatisch abgeleitet",
+			residualRiskText:        "Die folgenden Einschränkungen können die Vollständigkeit der Ergebnisse beeinflussen:",
 		}
 	default:
 		return translations{
-			title:               "sbom-sentry Audit Report",
-			inputSection:        "Input File",
-			configSection:       "Configuration",
-			rootMetadataSection: "Root SBOM Metadata",
-			sandboxSection:      "Sandbox Configuration",
-			extractionSection:   "Extraction Log",
-			scanSection:         "Scan Results",
-			policySection:       "Policy Decisions",
-			summarySection:      "Summary",
-			residualRiskSection: "Residual Risk and Limitations",
-			field:               "Field",
-			value:               "Value",
-			setting:             "Setting",
-			filename:            "Filename",
-			filesize:            "File size",
-			policyMode:          "Policy mode",
-			interpretMode:       "Interpretation mode",
-			language:            "Language",
-			maxDepth:            "Max depth",
-			maxFiles:            "Max files",
-			maxTotalSize:        "Max total size",
-			maxEntrySize:        "Max entry size",
-			maxRatio:            "Max ratio",
-			timeout:             "Timeout",
-			sandboxName:         "Sandbox",
-			sandboxAvail:        "Available",
-			unsafeWarning:       "WARNING",
-			unsafeActive:        "Unsafe mode active — no sandbox isolation",
-			processingTime:      "Processing time",
-			scanError:           "Error:",
-			componentsFound:     "components found",
-			noComponents:        "no components found",
-			deliveryPath:        "Delivery path",
-			status:              "Status",
-			tool:                "Tool",
-			duration:            "Duration",
-			suppliedBy:          "User-supplied",
-			derived:             "Auto-derived",
-			residualRiskText:    "The following limitations may affect the completeness of the results:",
+			title:                   "sbom-sentry Audit Report",
+			inputSection:            "Input File",
+			configSection:           "Configuration",
+			rootMetadataSection:     "Root SBOM Metadata",
+			sandboxSection:          "Sandbox Configuration",
+			extractionSection:       "Extraction Log",
+			scanSection:             "Scan Results",
+			policySection:           "Policy Decisions",
+			summarySection:          "Summary",
+			residualRiskSection:     "Residual Risk and Limitations",
+			processingIssuesSection: "Processing Errors",
+			field:                   "Field",
+			value:                   "Value",
+			setting:                 "Setting",
+			filename:                "Filename",
+			filesize:                "File size",
+			policyMode:              "Policy mode",
+			interpretMode:           "Interpretation mode",
+			language:                "Language",
+			maxDepth:                "Max depth",
+			maxFiles:                "Max files",
+			maxTotalSize:            "Max total size",
+			maxEntrySize:            "Max entry size",
+			maxRatio:                "Max ratio",
+			timeout:                 "Timeout",
+			sandboxName:             "Sandbox",
+			sandboxAvail:            "Available",
+			unsafeWarning:           "WARNING",
+			unsafeActive:            "Unsafe mode active — no sandbox isolation",
+			processingTime:          "Processing time",
+			scanError:               "Error:",
+			componentsFound:         "components found",
+			noComponents:            "no components found",
+			deliveryPath:            "Delivery path",
+			status:                  "Status",
+			tool:                    "Tool",
+			duration:                "Duration",
+			suppliedBy:              "User-supplied",
+			derived:                 "Auto-derived",
+			residualRiskText:        "The following limitations may affect the completeness of the results:",
 		}
 	}
 }

@@ -231,6 +231,31 @@ func TestGenerateHumanWithPolicyDecisions(t *testing.T) {
 	}
 }
 
+// TestGenerateHumanWithProcessingIssues verifies that processing-stage errors
+// are documented in a dedicated section for operator auditability.
+func TestGenerateHumanWithProcessingIssues(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.ProcessingIssues = []ProcessingIssue{{
+		Stage:   "assembly",
+		Message: "failed to merge components",
+	}}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "## Processing Errors") {
+		t.Fatal("report does not contain Processing Errors section")
+	}
+	if !strings.Contains(output, "**assembly**: failed to merge components") {
+		t.Fatal("report does not contain processing issue details")
+	}
+}
+
 // TestGenerateHumanWithScanResults verifies that scan results
 // are displayed in the report.
 func TestGenerateHumanWithScanResults(t *testing.T) {
@@ -257,6 +282,40 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 
 	if !strings.Contains(output, "2 components found") {
 		t.Error("report does not show component count")
+	}
+}
+
+// TestGenerateMachineIncludesProcessingIssues verifies that machine output
+// includes processing issues for downstream automation.
+func TestGenerateMachineIncludesProcessingIssues(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.ProcessingIssues = []ProcessingIssue{{
+		Stage:   "scan",
+		Message: "syft catalog error",
+	}}
+
+	var buf bytes.Buffer
+	if err := GenerateMachine(data, &buf); err != nil {
+		t.Fatalf("GenerateMachine error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("invalid machine report JSON: %v", err)
+	}
+
+	issues, ok := parsed["issues"].([]interface{})
+	if !ok || len(issues) != 1 {
+		t.Fatalf("issues missing or wrong size: %#v", parsed["issues"])
+	}
+	issue, ok := issues[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("issue entry has wrong type: %#v", issues[0])
+	}
+	if issue["stage"] != "scan" || issue["message"] != "syft catalog error" {
+		t.Fatalf("unexpected issue payload: %#v", issue)
 	}
 }
 

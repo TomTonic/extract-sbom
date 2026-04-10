@@ -250,6 +250,7 @@ main()
 **Key flags:**
 - `--input` / positional arg: path to delivery file
 - `--output-dir`: target directory for SBOM + report
+- `--work-dir`: base directory for temporary extraction work (default: system temp dir)
 - `--format`: SBOM output format (`cyclonedx-json` default)
 - `--policy`: `strict` (default) | `partial`
 - `--mode`: `installer-semantic` (default) | `physical`
@@ -281,6 +282,7 @@ main()
 type Config struct {
     InputPath       string
     OutputDir       string
+  WorkDir         string        // base directory for temporary extraction work
     SBOMFormat      string        // "cyclonedx-json"
     PolicyMode      PolicyMode    // Strict | Partial
     InterpretMode   InterpretMode // Physical | InstallerSemantic
@@ -314,7 +316,8 @@ func (c *Config) Validate() error
 
 **Design decisions:**
 - All limits have tested defaults matching DESIGN.md §6.1.
-- `Validate()` enforces invariants (e.g. input file must exist, output dir writable).
+- `Validate()` enforces invariants (e.g. input file must exist, output dir writable,
+  work dir must exist and be writable).
 - `RootMetadata.Validate()` normalizes duplicate property keys, validates the
   delivery-date format, and rejects malformed `key=value` pairs.
 - If `RootMetadata.Name` is empty, assembly derives a deterministic fallback
@@ -434,7 +437,10 @@ bwrap \
 - `--die-with-parent` ensures cleanup if the parent (sbom-sentry) crashes.
 - `--new-session` mitigates `TIOCSTI` injection.
 - `Resolve()` checks `Available()` on the bwrap sandbox; if unavailable and
-  `cfg.Unsafe == true`, returns passthrough; otherwise returns an error.
+  `cfg.Unsafe == true`, returns passthrough.
+- If unavailable and `cfg.Unsafe == false`, `Resolve()` returns
+  `DeniedSandbox` plus a non-nil error so the condition is explicit and
+  deterministic in reports.
 - The same sandbox interface is used for both `7zz` and `unshield` invocations.
 - Every invocation is logged with the sandbox name for the audit trail.
 
@@ -669,6 +675,7 @@ type ReportData struct {
     Scans            []scan.ScanResult
     PolicyDecisions  []policy.Decision
     SandboxInfo      SandboxSummary
+  ProcessingIssues []ProcessingIssue
     StartTime        time.Time
     EndTime          time.Time
 }
@@ -705,6 +712,8 @@ func GenerateMachine(data ReportData, w io.Writer) error
   localization framework. Two languages: EN (default), DE.
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
+- Processing-stage errors are captured as structured `ProcessingIssue` entries
+  and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.
 
 ---
@@ -746,14 +755,21 @@ func (e *Engine) Decisions() []Decision
 
 **Interface:**
 ```go
-func Run(ctx context.Context, cfg config.Config) error
+type Result struct {
+  ExitCode   ExitCode
+  SBOMPath   string
+  ReportPath string
+  Error      error
+}
+
+func Run(ctx context.Context, cfg config.Config) Result
 ```
 
 **Pipeline:**
 ```
 1. cfg.Validate()
 2. Compute input file hash (SHA-256, SHA-512)
-3. sandbox.Resolve(cfg) → Sandbox
+3. sandbox.Resolve(cfg) → (Sandbox, optional error)
 4. extract.Extract(ctx, cfg.InputPath, cfg, sandbox) → ExtractionTree
 5. scan.ScanAll(ctx, tree, cfg) → []ScanResult
 6. assembly.Assemble(tree, scans, cfg) → *cyclonedx.BOM
@@ -766,8 +782,9 @@ func Run(ctx context.Context, cfg config.Config) error
 **Design decisions:**
 - The orchestrator owns the lifecycle of temporary directories.
 - Exit codes are deterministic and machine-parseable.
-- Errors at any stage are captured in `ReportData` before the report
-  is generated, so all failures are always documented.
+- Processing-stage errors (sandbox resolution, extraction, scan, assembly,
+  output writing) are captured in `ReportData` before report generation,
+  so failures are documented when report output succeeds.
 - Once input validation has succeeded and the root extraction node exists,
   later hard security events no longer suppress final output generation.
 - The orchestrator still writes a final SBOM and audit report, marks the
