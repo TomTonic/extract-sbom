@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/config"
 )
 
 // TestValidatePathRejectsPathTraversal verifies that archive entries

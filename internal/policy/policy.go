@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/safeguard"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/safeguard"
 )
 
 // Action represents the policy response to a violation.

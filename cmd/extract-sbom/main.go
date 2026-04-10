@@ -1,17 +1,17 @@
-// Package main provides the CLI entry point for sbom-sentry.
-// sbom-sentry is a tool for standardized incoming inspection of software
+// Package main provides the CLI entry point for extract-sbom.
+// extract-sbom is a tool for standardized incoming inspection of software
 // deliveries. Given a single delivery file, it produces a consolidated
 // CycloneDX SBOM and a formal audit report.
 //
 // Configuration is resolved from (in order of precedence):
 //  1. Command-line flags
-//  2. Environment variables (SBOM_SENTRY_<FLAG_NAME>)
+//  2. Environment variables (EXTRACT_SBOM_<FLAG_NAME>)
 //  3. Configuration file (--config or auto-discovered)
 //  4. Built-in defaults
 //
 // Configuration files are YAML format and searched in:
-//   - Current directory: .sbom-sentry.yaml, .sbom-sentry.yml
-//   - Home directory: ~/.sbom-sentry.yaml
+//   - Current directory: .extract-sbom.yaml, .extract-sbom.yml
+//   - Home directory: ~/.extract-sbom.yaml
 package main
 
 import (
@@ -27,8 +27,8 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/orchestrator"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/orchestrator"
 )
 
 // scriptVersion is set at build time via -ldflags.
@@ -65,9 +65,9 @@ func rootCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "sbom-sentry [flags] <input-file>",
+		Use:   "extract-sbom [flags] <input-file>",
 		Short: "Standardized incoming inspection of software deliveries",
-		Long: `sbom-sentry inspects a software delivery file and produces:
+		Long: `extract-sbom inspects a software delivery file and produces:
   1. A consolidated CycloneDX SBOM
   2. A formal audit report
 
@@ -77,7 +77,7 @@ delivery-path traceability.
 
 Configuration can be set via:
   - Command-line flags (highest precedence)
-  - Environment variables (SBOM_SENTRY_<FLAG_NAME>)
+  - Environment variables (EXTRACT_SBOM_<FLAG_NAME>)
   - Configuration file (YAML format)
   - Built-in defaults (lowest precedence)`,
 		Version: scriptVersion,
@@ -149,7 +149,7 @@ Configuration can be set via:
 
 func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	v := viper.New()
-	v.SetConfigName(".sbom-sentry")
+	v.SetConfigName(".extract-sbom")
 	v.AddConfigPath(".")
 	if home, err := os.UserHomeDir(); err == nil {
 		v.AddConfigPath(home)
@@ -163,7 +163,7 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 		v.SetConfigFile(configPath)
 	}
 
-	v.SetEnvPrefix("SBOM_SENTRY")
+	v.SetEnvPrefix("EXTRACT_SBOM")
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
 

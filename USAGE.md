@@ -1,6 +1,6 @@
 # USAGE
 
-This guide explains sbom-sentry in scenario form: what to run, which parameters
+This guide explains extract-sbom in scenario form: what to run, which parameters
 matter, and which outputs to expect.
 
 ## Exit Codes
@@ -28,7 +28,7 @@ Command:
 
 ```bash
 mkdir -p out
-./sbom-sentry \
+./extract-sbom \
   --unsafe \
   --output-dir out \
   vendor-delivery.zip
@@ -55,7 +55,7 @@ Command:
 
 ```bash
 mkdir -p out
-./sbom-sentry \
+./extract-sbom \
   --policy strict \
   --mode installer-semantic \
   --report both \
@@ -84,7 +84,7 @@ Command:
 
 ```bash
 mkdir -p out
-./sbom-sentry \
+./extract-sbom \
   --unsafe \
   --policy partial \
   --max-depth 8 \
@@ -109,7 +109,7 @@ Command:
 
 ```bash
 mkdir -p out
-./sbom-sentry \
+./extract-sbom \
   --unsafe \
   --output-dir out \
   --root-manufacturer "Acme Corp" \
@@ -136,7 +136,7 @@ Command:
 
 ```bash
 mkdir -p out
-./sbom-sentry \
+./extract-sbom \
   --unsafe \
   --report machine \
   --output-dir out \
@@ -330,8 +330,8 @@ SBOM (`*.cdx.json`):
 
 - CycloneDX format (`bomFormat`, `specVersion`)
 - delivery traceability in component properties:
-  - `sbom-sentry:delivery-path`
-  - `sbom-sentry:extraction-status`
+  - `extract-sbom:delivery-path`
+  - `extract-sbom:extraction-status`
 
 Report (`*.report.md` / `*.report.json`):
 

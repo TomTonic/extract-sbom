@@ -1,6 +1,6 @@
 # BUILD
 
-This document describes how to build sbom-sentry from source. For installing
+This document describes how to build extract-sbom from source. For installing
 a finished release binary, see [INSTALL.md](INSTALL.md).
 
 ## Prerequisites
@@ -11,7 +11,7 @@ a finished release binary, see [INSTALL.md](INSTALL.md).
 ## Build
 
 ```bash
-go build -o sbom-sentry ./cmd/sbom-sentry
+go build -o extract-sbom ./cmd/extract-sbom
 ```
 
 The resulting binary is statically linked (CGO disabled) and has no external
@@ -20,10 +20,10 @@ Go runtime dependencies.
 ## Install via go install
 
 ```bash
-go install github.com/sbom-sentry/cmd/sbom-sentry@latest
+go install github.com/TomTonic/extract-sbom/cmd/extract-sbom@latest
 ```
 
-The binary is installed into `$(go env GOPATH)/bin/sbom-sentry`.
+The binary is installed into `$(go env GOPATH)/bin/extract-sbom`.
 
 ## GoReleaser (cross-platform release build)
 

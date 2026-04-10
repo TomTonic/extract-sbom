@@ -1,6 +1,6 @@
 // Extract module tests: Validate that archive extraction correctly unpacks
 // contents with safety guarantees. This belongs to the extraction subsystem
-// which is the core recursive unpacking engine of sbom-sentry.
+// which is the core recursive unpacking engine of extract-sbom.
 package extract
 
 import (
@@ -16,10 +16,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/internal/safeguard"
-	"github.com/sbom-sentry/internal/sandbox"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/identify"
+	"github.com/TomTonic/extract-sbom/internal/safeguard"
+	"github.com/TomTonic/extract-sbom/internal/sandbox"
 )
 
 var lookPathMu sync.Mutex

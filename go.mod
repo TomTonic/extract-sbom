@@ -1,4 +1,4 @@
-module github.com/sbom-sentry
+module github.com/TomTonic/extract-sbom
 
 go 1.26.2
 
@@ -7,6 +7,8 @@ require (
 	github.com/anchore/syft v1.42.4
 	github.com/richardlehane/mscfb v1.0.6
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
+	github.com/spf13/viper v1.21.0
 )
 
 require (
@@ -228,8 +230,6 @@ require (
 	github.com/spdx/tools-golang v0.5.7 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.21.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/sylabs/sif/v2 v2.24.0 // indirect

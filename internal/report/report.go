@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/policy"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
 // InputSummary describes the input file for the report.
@@ -431,7 +431,7 @@ func getTranslations(lang string) translations {
 	switch lang {
 	case "de":
 		return translations{
-			title:                   "sbom-sentry Prüfbericht",
+			title:                   "extract-sbom Prüfbericht",
 			inputSection:            "Eingabedatei",
 			configSection:           "Konfiguration",
 			rootMetadataSection:     "SBOM Stammdaten",
@@ -474,7 +474,7 @@ func getTranslations(lang string) translations {
 		}
 	default:
 		return translations{
-			title:                   "sbom-sentry Audit Report",
+			title:                   "extract-sbom Audit Report",
 			inputSection:            "Input File",
 			configSection:           "Configuration",
 			rootMetadataSection:     "Root SBOM Metadata",

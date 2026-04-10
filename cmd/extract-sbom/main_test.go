@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sbom-sentry/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/config"
 )
 
 // TestParseKeyValue verifies key=value parsing for root properties.
@@ -184,7 +184,7 @@ func TestLoadConfigRespectsPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configPath := filepath.Join(dir, "sbom-sentry.yaml")
+	configPath := filepath.Join(dir, "extract-sbom.yaml")
 	configContent := "output-dir: \"" + configOutputDir + "\"\n" +
 		"work-dir: \"" + configWorkDir + "\"\n" +
 		"policy: partial\n" +
@@ -200,8 +200,8 @@ func TestLoadConfigRespectsPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("SBOM_SENTRY_LANGUAGE", "en")
-	t.Setenv("SBOM_SENTRY_ROOT_VERSION", "env-version")
+	t.Setenv("EXTRACT_SBOM_LANGUAGE", "en")
+	t.Setenv("EXTRACT_SBOM_ROOT_VERSION", "env-version")
 
 	cmd := rootCmd()
 	if err := cmd.Flags().Set("config", configPath); err != nil {
