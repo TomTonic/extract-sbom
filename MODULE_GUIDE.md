@@ -185,6 +185,16 @@ extraction is unavailable:
 The OLE reader (`mscfb`) and the MSI string-pool parser are shared between
 metadata extraction (Phase 3) and full table parsing (Phase 4). See §5.8.
 
+**Implementation risk note for installer-semantic MSI support.** Parsing the MSI
+`File` table, resolving directories, and remapping internal CAB names back to
+installer target paths is the highest-risk feature in the current design. If
+this logic cannot be implemented defensibly, the fallback is:
+
+- keep physical-mode extraction as the source of truth for file payloads
+- still extract MSI container metadata in both modes
+- emit installer-semantic remapping only where reconstruction is reliable
+- document unresolved MSI path semantics explicitly in the audit report
+
 **InstallShield CABs.** InstallShield uses a proprietary cabinet format that is
 *not* compatible with Microsoft CABs. Files typically arrive as `data1.cab` +
 `data1.hdr`. Neither 7-Zip nor `cabextract` can unpack these; the tool
@@ -496,8 +506,8 @@ For each file encountered:
   are enforced continuously. Violations trigger policy behavior:
   `strict` → abort entire run, `partial` → skip subtree, continue.
 - Hard security violations block the affected subtree immediately, but the
-  orchestrator still writes a final SBOM and report whenever the processing
-  state is sufficiently complete to do so.
+  orchestrator still writes a final SBOM and report once input validation has
+  succeeded and the root extraction node has been created.
 - Every node logs tool, sandbox, timing, and outcome for the audit trail.
 - Temporary extraction directories use `os.MkdirTemp` under a
   configurable work directory and are cleaned up after processing.
@@ -603,6 +613,10 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 - `sbom-sentry:delivery-path` is the exact supplier-facing pointer to the
   physical artifact in the delivery; `sbom-sentry:evidence-path` is optional
   supporting provenance for components derived from richer internal evidence.
+- In the first implementation, `sbom-sentry:evidence-path` is limited to cases
+  where sbom-sentry itself directly knows the exact supporting artifact, such
+  as blocked archive members, direct manifest-based detections, or explicit
+  internal container members. Generic Syft-derived packages do not require it.
 - Composition completeness annotations enable downstream consumers to
   programmatically assess coverage without reading the audit report.
 - The dependency graph models containment/origin (per DESIGN.md §5.2),
@@ -720,10 +734,10 @@ func Run(ctx context.Context, cfg config.Config) error
 - Exit codes are deterministic and machine-parseable.
 - Errors at any stage are captured in `ReportData` before the report
   is generated, so all failures are always documented.
-- If a hard security event occurs after processing has already produced a
-  usable extraction tree, the orchestrator still writes a final SBOM and
-  audit report, marks the affected subtree incomplete or security-blocked,
-  and returns exit code `2`.
+- Once input validation has succeeded and the root extraction node exists,
+  later hard security events no longer suppress final output generation.
+- The orchestrator still writes a final SBOM and audit report, marks the
+  affected subtree incomplete or security-blocked, and returns exit code `2`.
 
 ---
 
@@ -800,7 +814,7 @@ hard security checks.
 
 Hard security events therefore change the final status code and subtree
 completeness, but do not suppress final output generation when the run has
-already accumulated enough state to produce a defensible SBOM and report.
+already initialized the root processing state.
 
 ### 5.4 External Binaries: 7-Zip and unshield
 
@@ -947,6 +961,11 @@ If more precise internal provenance is available, sbom-sentry additionally
 stores one or more `sbom-sentry:evidence-path` properties for the exact
 manifest, archive member, or internal file that supported the identification.
 
+For the first implementation, this is intentionally limited to provenance that
+sbom-sentry can name directly and deterministically. Generic Syft-derived
+package evidence is not reconstructed unless the underlying scan data provides
+it cleanly.
+
 The property uses forward-slash separators regardless of host OS and is
 always relative to the delivery root (the input file name). It enables
 downstream consumers to locate any SBOM component within the original
@@ -974,7 +993,8 @@ delivery without re-extracting it.
 4. `safeguard`: path validation, symlink check, ratio check
 5. `extract`: single-level extraction for ZIP/TAR via Go stdlib (`archive/zip`, `archive/tar`)
 6. `scan`: Syft library-mode integration (Syft-first: native leaves + extracted dirs)
-7. `assembly`: single-BOM passthrough (CycloneDX encoding)
+7. `assembly`: minimal unified BOM with root component, deterministic BOMRefs,
+   and baseline `sbom-sentry:delivery-path` properties for all produced components
 8. `orchestrator`: wire everything, produce SBOM output file
 9. `cmd/sbom-sentry`: cobra CLI with core flags
 10. Basic end-to-end test: ZIP → SBOM
@@ -988,7 +1008,8 @@ delivery without re-extracting it.
    composition annotations
 3. `policy`: strict/partial engine
 4. `report`: basic human-readable Markdown report (EN only)
-5. Integration tests with nested archives (ZIP-in-ZIP, TAR.GZ-in-ZIP)
+5. Extend delivery-path handling to nested container trees
+6. Integration tests with nested archives (ZIP-in-ZIP, TAR.GZ-in-ZIP)
 
 ### Phase 3 — CAB/MSI and Sandbox
 
@@ -1001,7 +1022,7 @@ delivery without re-extracting it.
   Property table directly from the original MSI → populate `ContainerMetadata`
   → CPE generation in assembly, independent of 7-Zip availability
 5. `--unsafe` flag and associated warning logic
-6. Delivery-path property (`sbom-sentry:delivery-path`) on all SBOM components
+6. Extend delivery-path handling to CAB/MSI and sandboxed extraction paths
 7. Integration tests with CAB and MSI test fixtures
 8. Test sandbox availability detection and fallback behavior
 
@@ -1013,7 +1034,8 @@ delivery without re-extracting it.
 2. `report`: machine-readable JSON schema and encoder
 3. `report`: German language support via embedded templates
 4. Installer-semantic interpretation mode: MSI table parsing via OLE reader,
-   CAB name remapping (see §1.6)
+  CAB name remapping (see §1.6); if reconstruction is not defensible,
+  fall back to physical-mode paths plus explicit audit disclosure
 5. `--report`, `--language`, `--mode` CLI flags
 6. End-to-end tests for all report/mode combinations
 
