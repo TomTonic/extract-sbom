@@ -452,7 +452,7 @@ func TestMakeBOMRefIsDeterministic(t *testing.T) {
 	}
 
 	// Should have the expected prefix.
-	if ref1[:12] != "extract-sbom:" {
+	if ref1[:13] != "extract-sbom:" {
 		t.Errorf("BOMRef doesn't start with 'extract-sbom:', got %q", ref1)
 	}
 }
