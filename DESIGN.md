@@ -99,7 +99,18 @@ Every extraction attempt must be recorded, including:
 - Extraction tool used
 - Outcome and reason
 
-### 4.3 Extraction Interpretation Modes
+### 4.3 Syft-First Principle
+Formats that Syft already understands natively (e.g. JAR, RPM, DEB, wheel,
+nupkg, apk) must be passed directly to Syft without extraction by sbom-sentry.
+sbom-sentry only extracts "dumb" container formats (ZIP, TAR, CAB, MSI) that
+Syft cannot see through.
+
+This ensures:
+- Richer metadata from Syft's format-specific catalogers
+- Correct PURL and CPE generation for ecosystem packages
+- Reduced attack surface (fewer files parsed by sbom-sentry)
+
+### 4.4 Extraction Interpretation Modes
 The system shall support at least two configurable interpretation modes:
 
 - **physical**: model only artifacts that are directly present or can be materially extracted
@@ -108,7 +119,7 @@ The system shall support at least two configurable interpretation modes:
 
 The selected mode must be included in the audit report and, where relevant, in SBOM metadata.
 
-### 4.4 Special Handling: CAB Files from Setup.exe/MSI Contexts
+### 4.5 Special Handling: CAB Files from Setup.exe/MSI Contexts
 
 Vendor deliveries frequently use setup.exe wrappers that internally unpack CAB files, sometimes in combination with MSI installers. These CAB files may exhibit name mangling or non-standard filenames due to legacy packaging tools.
 
@@ -139,7 +150,43 @@ This graph:
 - Is fully machine-readable
 - Does not require any visual (DOT/graphical) representation
 
-### 5.3 Partial and Failed Extraction
+### 5.3 Delivery Path Traceability
+Every component in the SBOM must carry a reference to its location within the
+original delivery structure. The path is expressed relative to the delivery root
+and includes all nesting levels, e.g.:
+
+    sw_delivery.zip/server/webserver.tar.gz/java/component.jar
+
+This property:
+- Enables downstream consumers to trace any SBOM component back to its
+  physical location in the original delivery
+- Is stored as a CycloneDX component property
+  (`sbom-sentry:delivery-path`)
+- Applies to both container components and leaf components discovered by Syft
+- Is deterministic and stable for a given input
+
+### 5.4 Container Metadata Enrichment
+Container formats that carry structured metadata about their contents must be
+parsed for that metadata, even in physical mode. The extracted metadata is used
+to enrich the SBOM component representing the container with accurate
+identifiers (CPE, PURL) for downstream vulnerability matching.
+
+The primary case is **MSI packages**, whose Property table contains:
+- `Manufacturer` (required) → CPE vendor
+- `ProductName` (required) → CPE product
+- `ProductVersion` (required) → CPE version
+- `UpgradeCode` (optional) → correlates related product releases
+
+These fields directly map to a CPE
+(`cpe:2.3:a:<manufacturer>:<productname>:<version>:*:*:*:*:*:*:*`) and
+potentially a generic PURL. Without this metadata, the MSI component would
+appear in the SBOM as an opaque file with only a hash — invisible to
+vulnerability scanners.
+
+This principle extends to any future container format that provides
+structured product metadata.
+
+### 5.5 Partial and Failed Extraction
 If extraction fails or is restricted:
 - The container component remains in the SBOM
 - The SBOM and report must clearly indicate the limitation
@@ -169,13 +216,21 @@ The extraction logic must robustly prevent:
 - Materialization of special files (devices, pipes)
 - Inheritance of unsafe permissions
 
-### 6.3 Explicit Unsafe Override Mode
+### 6.3 Hard Security Events
+Hard security violations — path traversal, symlink escape, special file
+materialization — are **never** overridable, regardless of any CLI flag or
+configuration. They abort the affected extraction subtree immediately and
+prevent SBOM generation for that subtree. The audit report must always
+document them.
+
+### 6.4 Explicit Unsafe Override Mode
 If the preferred technical isolation mechanism is unavailable, the operator may explicitly opt into
 an unsafe recursive extraction mode via a dedicated command-line parameter.
 
 This mode:
 - Is intended only for controlled environments and forensic fallback use
-- May relax normal isolation and completeness-oriented resource limits
+- Affects **only** the sandbox isolation requirement; hard security checks
+  (§6.3) remain fully enforced
 - Must never silently activate
 - Must be highlighted prominently in the audit output and machine-readable report metadata
 
@@ -223,8 +278,11 @@ All relevant code must be written in **Go**.
 ### 9.2 External Dependencies
 - Dependencies on external binaries and libraries must be kept minimal
 - The concrete selection of helper tools is a solution design decision and must be documented
-- **7-Zip** is the preferred general-purpose extractor
+- **7-Zip** is the preferred extractor for Microsoft CAB, MSI, and related formats
+- **unshield** is the required extractor for InstallShield proprietary CABs
 - **Syft** is mandatory, preferably used in library mode
+- External extraction tools are optional at runtime; if missing, the corresponding
+  formats are recorded as non-extractable in the SBOM rather than causing a fatal error
 
 ---
 
@@ -256,10 +314,12 @@ At minimum:
 - Input identification (hashes, metadata)
 - Configuration and limits
 - Interpretation mode and policy mode
-- Full recursive extraction log
+- Full recursive extraction log with delivery paths
 - Tools and isolation used
 - SBOM modeling assumptions
+- Container metadata extracted (e.g. MSI properties) and how it was used
 - Whether unsafe override mode was active
+- Unidentified binaries and other coverage gaps
 - Summary of completeness and limitations
 - Explicit statement of residual risk and uncertainty
 
@@ -272,6 +332,8 @@ sbom-sentry is complete when:
 - Nested container formats are processed safely and recursively
 - CAB and MSI contents are extractable and auditable
 - Containers always appear as SBOM components
+- Every SBOM component carries a delivery-path reference to its origin
+- Container metadata (e.g. MSI properties) is extracted and used for CPE enrichment
 - Limits and policies are enforced and documented
 - Native Linux execution is fully supported
 - Results are reproducible and defensible
