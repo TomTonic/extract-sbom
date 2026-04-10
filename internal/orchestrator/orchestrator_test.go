@@ -354,3 +354,191 @@ func TestRunExitCodeOnHardSecurityIsNonZero(t *testing.T) {
 		t.Error("ExitCode = Success after path traversal in strict mode, want non-success")
 	}
 }
+
+// createZIPWithNestedZIP creates a ZIP that contains another ZIP inside it.
+// This helper supports nested container end-to-end tests.
+func createZIPWithNestedZIP(t *testing.T, dir string, outerName string) string {
+	t.Helper()
+
+	// Create inner ZIP content in memory.
+	var innerBuf []byte
+	{
+		var b []byte
+		innerW := zip.NewWriter(newBytesWriter(&b))
+		fw, err := innerW.Create("inner-file.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte("inner content")); err != nil {
+			t.Fatal(err)
+		}
+		if err := innerW.Close(); err != nil {
+			t.Fatal(err)
+		}
+		innerBuf = b
+	}
+
+	// Create outer ZIP containing the inner ZIP and a plain file.
+	outerPath := filepath.Join(dir, outerName)
+	f, err := os.Create(outerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	w := zip.NewWriter(f)
+
+	fw, err := w.Create("readme.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("outer readme")); err != nil {
+		t.Fatal(err)
+	}
+
+	fw2, err := w.Create("inner.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw2.Write(innerBuf); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return outerPath
+}
+
+// bytesWriter is a minimal io.Writer that accumulates into a slice pointer,
+// used to build ZIP data in memory without a temp file.
+type bytesWriter struct{ buf *[]byte }
+
+func newBytesWriter(buf *[]byte) *bytesWriter { return &bytesWriter{buf: buf} }
+func (b *bytesWriter) Write(p []byte) (int, error) {
+	*b.buf = append(*b.buf, p...)
+	return len(p), nil
+}
+
+// TestRunNestedZIPEndToEndProducesOutputFiles is an end-to-end test verifying
+// that a ZIP containing another ZIP produces an SBOM and audit report. Nested
+// container scenarios are a core requirement from AGENT.md §4.1.3.
+func TestRunNestedZIPEndToEndProducesOutputFiles(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := createZIPWithNestedZIP(t, dir, "nested-delivery.zip")
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.ReportMode = config.ReportBoth
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode == ExitHardSecurity && result.Error != nil {
+		t.Fatalf("pipeline fatal error: %v", result.Error)
+	}
+
+	// Both SBOM and report must be written for a nested delivery.
+	if result.SBOMPath == "" {
+		t.Error("SBOMPath is empty; SBOM must be produced for nested ZIP")
+	} else if _, err := os.Stat(result.SBOMPath); err != nil {
+		t.Errorf("SBOM file not written: %v", err)
+	}
+
+	if result.ReportPath == "" {
+		t.Error("ReportPath is empty; report must be produced for nested ZIP")
+	} else if _, err := os.Stat(result.ReportPath); err != nil {
+		t.Errorf("report file not written: %v", err)
+	}
+}
+
+// TestRunResourceLimitPartialModeExitsPartial is an end-to-end test verifying
+// that when a resource limit fires and the policy mode is partial, the pipeline
+// returns ExitPartial rather than ExitSuccess. This validates the limit
+// enforcement path from AGENT.md §4.1.3 and §10.
+func TestRunResourceLimitPartialModeExitsPartial(t *testing.T) {
+	dir := t.TempDir()
+
+	// Build a ZIP with 5 files but cap MaxFiles at 2.
+	zipPath := filepath.Join(dir, "many-files.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	for i := 0; i < 5; i++ {
+		fw, wErr := w.Create(filepath.Join("dir", "file"+string(rune('a'+i))+".txt"))
+		if wErr != nil {
+			t.Fatal(wErr)
+		}
+		if _, wErr = fw.Write([]byte("content")); wErr != nil {
+			t.Fatal(wErr)
+		}
+	}
+	if cErr := w.Close(); cErr != nil {
+		t.Fatal(cErr)
+	}
+	if cErr := f.Close(); cErr != nil {
+		t.Fatal(cErr)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = zipPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.PolicyMode = config.PolicyPartial
+	cfg.Limits.MaxFiles = 2
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode == ExitHardSecurity && result.Error != nil {
+		t.Fatalf("pipeline fatal error: %v", result.Error)
+	}
+	if result.ExitCode == ExitSuccess {
+		t.Errorf("ExitCode = Success when MaxFiles limit was exceeded, want ExitPartial (%d)", ExitPartial)
+	}
+}
+
+// TestRunResourceLimitStrictModeExitsPartial verifies that a resource limit
+// violation in strict mode returns ExitPartial (not ExitSuccess). Hard security
+// events return ExitHardSecurity; resource limits are a different category.
+func TestRunResourceLimitStrictModeExitsPartial(t *testing.T) {
+	dir := t.TempDir()
+
+	// ZIP with 5 files, MaxFiles=2, strict policy.
+	zipPath := filepath.Join(dir, "strict-overflow.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	for i := 0; i < 5; i++ {
+		fw, wErr := w.Create("f" + string(rune('a'+i)) + ".txt")
+		if wErr != nil {
+			t.Fatal(wErr)
+		}
+		if _, wErr = fw.Write([]byte("data")); wErr != nil {
+			t.Fatal(wErr)
+		}
+	}
+	if cErr := w.Close(); cErr != nil {
+		t.Fatal(cErr)
+	}
+	if cErr := f.Close(); cErr != nil {
+		t.Fatal(cErr)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = zipPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.PolicyMode = config.PolicyStrict
+	cfg.Limits.MaxFiles = 2
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode == ExitSuccess {
+		t.Errorf("ExitCode = Success with MaxFiles limit exceeded in strict mode, want non-success")
+	}
+}
