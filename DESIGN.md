@@ -29,6 +29,8 @@ of container artifacts and their contents.
 
 ### 1.3 Non-Goals
 - Performing CVE scanning (e.g., via Grype) is **explicitly excluded**
+- No malware or virus scanning — sbom-sentry inspects delivery structure and
+  software components, but does not assess whether any content is malicious
 - No execution or dynamic analysis of delivered software
 - No online or service-based operation model
 
