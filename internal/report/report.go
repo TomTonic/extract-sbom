@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
@@ -50,6 +51,7 @@ type ProcessingIssue struct {
 // extraction, scanning, and assembly is complete.
 type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 	Input            InputSummary
+	Generator        buildinfo.Info
 	Config           config.Config
 	Tree             *extract.ExtractionNode
 	Scans            []scan.ScanResult
@@ -134,6 +136,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	fmt.Fprintf(w, "| %s | %d bytes |\n", t.maxEntrySize, data.Config.Limits.MaxEntrySize)
 	fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, data.Config.Limits.MaxRatio)
 	fmt.Fprintf(w, "| %s | %s |\n", t.timeout, data.Config.Limits.Timeout)
+	fmt.Fprintf(w, "| %s | %s |\n", t.generator, data.Generator.String())
 	fmt.Fprintln(w)
 
 	// Root SBOM metadata.
@@ -216,6 +219,13 @@ func GenerateMachine(data ReportData, w io.Writer) error {
 	report := machineReport{
 		SchemaVersion: "1.0.0",
 		Input:         data.Input,
+		Generator: machineGenerator{
+			Version:  data.Generator.Version,
+			Revision: data.Generator.Revision,
+			Time:     data.Generator.Time,
+			Modified: data.Generator.Modified,
+			Display:  data.Generator.String(),
+		},
 		Config: machineConfig{
 			PolicyMode:    data.Config.PolicyMode.String(),
 			InterpretMode: data.Config.InterpretMode.String(),
@@ -260,6 +270,7 @@ func GenerateMachine(data ReportData, w io.Writer) error {
 type machineReport struct {
 	SchemaVersion string              `json:"schemaVersion"`
 	Input         InputSummary        `json:"input"`
+	Generator     machineGenerator    `json:"generator"`
 	Config        machineConfig       `json:"config"`
 	RootMetadata  machineRootMetadata `json:"rootMetadata"`
 	Sandbox       machineSandbox      `json:"sandbox"`
@@ -277,6 +288,14 @@ type machineConfig struct {
 	InterpretMode string        `json:"interpretMode"`
 	Language      string        `json:"language"`
 	Limits        machineLimits `json:"limits"`
+}
+
+type machineGenerator struct {
+	Version  string `json:"version"`
+	Revision string `json:"revision,omitempty"`
+	Time     string `json:"time,omitempty"`
+	Modified bool   `json:"modified"`
+	Display  string `json:"display"`
 }
 
 type machineLimits struct {
@@ -410,6 +429,7 @@ type translations struct {
 	maxEntrySize            string
 	maxRatio                string
 	timeout                 string
+	generator               string
 	sandboxName             string
 	sandboxAvail            string
 	unsafeWarning           string
@@ -456,6 +476,7 @@ func getTranslations(lang string) translations {
 			maxEntrySize:            "Maximale Eintragsgröße",
 			maxRatio:                "Maximales Verhältnis",
 			timeout:                 "Zeitlimit",
+			generator:               "Generator",
 			sandboxName:             "Sandbox",
 			sandboxAvail:            "Verfügbar",
 			unsafeWarning:           "WARNUNG",
@@ -499,6 +520,7 @@ func getTranslations(lang string) translations {
 			maxEntrySize:            "Max entry size",
 			maxRatio:                "Max ratio",
 			timeout:                 "Timeout",
+			generator:               "Generator",
 			sandboxName:             "Sandbox",
 			sandboxAvail:            "Available",
 			unsafeWarning:           "WARNING",

@@ -26,7 +26,7 @@ jobs:
         run: |
           mkdir -p dist
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -ldflags "-s -w -X main.scriptVersion=${VERSION}" \
+            go build -trimpath -ldflags "-s -w -X github.com/TomTonic/extract-sbom/internal/buildinfo.ReleaseVersion=${VERSION}" \
             -o dist/extract-sbom-linux-amd64 ./cmd/extract-sbom
 
       - name: Build release-test container

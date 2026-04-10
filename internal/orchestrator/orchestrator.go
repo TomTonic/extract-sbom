@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/TomTonic/extract-sbom/internal/assembly"
+	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
@@ -58,6 +59,7 @@ type Result struct {
 // Returns a Result containing the exit code, output paths, and any fatal error.
 func Run(ctx context.Context, cfg config.Config) Result {
 	startTime := time.Now()
+	generatorInfo := buildinfo.Read()
 	issues := make([]report.ProcessingIssue, 0)
 	addIssue := func(stage string, err error) {
 		if err == nil {
@@ -158,6 +160,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
 		return report.ReportData{
 			Input:            inputSummary,
+			Generator:        generatorInfo,
 			Config:           cfg,
 			Tree:             tree,
 			Scans:            scans,
