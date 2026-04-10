@@ -235,6 +235,12 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 			node.StatusDetail = err.Error()
 			return err
 		}
+		// Resource limit errors propagate so the policy engine can evaluate them.
+		if _, ok := err.(*safeguard.ResourceLimitError); ok {
+			node.Status = StatusFailed
+			node.StatusDetail = err.Error()
+			return err
+		}
 		// Other extraction errors are recorded but not fatal to the tree.
 		if node.Status == StatusPending {
 			node.Status = StatusFailed
@@ -323,6 +329,13 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, limi
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
+	// Clean up if extraction fails before node.ExtractedDir is assigned.
+	var zipOK bool
+	defer func() {
+		if !zipOK {
+			os.RemoveAll(outDir)
+		}
+	}()
 
 	node.Tool = "archive/zip"
 
@@ -376,6 +389,7 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, limi
 	node.ExtractedDir = outDir
 	node.Status = StatusExtracted
 	node.StatusDetail = fmt.Sprintf("extracted %d entries", node.EntriesCount)
+	zipOK = true
 
 	return nil
 }
@@ -429,6 +443,13 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
+	// Clean up if extraction fails before node.ExtractedDir is assigned.
+	var tarOK bool
+	defer func() {
+		if !tarOK {
+			os.RemoveAll(outDir)
+		}
+	}()
 
 	node.Tool = "archive/tar"
 
@@ -492,6 +513,7 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 	node.ExtractedDir = outDir
 	node.Status = StatusExtracted
 	node.StatusDetail = fmt.Sprintf("extracted %d entries", node.EntriesCount)
+	tarOK = true
 
 	return nil
 }
@@ -571,6 +593,7 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 
 	args := []string{"x", filePath, "-o" + outDir, "-y"}
 	if err := sb.Run(ctx, "7zz", args, filePath, outDir); err != nil {
+		os.RemoveAll(outDir)
 		node.Status = StatusFailed
 		node.StatusDetail = fmt.Sprintf("7zz extraction failed: %v", err)
 		return nil
@@ -611,6 +634,7 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 
 	args := []string{"x", filePath}
 	if err := sb.Run(ctx, "unshield", args, filePath, outDir); err != nil {
+		os.RemoveAll(outDir)
 		node.Status = StatusFailed
 		node.StatusDetail = fmt.Sprintf("unshield extraction failed: %v", err)
 		return nil

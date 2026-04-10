@@ -9,11 +9,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/safeguard"
 	"github.com/sbom-sentry/internal/sandbox"
 )
 
@@ -480,6 +482,229 @@ func TestExtractTARWithSymlinkRejects(t *testing.T) {
 
 	if tree != nil {
 		CleanupNode(tree)
+	}
+}
+
+// createTestTAR creates a plain uncompressed TAR file with the given entries.
+func createTestTAR(t *testing.T, dir string, name string, entries map[string][]byte) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	tw := tar.NewWriter(f)
+	for entryName, content := range entries {
+		if err := tw.WriteHeader(&tar.Header{
+			Name: entryName,
+			Mode: 0o644,
+			Size: int64(len(content)),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestExtractPlainTARProducesExtractionTree verifies that extracting a plain
+// (uncompressed) TAR archive produces a correct extraction tree. Plain TAR
+// is common in Linux software deliveries and exercises extractTAR directly.
+func TestExtractPlainTARProducesExtractionTree(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	tarPath := createTestTAR(t, dir, "delivery.tar", map[string][]byte{
+		"readme.txt": []byte("plain tar content"),
+		"bin/tool":   []byte("binary data"),
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = tarPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, err := Extract(context.Background(), tarPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree.Status != StatusExtracted {
+		t.Errorf("status = %v, want Extracted", tree.Status)
+	}
+	if tree.EntriesCount != 2 {
+		t.Errorf("EntriesCount = %d, want 2", tree.EntriesCount)
+	}
+	if tree.Tool != "archive/tar" {
+		t.Errorf("Tool = %q, want archive/tar", tree.Tool)
+	}
+	CleanupNode(tree)
+}
+
+// TestExtractBzip2TARInvalidDataFailsGracefully verifies that a file with
+// bzip2 magic bytes but invalid compressed content fails without panicking.
+// This exercises the bzip2 branch of extractCompressedTAR.
+func TestExtractBzip2TARInvalidDataFailsGracefully(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// BZh magic header followed by invalid compressed data.
+	// The identify package will classify this as Bzip2TAR due to the
+	// magic bytes and .tar.bz2 extension.
+	fakeBzip2 := append([]byte{'B', 'Z', 'h', '9'}, make([]byte, 64)...)
+	fakePath := filepath.Join(dir, "fake.tar.bz2")
+	if err := os.WriteFile(fakePath, fakeBzip2, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = fakePath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, _ := Extract(context.Background(), fakePath, cfg, sb)
+	// Invalid bzip2 data must not produce a nil tree and must not panic.
+	if tree == nil {
+		t.Fatal("tree must not be nil even for invalid bzip2 input")
+	}
+	// The node should be failed (invalid payload) or skipped (not recognised).
+	if tree.Status == StatusExtracted {
+		t.Errorf("status = Extracted for invalid bzip2 data, want Failed or Skipped")
+	}
+	CleanupNode(tree)
+}
+
+// TestExtract7zToolMissingRecordsStatusCorrectly verifies that when 7zz
+// is not available, the node is marked StatusToolMissing rather than failing
+// the entire pipeline. This exercises the tool-availability gate in extract7z.
+func TestExtract7zToolMissingRecordsStatusCorrectly(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Override the tool lookup to simulate a missing 7zz binary.
+	savedLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "", fmt.Errorf("executable not found")
+	}
+	defer func() { lookPath = savedLookPath }()
+
+	// Create a file with CAB magic (MSCF) so identify classifies it as CAB.
+	cabContent := []byte{'M', 'S', 'C', 'F', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	cabPath := filepath.Join(dir, "setup.cab")
+	if err := os.WriteFile(cabPath, cabContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = cabPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, err := Extract(context.Background(), cabPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("tree must not be nil")
+	}
+	if tree.Status != StatusToolMissing {
+		t.Errorf("status = %v, want StatusToolMissing", tree.Status)
+	}
+	if tree.Tool != "7zz" {
+		t.Errorf("Tool = %q, want 7zz", tree.Tool)
+	}
+}
+
+// TestExtractInstallShieldToolMissingRecordsStatusCorrectly verifies that
+// when unshield is not available, InstallShield CAB nodes are marked
+// StatusToolMissing. This exercises the tool-availability gate in
+// extractUnshield.
+func TestExtractInstallShieldToolMissingRecordsStatusCorrectly(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Override the tool lookup to simulate missing binaries.
+	savedLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "", fmt.Errorf("executable not found")
+	}
+	defer func() { lookPath = savedLookPath }()
+
+	// Create a file with InstallShield magic (ISc() so identify classifies it.
+	iscContent := []byte{'I', 'S', 'c', '(', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	iscPath := filepath.Join(dir, "data1.cab")
+	if err := os.WriteFile(iscPath, iscContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = iscPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, err := Extract(context.Background(), iscPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("tree must not be nil")
+	}
+	if tree.Status != StatusToolMissing {
+		t.Errorf("status = %v, want StatusToolMissing", tree.Status)
+	}
+	if tree.Tool != "unshield" {
+		t.Errorf("Tool = %q, want unshield", tree.Tool)
+	}
+}
+
+// TestExtractZIPFileCountLimitPropagates verifies that exceeding MaxFiles
+// causes a ResourceLimitError to propagate from extraction so the policy
+// engine can evaluate it. This is the mechanism that drives ExitPartial.
+func TestExtractZIPFileCountLimitPropagates(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Create a ZIP with 3 files but set MaxFiles=2 to trigger the limit.
+	zipPath := createTestZIP(t, dir, "overflow.zip", map[string][]byte{
+		"a.txt": []byte("aaa"),
+		"b.txt": []byte("bbb"),
+		"c.txt": []byte("ccc"),
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = zipPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.Limits.MaxFiles = 2
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, err := Extract(context.Background(), zipPath, cfg, sb)
+	if tree == nil {
+		t.Fatal("tree must not be nil when limit fires")
+	}
+	if err == nil {
+		t.Error("expected ResourceLimitError to propagate from extraction")
+	}
+	if _, ok := err.(*safeguard.ResourceLimitError); !ok {
+		t.Errorf("expected *safeguard.ResourceLimitError, got %T: %v", err, err)
+	}
+	if tree.Status != StatusFailed {
+		t.Errorf("node status = %v, want StatusFailed", tree.Status)
 	}
 }
 
