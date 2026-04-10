@@ -12,12 +12,54 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/identify"
 	"github.com/sbom-sentry/internal/safeguard"
 	"github.com/sbom-sentry/internal/sandbox"
 )
+
+var lookPathMu sync.Mutex
+
+type sandboxCall struct {
+	cmd       string
+	args      []string
+	inputPath string
+	outputDir string
+}
+
+type recordingSandbox struct {
+	name  string
+	calls []sandboxCall
+	run   func(cmd string, args []string, inputPath string, outputDir string) error
+}
+
+func (s *recordingSandbox) Run(_ context.Context, cmd string, args []string, inputPath string, outputDir string) error {
+	s.calls = append(s.calls, sandboxCall{
+		cmd:       cmd,
+		args:      append([]string(nil), args...),
+		inputPath: inputPath,
+		outputDir: outputDir,
+	})
+	if s.run != nil {
+		return s.run(cmd, args, inputPath, outputDir)
+	}
+	return nil
+}
+
+func (s *recordingSandbox) Available() bool {
+	return true
+}
+
+func (s *recordingSandbox) Name() string {
+	if s.name == "" {
+		return "recording"
+	}
+	return s.name
+}
 
 // createTestZIP creates a minimal ZIP file with the given entries.
 // Each entry is a name→content mapping. This helper enables reproducible
@@ -294,6 +336,155 @@ func TestExtractHandlesContextCancellation(t *testing.T) {
 	// The cancelled context may or may not produce an error depending on timing.
 	// Just verify it doesn't panic.
 	_ = err
+}
+
+// TestExtract7zMarksToolMissingWhenUnavailable verifies that unsupported hosts
+// record a deterministic non-extractable outcome instead of failing fatally.
+func TestExtract7zMarksToolMissingWhenUnavailable(t *testing.T) {
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
+	originalLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "", fmt.Errorf("missing")
+	}
+	t.Cleanup(func() {
+		lookPath = originalLookPath
+	})
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sandbox.NewPassthroughSandbox(), config.DefaultLimits())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if node.Status != StatusToolMissing {
+		t.Fatalf("status = %v, want %v", node.Status, StatusToolMissing)
+	}
+	if node.Tool != "7zz" {
+		t.Fatalf("tool = %q, want %q", node.Tool, "7zz")
+	}
+}
+
+// TestExtract7zUsesSandboxOutputAndSummarizesFiles verifies that 7-Zip-backed
+// extraction writes into the designated output directory and records file-level
+// metrics for audit reporting.
+func TestExtract7zUsesSandboxOutputAndSummarizesFiles(t *testing.T) {
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
+	originalLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "/usr/bin/fake-7zz", nil
+	}
+	t.Cleanup(func() {
+		lookPath = originalLookPath
+	})
+
+	sb := &recordingSandbox{name: "recording", run: func(_ string, _ []string, _ string, outputDir string) error {
+		if err := os.MkdirAll(filepath.Join(outputDir, "nested"), 0o750); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(outputDir, "nested", "a.txt"), []byte("alpha"), 0o600); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(outputDir, "b.txt"), []byte("beta"), 0o600)
+	}}
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, config.DefaultLimits())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sb.calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(sb.calls))
+	}
+	if sb.calls[0].cmd != "7zz" {
+		t.Fatalf("cmd = %q, want %q", sb.calls[0].cmd, "7zz")
+	}
+	if node.Status != StatusExtracted {
+		t.Fatalf("status = %v, want %v", node.Status, StatusExtracted)
+	}
+	if node.SandboxUsed != "recording" {
+		t.Fatalf("sandbox = %q, want %q", node.SandboxUsed, "recording")
+	}
+	if node.EntriesCount != 2 {
+		t.Fatalf("entries = %d, want 2", node.EntriesCount)
+	}
+	if node.TotalSize != int64(len("alpha")+len("beta")) {
+		t.Fatalf("total size = %d, want %d", node.TotalSize, len("alpha")+len("beta"))
+	}
+	if node.ExtractedDir == "" {
+		t.Fatal("expected extracted dir to be recorded")
+	}
+	CleanupNode(node)
+}
+
+// TestExtractUnshieldPassesDestinationDirectory verifies that InstallShield
+// extraction explicitly targets the temporary output directory so results stay
+// deterministic across sandbox implementations.
+func TestExtractUnshieldPassesDestinationDirectory(t *testing.T) {
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
+	originalLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "/usr/bin/fake-unshield", nil
+	}
+	t.Cleanup(func() {
+		lookPath = originalLookPath
+	})
+
+	sb := &recordingSandbox{name: "recording", run: func(_ string, args []string, _ string, outputDir string) error {
+		wantArgs := []string{"-d", outputDir, "x", "/tmp/setup.cab"}
+		if !reflect.DeepEqual(args, wantArgs) {
+			return fmt.Errorf("args = %v, want %v", args, wantArgs)
+		}
+		return os.WriteFile(filepath.Join(outputDir, "payload.bin"), []byte("payload"), 0o600)
+	}}
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.InstallShieldCAB}}
+	err := extractUnshield(context.Background(), node, "/tmp/setup.cab", sb, config.DefaultLimits())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if node.Status != StatusExtracted {
+		t.Fatalf("status = %v, want %v", node.Status, StatusExtracted)
+	}
+	if node.EntriesCount != 1 {
+		t.Fatalf("entries = %d, want 1", node.EntriesCount)
+	}
+	CleanupNode(node)
+}
+
+// TestExtract7zRejectsUnsafePostExtractionOutput verifies that externally
+// extracted symlinks are blocked before they can become part of the traversal.
+func TestExtract7zRejectsUnsafePostExtractionOutput(t *testing.T) {
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
+	originalLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "/usr/bin/fake-7zz", nil
+	}
+	t.Cleanup(func() {
+		lookPath = originalLookPath
+	})
+
+	sb := &recordingSandbox{run: func(_ string, _ []string, _ string, outputDir string) error {
+		return os.Symlink("/etc/passwd", filepath.Join(outputDir, "escape-link"))
+	}}
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, config.DefaultLimits())
+	if err == nil {
+		t.Fatal("expected hard security error, got nil")
+	}
+	if _, ok := err.(*safeguard.HardSecurityError); !ok {
+		t.Fatalf("error = %T, want *safeguard.HardSecurityError", err)
+	}
+	if node.ExtractedDir != "" {
+		t.Fatal("unsafe extraction output should not be retained")
+	}
 }
 
 // TestExtractZIPRejectsPathTraversal verifies that ZIP entries with
@@ -588,7 +779,9 @@ func TestExtractBzip2TARInvalidDataFailsGracefully(t *testing.T) {
 // is not available, the node is marked StatusToolMissing rather than failing
 // the entire pipeline. This exercises the tool-availability gate in extract7z.
 func TestExtract7zToolMissingRecordsStatusCorrectly(t *testing.T) {
-	t.Parallel()
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
 	dir := t.TempDir()
 
 	// Override the tool lookup to simulate a missing 7zz binary.
@@ -632,7 +825,9 @@ func TestExtract7zToolMissingRecordsStatusCorrectly(t *testing.T) {
 // StatusToolMissing. This exercises the tool-availability gate in
 // extractUnshield.
 func TestExtractInstallShieldToolMissingRecordsStatusCorrectly(t *testing.T) {
-	t.Parallel()
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
 	dir := t.TempDir()
 
 	// Override the tool lookup to simulate missing binaries.

@@ -599,18 +599,7 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 		return nil
 	}
 
-	// Post-extraction safeguard: validate all output paths and file types.
-	if err := safeguard.ValidatePostExtraction(outDir, limits); err != nil {
-		// Clean up the unsafe output.
-		os.RemoveAll(outDir)
-		return err
-	}
-
-	node.ExtractedDir = outDir
-	node.Status = StatusExtracted
-	node.StatusDetail = "extracted with 7zz"
-
-	return nil
+	return finalizeExternalExtraction(node, outDir, limits)
 }
 
 // extractUnshield extracts InstallShield CABs using unshield via the sandbox.
@@ -632,7 +621,7 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 	node.Tool = "unshield"
 	node.SandboxUsed = sb.Name()
 
-	args := []string{"x", filePath}
+	args := []string{"-d", outDir, "x", filePath}
 	if err := sb.Run(ctx, "unshield", args, filePath, outDir); err != nil {
 		os.RemoveAll(outDir)
 		node.Status = StatusFailed
@@ -640,18 +629,59 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 		return nil
 	}
 
-	// Post-extraction safeguard: validate all output paths and file types.
+	return finalizeExternalExtraction(node, outDir, limits)
+}
+
+// finalizeExternalExtraction validates and summarizes an output directory created
+// by an external extractor before attaching it to the extraction tree.
+func finalizeExternalExtraction(node *ExtractionNode, outDir string, limits config.Limits) error {
 	if err := safeguard.ValidatePostExtraction(outDir, limits); err != nil {
-		// Clean up the unsafe output.
 		os.RemoveAll(outDir)
 		return err
 	}
 
+	entriesCount, totalSize, err := summarizeExtractedDir(outDir)
+	if err != nil {
+		os.RemoveAll(outDir)
+		return fmt.Errorf("extract: summarize external extraction output: %w", err)
+	}
+
 	node.ExtractedDir = outDir
+	node.EntriesCount = entriesCount
+	node.TotalSize = totalSize
 	node.Status = StatusExtracted
-	node.StatusDetail = "extracted with unshield"
+	node.StatusDetail = fmt.Sprintf("extracted %d entries", entriesCount)
 
 	return nil
+}
+
+// summarizeExtractedDir walks an extracted directory and returns the count and
+// total size of regular files so external-tool extraction metrics match the
+// in-process ZIP and TAR extractors.
+func summarizeExtractedDir(outDir string) (int, int64, error) {
+	entriesCount := 0
+	totalSize := int64(0)
+
+	err := filepath.Walk(outDir, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		entriesCount++
+		totalSize += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return entriesCount, totalSize, nil
 }
 
 // isToolAvailable checks if an external tool is on the PATH.
