@@ -17,6 +17,7 @@ coding agent invocations.
 | `github.com/CycloneDX/cyclonedx-go` | v0.10.x | SBOM data model, encoding, decoding | Standard Go binding for CycloneDX 1.6. Provides `BOM`, `Component`, `Dependency`, `Composition` types plus JSON/XML encoder/decoder. Used for merging per-subtree SBOMs and adding container components. |
 | `github.com/spf13/cobra` | v1.x | CLI framework | De facto standard for Go CLIs. Provides flag parsing, subcommands, help generation. Low-risk, widely adopted. |
 | `github.com/spf13/viper` | v1.x | Configuration binding | Binds CLI flags, env vars, and config files to a single config struct. Pairs naturally with cobra. |
+| `github.com/richardlehane/mscfb` | v1.x | OLE/CFBF compound document reader | Required for reading MSI Property tables (ProductName, Manufacturer, ProductVersion). Used in both physical and installer-semantic modes for container metadata enrichment (see §5.8). |
 
 Go Standard Library modules used directly for archive handling:
 
@@ -156,15 +157,31 @@ component, and feature. In installer-semantic mode, sbom-sentry must:
 
 1. Extract the raw MSI with 7-Zip (yielding internal CAB streams + table data).
 2. Parse the MSI's OLE structure to read the `File` table.
-   A Go OLE/CFBF reader such as `github.com/richardlehane/mscfb` can provide
+   The Go OLE/CFBF reader `github.com/richardlehane/mscfb` provides
    stream-level access; the MSI table format itself requires a small custom
    parser for the string pool and table records.
 3. Use the `File` table to remap internal CAB entry names to target paths.
 4. Document all remappings in the audit report.
 
 This functionality is deferred to the installer-semantic implementation phase
-(Phase 4). Physical mode does not require MSI table parsing and works with
-raw 7-Zip extraction alone.
+(Phase 4). Physical mode does not require MSI table parsing for filename
+remapping.
+
+**MSI metadata extraction (both modes).** Independently of filename remapping,
+the MSI Property table is read in *both* physical and installer-semantic modes
+to extract product metadata for SBOM enrichment:
+
+| MSI Property | Usage |
+|---|---|
+| `Manufacturer` (required) | CPE vendor field |
+| `ProductName` (required) | CPE product field, component name |
+| `ProductVersion` (required) | CPE version field, component version |
+| `UpgradeCode` (optional) | Correlates related product releases; stored as component property |
+| `ProductCode` (required) | Unique product GUID; stored as component property |
+| `ProductLanguage` (required) | Stored as component property |
+
+The OLE reader (`mscfb`) and the MSI string-pool parser are shared between
+metadata extraction (Phase 3) and full table parsing (Phase 4). See §5.8.
 
 **InstallShield CABs.** InstallShield uses a proprietary cabinet format that is
 *not* compatible with Microsoft CABs. Files typically arrive as `data1.cab` +
@@ -408,11 +425,23 @@ type ExtractionNode struct {
     StatusDetail  string
     ExtractedDir  string         // filesystem path of extracted contents (empty if SyftNative)
     Children      []*ExtractionNode
+    Metadata      *ContainerMetadata // non-nil for formats with structured metadata (MSI)
     Tool          string         // "archive/zip" | "archive/tar" | "7zz" | "unshield" | "syft"
     SandboxUsed   string         // "bwrap" | "passthrough" | ""
     Duration      time.Duration
     EntriesCount  int
     TotalSize     int64
+}
+
+// ContainerMetadata holds structured product information extracted from
+// container formats that carry it (currently: MSI Property table).
+type ContainerMetadata struct {
+    ProductName    string // MSI: ProductName
+    Manufacturer   string // MSI: Manufacturer
+    ProductVersion string // MSI: ProductVersion
+    ProductCode    string // MSI: ProductCode (GUID)
+    UpgradeCode    string // MSI: UpgradeCode (GUID)
+    Language       string // MSI: ProductLanguage
 }
 
 // Extract recursively processes the given file according to config.
@@ -434,6 +463,7 @@ For each file encountered:
         ├─ TAR / compressed TAR → Go stdlib archive/tar + compress/* (in-process, per-entry safeguard)
         ├─ CAB, MSI, 7z, RAR   → 7zz via sandbox (post-extraction safeguard walk)        ├─ InstallShield CAB    → unshield via sandbox (post-extraction safeguard walk)        └─ Unknown container   → mark as non-extractable leaf
      → for each extracted child: recurse (depth + 1)
+     → for MSI: additionally read Property table via mscfb → populate node.Metadata
   4. If not a container format:
      → mark as plain leaf (will be picked up by Syft when its parent directory is scanned)
 ```
@@ -442,7 +472,7 @@ For each file encountered:
 - ZIP → extracted with `archive/zip`
 - DLL → plain leaf, cataloged when Syft scans the extracted directory
 - JAR → SyftNative (Syft's Java cataloger handles it directly)
-- MSI → extracted with 7zz via sandbox → produces internal CABs → recurse
+- MSI → extracted with 7zz via sandbox → MSI Property table read (Manufacturer, ProductName, ProductVersion) → produces internal CABs → recurse
 
 **Design decisions:**
 - **Go stdlib extraction** (`archive/zip`, `archive/tar`) runs in-process.
@@ -529,9 +559,18 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
    - Create a `Component` (type `File`) representing the container artifact.
    - Set `BOMRef` to a deterministic identifier derived from the node path.
    - Attach any hashes (SHA-256 at minimum) computed during extraction.
+   - Set the `sbom-sentry:delivery-path` property to the node's full path
+     within the delivery structure (e.g.
+     `sw_delivery.zip/server/webserver.tar.gz/java/component.jar`).
+   - If `node.Metadata` is non-nil (MSI), set the component's `Name` to
+     `Metadata.ProductName`, `Version` to `Metadata.ProductVersion`, and
+     generate a CPE from Manufacturer/ProductName/ProductVersion. Store
+     `ProductCode`, `UpgradeCode`, and `Language` as component properties.
 3. For every `ScanResult`:
    - Merge its `BOM.Components` into the unified component list.
    - Prefix each `BOMRef` with the node path to avoid collisions.
+   - Set `sbom-sentry:delivery-path` on each merged component, computed as
+     the node path + the component's relative location within the scan target.
 4. Build `Dependencies`:
    - Each container component `dependsOn` its child container components
      and the packages discovered inside it.
@@ -828,7 +867,50 @@ generation. Filenames only matter for matching ecosystem package archives
 (e.g. `foo-1.2.3.jar`), but those are handled via the Syft-first
 principle and never reach the MSI extraction path.
 
-### 5.7 Deterministic Output
+### 5.8 Container Metadata as CPE Source
+
+Syft cannot see the MSI database — it only sees the extracted files. But
+the MSI itself represents a product with a vendor, name, and version.
+sbom-sentry reads the MSI Property table (via `mscfb` + MSI table parser)
+and uses it to create a proper CPE for the MSI component:
+
+```
+Input:  Manufacturer = "Contoso Ltd", ProductName = "Widget Server", ProductVersion = "3.2.1"
+Output: cpe:2.3:a:contoso_ltd:widget_server:3.2.1:*:*:*:*:*:*:*
+```
+
+CPE vendor/product normalization follows the same rules as NVD:
+lowercase, spaces replaced with underscores, special characters stripped.
+
+This enrichment is critical because without it, the MSI component would
+only appear as an opaque file with a SHA-256 hash — completely invisible
+to vulnerability scanners like Grype.
+
+The same approach can be extended to other metadata-bearing container
+formats in the future (e.g. InstallShield data files, NSIS installers)
+if suitable parsers become available.
+
+### 5.9 Delivery Path Traceability in SBOM
+
+Every component in the consolidated SBOM carries a
+`sbom-sentry:delivery-path` property recording its full location within
+the original delivery, e.g.:
+
+```
+sw_delivery.zip/server/webserver.tar.gz/java/component.jar
+```
+
+This applies to:
+- **Container components** created by sbom-sentry (path = `ExtractionNode.Path`)
+- **Package components** discovered by Syft (path = node path + relative
+  file location within the scan target)
+
+The property uses forward-slash separators regardless of host OS and is
+always relative to the delivery root (the input file name). It enables
+downstream consumers to locate any SBOM component within the original
+delivery without re-extracting it.
+
+### 5.10 Deterministic Output
 
 - Components are sorted by BOMRef before encoding.
 - Dependencies are sorted by Ref.
@@ -873,9 +955,12 @@ principle and never reach the MSI extraction path.
 1. `identify`: CAB/MSI detection via file-magic heuristics (`MSCF`, OLE `D0 CF 11 E0`)
 2. `sandbox`: Bubblewrap implementation + passthrough fallback
 3. `extract`: 7-Zip invocation via sandbox for CAB/MSI; post-extraction safeguard walk
-4. `--unsafe` flag and associated warning logic
-5. Integration tests with CAB and MSI test fixtures
-6. Test sandbox availability detection and fallback behavior
+4. MSI metadata extraction: OLE reader (`mscfb`) + MSI string-pool parser to read
+   Property table → populate `ContainerMetadata` → CPE generation in assembly
+5. `--unsafe` flag and associated warning logic
+6. Delivery-path property (`sbom-sentry:delivery-path`) on all SBOM components
+7. Integration tests with CAB and MSI test fixtures
+8. Test sandbox availability detection and fallback behavior
 
 ### Phase 4 — Reporting and Modes
 
