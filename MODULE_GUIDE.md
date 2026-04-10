@@ -255,6 +255,11 @@ main()
 - `--mode`: `installer-semantic` (default) | `physical`
 - `--report`: `human` (default) | `machine` | `both`
 - `--language`: `en` (default) | `de`
+- `--root-manufacturer`: override manufacturer / supplier for the SBOM root component
+- `--root-name`: override software / product name for the SBOM root component
+- `--root-version`: override version for the SBOM root component
+- `--root-delivery-date`: delivery date for the inspected software delivery (`YYYY-MM-DD`)
+- `--root-property`: repeated `key=value` property added to the SBOM root component
 - `--unsafe`: enable unsandboxed extraction (must never be silent)
 - `--max-depth`, `--max-files`, `--max-size`, `--max-entry-size`,
   `--max-ratio`, `--timeout`: override default limits
@@ -262,6 +267,8 @@ main()
 **Design decisions:**
 - No subcommands. Single verb: run the inspection.
 - `--unsafe` prints a hard warning to stderr before proceeding.
+- Root metadata flags apply only to the top-level delivered software component,
+  never to nested container components discovered during extraction.
 
 ---
 
@@ -279,8 +286,17 @@ type Config struct {
     InterpretMode   InterpretMode // Physical | InstallerSemantic
     ReportMode      ReportMode    // Human | Machine | Both
     Language        string        // "en" | "de"
+  RootMetadata    RootMetadata
     Unsafe          bool
     Limits          Limits
+}
+
+type RootMetadata struct {
+  Manufacturer string
+  Name         string
+  Version      string
+  DeliveryDate string            // canonical input format: YYYY-MM-DD
+  Properties   map[string]string // extra root-level metadata from --root-property
 }
 
 type Limits struct {
@@ -299,6 +315,10 @@ func (c *Config) Validate() error
 **Design decisions:**
 - All limits have tested defaults matching DESIGN.md §6.1.
 - `Validate()` enforces invariants (e.g. input file must exist, output dir writable).
+- `RootMetadata.Validate()` normalizes duplicate property keys, validates the
+  delivery-date format, and rejects malformed `key=value` pairs.
+- If `RootMetadata.Name` is empty, assembly derives a deterministic fallback
+  from the input filename; explicit CLI input always wins.
 
 ---
 
@@ -579,6 +599,16 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 1. Create a single top-level `Component` (type `Application`) for the input file itself.
    This component also represents the root `ExtractionNode`; the root is not
    emitted again as a second `File` component.
+   - Apply `cfg.RootMetadata` to this component.
+   - Set the component `Name` from `cfg.RootMetadata.Name`, or fall back to a
+     deterministic value derived from the input filename.
+   - Set the component `Version` from `cfg.RootMetadata.Version` when provided.
+   - Set supplier / manufacturer information from
+     `cfg.RootMetadata.Manufacturer` when provided.
+   - Store `cfg.RootMetadata.DeliveryDate` as a root component property
+     (`sbom-sentry:delivery-date`).
+   - Store each entry in `cfg.RootMetadata.Properties` as a root component
+     property.
 2. For every non-root `ExtractionNode`:
    - Create a `Component` (type `File`) representing the container artifact.
    - Set `BOMRef` to a deterministic identifier derived from the node path.
@@ -610,6 +640,8 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 
 **Design decisions:**
 - BOMRef namespacing by node path guarantees uniqueness across merged BOMs.
+- Root metadata is a first-class part of the consolidated SBOM and is sourced
+  from CLI/config input, not inferred from nested package discovery.
 - `sbom-sentry:delivery-path` is the exact supplier-facing pointer to the
   physical artifact in the delivery; `sbom-sentry:evidence-path` is optional
   supporting provenance for components derived from richer internal evidence.
@@ -651,6 +683,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
 **Required content (per DESIGN.md §10.4):**
 - Input identification (filename, size, SHA-256, SHA-512)
 - Configuration snapshot (limits, policy, mode, language)
+- Root SBOM metadata, including which fields were supplied explicitly via CLI
 - Interpretation mode and policy mode
 - Full recursive extraction log with delivery paths
 - Exact offending archive-member or file paths for blocked security events
@@ -672,6 +705,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
   localization framework. Two languages: EN (default), DE.
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
+- The report distinguishes explicit root metadata input from derived defaults.
 
 ---
 
@@ -994,7 +1028,8 @@ delivery without re-extracting it.
 5. `extract`: single-level extraction for ZIP/TAR via Go stdlib (`archive/zip`, `archive/tar`)
 6. `scan`: Syft library-mode integration (Syft-first: native leaves + extracted dirs)
 7. `assembly`: minimal unified BOM with root component, deterministic BOMRefs,
-   and baseline `sbom-sentry:delivery-path` properties for all produced components
+  baseline `sbom-sentry:delivery-path` properties for all produced components,
+  and CLI-driven root metadata
 8. `orchestrator`: wire everything, produce SBOM output file
 9. `cmd/sbom-sentry`: cobra CLI with core flags
 10. Basic end-to-end test: ZIP → SBOM

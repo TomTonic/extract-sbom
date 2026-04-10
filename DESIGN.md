@@ -150,7 +150,32 @@ This graph:
 - Is fully machine-readable
 - Does not require any visual (DOT/graphical) representation
 
-### 5.3 Delivery Path Traceability
+### 5.3 Root Component Metadata
+The top-level SBOM component representing the delivered software must support
+explicit metadata supplied by the operator via the command line.
+
+At minimum, the following root metadata fields must be supported:
+- Manufacturer / supplier
+- Software or product name
+- Version
+- Delivery date
+
+These values are intended to describe the delivered software from the
+procurement or incoming-inspection perspective, even when they are not
+reliably inferable from the delivery file itself.
+
+The root component metadata model shall be:
+- **Operator-overridable** via explicit CLI parameters
+- **Deterministic** for a given input and CLI configuration
+- **Auditable**: the report must show which values were user-supplied
+- **Extensible**: additional root-level metadata shall be attachable as
+  explicit key/value properties where needed
+
+If a field is not supplied, sbom-sentry may derive a reasonable default from
+the input file name or processing context, but explicit operator input always
+takes precedence.
+
+### 5.4 Delivery Path Traceability
 Every component in the SBOM must carry at least one provenance reference into
 the original delivery structure.
 
@@ -181,7 +206,7 @@ This model ensures:
 - The audit log can preserve the exact blocked or suspicious archive member path
   for dispute resolution
 
-### 5.4 Container Metadata Enrichment
+### 5.5 Container Metadata Enrichment
 Container formats that carry structured metadata about their contents must be
 parsed for that metadata, even in physical mode. The extracted metadata is used
 to enrich the SBOM component representing the container with accurate
@@ -207,7 +232,7 @@ represented in the SBOM with the best available product metadata.
 This principle extends to any future container format that provides
 structured product metadata.
 
-### 5.5 Partial and Failed Extraction
+### 5.6 Partial and Failed Extraction
 If extraction fails or is restricted:
 - The container component remains in the SBOM
 - The SBOM and report must clearly indicate the limitation
@@ -348,6 +373,7 @@ The chosen output mode or modes must be selectable explicitly.
 At minimum:
 - Input identification (hashes, metadata)
 - Configuration and limits
+- Root SBOM metadata, including which fields were supplied explicitly via CLI
 - Interpretation mode and policy mode
 - Full recursive extraction log with delivery paths
 - Exact offending archive-member or file paths for blocked security events
@@ -370,6 +396,8 @@ sbom-sentry is complete when:
 - Nested container formats are processed safely and recursively
 - CAB and MSI contents are extractable and auditable
 - Containers always appear as SBOM components
+- Root SBOM metadata can be set explicitly via CLI and is reflected in the SBOM
+  and report
 - Every SBOM component carries a delivery-path reference to its origin
 - Optional evidence paths are retained where they materially strengthen
   traceability
