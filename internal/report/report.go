@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -543,8 +544,13 @@ func writeRootMetadata(w io.Writer, data ReportData, t translations) {
 		fmt.Fprintf(w, "| Delivery Date | %s | %s |\n", rm.DeliveryDate, t.suppliedBy)
 	}
 
-	for k, v := range rm.Properties {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", k, v, t.suppliedBy)
+	propertyKeys := make([]string, 0, len(rm.Properties))
+	for key := range rm.Properties {
+		propertyKeys = append(propertyKeys, key)
+	}
+	sort.Strings(propertyKeys)
+	for _, key := range propertyKeys {
+		fmt.Fprintf(w, "| %s | %s | %s |\n", key, rm.Properties[key], t.suppliedBy)
 	}
 	fmt.Fprintln(w)
 }

@@ -285,6 +285,35 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 	}
 }
 
+// TestGenerateHumanRootPropertiesAreSorted verifies that repeated runs render
+// root metadata properties in deterministic key order for audit stability.
+func TestGenerateHumanRootPropertiesAreSorted(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Config.RootMetadata.Properties = map[string]string{
+		"zeta":  "last",
+		"alpha": "first",
+		"mu":    "middle",
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	alphaIdx := strings.Index(output, "| alpha | first | User-supplied |")
+	muIdx := strings.Index(output, "| mu | middle | User-supplied |")
+	zetaIdx := strings.Index(output, "| zeta | last | User-supplied |")
+	if alphaIdx == -1 || muIdx == -1 || zetaIdx == -1 {
+		t.Fatal("expected sorted root property rows to be present in human report")
+	}
+	if alphaIdx >= muIdx || muIdx >= zetaIdx {
+		t.Fatalf("root properties are not sorted deterministically: alpha=%d mu=%d zeta=%d", alphaIdx, muIdx, zetaIdx)
+	}
+}
+
 // TestGenerateMachineIncludesProcessingIssues verifies that machine output
 // includes processing issues for downstream automation.
 func TestGenerateMachineIncludesProcessingIssues(t *testing.T) {
