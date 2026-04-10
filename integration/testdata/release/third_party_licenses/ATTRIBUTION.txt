@@ -1,0 +1,6 @@
+Synthetic fixture assembled from permissive OSS license files.
+Sources:
+- github.com/spf13/cobra (Apache-2.0): LICENSE.txt
+- github.com/spf13/viper (MIT): LICENSE
+- github.com/anchore/syft (Apache-2.0): LICENSE
+Purpose: release happy-path test for nested archive extraction and SBOM generation.

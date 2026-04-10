@@ -1,4 +1,4 @@
-# Coding Agent Instructions — sbom-sentry
+# Coding Agent Instructions — extract-sbom
 
 This document defines **how** the project must be implemented,
 independent of the functional design in DESIGN.md.

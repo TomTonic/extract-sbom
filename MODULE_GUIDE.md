@@ -1,7 +1,7 @@
-# sbom-sentry — Software Module Guide
+# extract-sbom — Software Module Guide
 
 This document describes the solution architecture, tool selection, module
-structure, interfaces, and implementation plan for sbom-sentry. It fulfils the
+structure, interfaces, and implementation plan for extract-sbom. It fulfils the
 requirement in AGENT.md §3.1 and serves as the primary reference for subsequent
 coding agent invocations.
 
@@ -86,7 +86,7 @@ external 7-Zip for CAB/MSI/7z/RAR). This is justified in §1.5.
 
 ### 1.5 Security Architecture
 
-**Threat model scope.** sbom-sentry is a supply-chain inspection tool, not a
+**Threat model scope.** extract-sbom is a supply-chain inspection tool, not a
 malware or virus scanner (see DESIGN.md §1.3). It never executes, interprets,
 or dynamically analyses any content from the input file. Its security boundary
 covers *extraction safety* — the data-plane threats that arise from unpacking
@@ -117,14 +117,14 @@ regardless of `--unsafe`.
 
 **Why in-process extraction is acceptable for ZIP/TAR.** The specific concern
 with in-process archive parsing is that a parser bug could let a crafted archive
-compromise the host process. For sbom-sentry this risk is bounded:
+compromise the host process. For extract-sbom this risk is bounded:
 
 - Go's `archive/zip` and `archive/tar` are memory-safe (no buffer overflows).
 - Both are continuously fuzz-tested by the Go team and OSS-Fuzz.
 - We never interpret the *content* of extracted files — we only write them to
   disk and pass the directory to Syft. A parser bug could at worst cause a
   crash or incorrect extraction, not code execution.
-- sbom-sentry is not a persistent service; it runs as a one-shot CLI tool.
+- extract-sbom is not a persistent service; it runs as a one-shot CLI tool.
   A crash is a clean failure, not a persistent compromise.
 
 For formats without comparable Go-stdlib maturity (CAB, MSI), we do not accept
@@ -153,7 +153,7 @@ The reference implementation is the C library `libmspack` (used by `cabextract`)
 internal CAB streams. The entry names inside those CABs are often *not* the
 original filenames the installer would write to disk. Instead, the MSI database
 contains a `File` table that maps each internal entry name to a target path,
-component, and feature. In installer-semantic mode, sbom-sentry must:
+component, and feature. In installer-semantic mode, extract-sbom must:
 
 1. Extract the raw MSI with 7-Zip (yielding internal CAB streams + table data).
 2. Parse the MSI's OLE structure to read the `File` table.
@@ -200,7 +200,7 @@ this logic cannot be implemented defensibly, the fallback is:
 `data1.hdr`. Neither 7-Zip nor `cabextract` can unpack these; the tool
 `unshield` is required.
 
-When `unshield` is installed, sbom-sentry extracts InstallShield CABs via the
+When `unshield` is installed, extract-sbom extracts InstallShield CABs via the
 sandbox interface (same pattern as 7-Zip) and recurses into the extracted contents.
 When `unshield` is not installed, such files are recorded as non-extractable
 components in the SBOM and flagged in the audit report.
@@ -216,7 +216,7 @@ set. Additionally, the `identify` module checks for the InstallShield magic byte
 
 ```
 cmd/
-  sbom-sentry/          CLI entry point
+  extract-sbom/          CLI entry point
 
 internal/
   config/               Configuration types and defaults
@@ -235,7 +235,7 @@ internal/
 
 ## 3. Module Specifications
 
-### 3.1 `cmd/sbom-sentry`
+### 3.1 `cmd/extract-sbom`
 
 **Purpose:** Binary entry point. Parses CLI arguments, constructs a `config.Config`,
 and delegates to the orchestrator.
@@ -250,6 +250,7 @@ main()
 **Key flags:**
 - `--input` / positional arg: path to delivery file
 - `--output-dir`: target directory for SBOM + report
+- `--work-dir`: base directory for temporary extraction work (default: system temp dir)
 - `--format`: SBOM output format (`cyclonedx-json` default)
 - `--policy`: `strict` (default) | `partial`
 - `--mode`: `installer-semantic` (default) | `physical`
@@ -281,6 +282,7 @@ main()
 type Config struct {
     InputPath       string
     OutputDir       string
+  WorkDir         string        // base directory for temporary extraction work
     SBOMFormat      string        // "cyclonedx-json"
     PolicyMode      PolicyMode    // Strict | Partial
     InterpretMode   InterpretMode // Physical | InstallerSemantic
@@ -314,7 +316,8 @@ func (c *Config) Validate() error
 
 **Design decisions:**
 - All limits have tested defaults matching DESIGN.md §6.1.
-- `Validate()` enforces invariants (e.g. input file must exist, output dir writable).
+- `Validate()` enforces invariants (e.g. input file must exist, output dir writable,
+  work dir must exist and be writable).
 - `RootMetadata.Validate()` normalizes duplicate property keys, validates the
   delivery-date format, and rejects malformed `key=value` pairs.
 - If `RootMetadata.Name` is empty, assembly derives a deterministic fallback
@@ -325,7 +328,7 @@ func (c *Config) Validate() error
 ### 3.3 `internal/identify`
 
 **Purpose:** Detect the format of a file, and determine whether Syft can handle
-it natively or whether sbom-sentry needs to extract it.
+it natively or whether extract-sbom needs to extract it.
 
 **Interface:**
 ```go
@@ -357,7 +360,7 @@ func Identify(ctx context.Context, path string) (FormatInfo, error)
 - **Syft-native formats** are file types where Syft has a dedicated cataloger
   that understands the internal structure (e.g. JAR → Java packages, RPM →
   RPM metadata, DEB → Debian packages). These are passed directly to Syft
-  and never extracted by sbom-sentry. The list of Syft-native formats is
+  and never extracted by extract-sbom. The list of Syft-native formats is
   maintained as a configuration constant.
 - Never attempts extraction. Read-only, bounded I/O.
 
@@ -431,10 +434,13 @@ bwrap \
 
 **Design decisions:**
 - `--unshare-all` creates new mount, PID, IPC, UTS, network, and user namespaces.
-- `--die-with-parent` ensures cleanup if the parent (sbom-sentry) crashes.
+- `--die-with-parent` ensures cleanup if the parent (extract-sbom) crashes.
 - `--new-session` mitigates `TIOCSTI` injection.
 - `Resolve()` checks `Available()` on the bwrap sandbox; if unavailable and
-  `cfg.Unsafe == true`, returns passthrough; otherwise returns an error.
+  `cfg.Unsafe == true`, returns passthrough.
+- If unavailable and `cfg.Unsafe == false`, `Resolve()` returns
+  `DeniedSandbox` plus a non-nil error so the condition is explicit and
+  deterministic in reports.
 - The same sandbox interface is used for both `7zz` and `unshield` invocations.
 - Every invocation is logged with the sandbox name for the audit trail.
 
@@ -444,7 +450,7 @@ bwrap \
 
 **Purpose:** Recursive, auditable extraction of archive formats. Applies the
 **Syft-first principle**: every file is first checked for Syft-native handling;
-sbom-sentry only extracts when Syft cannot see through a container format.
+extract-sbom only extracts when Syft cannot see through a container format.
 
 **Interface:**
 ```go
@@ -565,7 +571,7 @@ if node.Status == extract.SyftNative {
 
 src, err := syft.GetSource(ctx, target, nil)
 syftSBOM, err := syft.CreateSBOM(ctx, src, syft.DefaultCreateSBOMConfig().
-    WithTool("sbom-sentry", version))
+    WithTool("extract-sbom", version))
 // Encode Syft's internal SBOM to CycloneDX JSON bytes
 // Decode with cyclonedx-go into *cyclonedx.BOM
 ```
@@ -573,7 +579,7 @@ syftSBOM, err := syft.CreateSBOM(ctx, src, syft.DefaultCreateSBOMConfig().
 **Design decisions:**
 - The distinction between SyftNative and extracted nodes is the core of the
   Syft-first principle: Syft's own catalogers take precedence for formats
-  they understand (JAR, RPM, DEB, etc.). sbom-sentry only extracts "dumb"
+  they understand (JAR, RPM, DEB, etc.). extract-sbom only extracts "dumb"
   container formats where Syft needs the files to be laid out on disk.
 - Syft's internal `sbom.SBOM` is serialized to CycloneDX JSON using
   Syft's own format encoder, then deserialized with `cyclonedx-go` to
@@ -606,14 +612,14 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
    - Set supplier / manufacturer information from
      `cfg.RootMetadata.Manufacturer` when provided.
    - Store `cfg.RootMetadata.DeliveryDate` as a root component property
-     (`sbom-sentry:delivery-date`).
+     (`extract-sbom:delivery-date`).
    - Store each entry in `cfg.RootMetadata.Properties` as a root component
      property.
 2. For every non-root `ExtractionNode`:
    - Create a `Component` (type `File`) representing the container artifact.
    - Set `BOMRef` to a deterministic identifier derived from the node path.
    - Attach any hashes (SHA-256 at minimum) computed during extraction.
-   - Set the `sbom-sentry:delivery-path` property to the node's full path
+   - Set the `extract-sbom:delivery-path` property to the node's full path
      within the delivery structure (e.g.
      `sw_delivery.zip/server/webserver.tar.gz/java/component.jar`).
    - If `node.Metadata` is non-nil (MSI), set the component's `Name` to
@@ -623,10 +629,10 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 3. For every `ScanResult`:
    - Merge its `BOM.Components` into the unified component list.
    - Prefix each `BOMRef` with the node path to avoid collisions.
-   - Set `sbom-sentry:delivery-path` on each merged component to the nearest
+   - Set `extract-sbom:delivery-path` on each merged component to the nearest
      defensible physical artifact path in the original delivery, usually the
      scanned node path itself.
-   - Add optional repeated `sbom-sentry:evidence-path` properties when exact
+   - Add optional repeated `extract-sbom:evidence-path` properties when exact
      internal files or archive members used for identification are known.
 4. Build `Dependencies`:
    - Each container component `dependsOn` its child container components
@@ -635,18 +641,18 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
    - `Complete` for fully extracted subtrees.
    - `Incomplete` for skipped, failed, or security-blocked nodes.
    - `Unknown` for nodes where Syft scan failed.
-6. Set `Metadata.Tools` to include sbom-sentry + Syft version info.
+6. Set `Metadata.Tools` to include extract-sbom + Syft version info.
 7. Encode to CycloneDX JSON via `cyclonedx.NewBOMEncoder(writer, cyclonedx.BOMFileFormatJSON)`.
 
 **Design decisions:**
 - BOMRef namespacing by node path guarantees uniqueness across merged BOMs.
 - Root metadata is a first-class part of the consolidated SBOM and is sourced
   from CLI/config input, not inferred from nested package discovery.
-- `sbom-sentry:delivery-path` is the exact supplier-facing pointer to the
-  physical artifact in the delivery; `sbom-sentry:evidence-path` is optional
+- `extract-sbom:delivery-path` is the exact supplier-facing pointer to the
+  physical artifact in the delivery; `extract-sbom:evidence-path` is optional
   supporting provenance for components derived from richer internal evidence.
-- In the first implementation, `sbom-sentry:evidence-path` is limited to cases
-  where sbom-sentry itself directly knows the exact supporting artifact, such
+- In the first implementation, `extract-sbom:evidence-path` is limited to cases
+  where extract-sbom itself directly knows the exact supporting artifact, such
   as blocked archive members, direct manifest-based detections, or explicit
   internal container members. Generic Syft-derived packages do not require it.
 - Composition completeness annotations enable downstream consumers to
@@ -669,6 +675,7 @@ type ReportData struct {
     Scans            []scan.ScanResult
     PolicyDecisions  []policy.Decision
     SandboxInfo      SandboxSummary
+  ProcessingIssues []ProcessingIssue
     StartTime        time.Time
     EndTime          time.Time
 }
@@ -705,6 +712,8 @@ func GenerateMachine(data ReportData, w io.Writer) error
   localization framework. Two languages: EN (default), DE.
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
+- Processing-stage errors are captured as structured `ProcessingIssue` entries
+  and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.
 
 ---
@@ -746,14 +755,21 @@ func (e *Engine) Decisions() []Decision
 
 **Interface:**
 ```go
-func Run(ctx context.Context, cfg config.Config) error
+type Result struct {
+  ExitCode   ExitCode
+  SBOMPath   string
+  ReportPath string
+  Error      error
+}
+
+func Run(ctx context.Context, cfg config.Config) Result
 ```
 
 **Pipeline:**
 ```
 1. cfg.Validate()
 2. Compute input file hash (SHA-256, SHA-512)
-3. sandbox.Resolve(cfg) → Sandbox
+3. sandbox.Resolve(cfg) → (Sandbox, optional error)
 4. extract.Extract(ctx, cfg.InputPath, cfg, sandbox) → ExtractionTree
 5. scan.ScanAll(ctx, tree, cfg) → []ScanResult
 6. assembly.Assemble(tree, scans, cfg) → *cyclonedx.BOM
@@ -766,8 +782,9 @@ func Run(ctx context.Context, cfg config.Config) error
 **Design decisions:**
 - The orchestrator owns the lifecycle of temporary directories.
 - Exit codes are deterministic and machine-parseable.
-- Errors at any stage are captured in `ReportData` before the report
-  is generated, so all failures are always documented.
+- Processing-stage errors (sandbox resolution, extraction, scan, assembly,
+  output writing) are captured in `ReportData` before report generation,
+  so failures are documented when report output succeeds.
 - Once input validation has succeeded and the root extraction node exists,
   later hard security events no longer suppress final output generation.
 - The orchestrator still writes a final SBOM and audit report, marks the
@@ -871,10 +888,10 @@ are always invoked through the sandbox interface when available.
 
 ### 5.5 Syft-First Principle
 
-Before sbom-sentry extracts any file, it checks whether Syft has a
+Before extract-sbom extracts any file, it checks whether Syft has a
 native cataloger for that file format. Syft-native formats (JAR, WAR,
 RPM, DEB, wheel, egg, nupkg, apk, etc.) are passed directly to Syft
-without extraction by sbom-sentry.
+without extraction by extract-sbom.
 
 This principle has three benefits:
 1. **Correctness:** Syft's format-specific catalogers produce richer
@@ -882,14 +899,14 @@ This principle has three benefits:
    extracted files would.
 2. **Efficiency:** No unnecessary extraction, no temporary files.
 3. **Reduced attack surface:** Files that Syft understands natively
-   are never parsed by sbom-sentry's extraction code.
+   are never parsed by extract-sbom's extraction code.
 
-sbom-sentry only extracts "dumb" container formats (ZIP, TAR, CAB, MSI)
+extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI)
 that Syft cannot see through, in order to present their contents to Syft.
 
 ### 5.6 Downstream Vulnerability Matching (CPE / PURL)
 
-sbom-sentry does not perform CVE scanning itself (see DESIGN.md §1.3),
+extract-sbom does not perform CVE scanning itself (see DESIGN.md §1.3),
 but the SBOM it produces must be immediately usable by tools like
 **Grype** for vulnerability matching. Grype matches packages against
 vulnerability databases using two identifiers:
@@ -910,7 +927,7 @@ PURLs and CPEs automatically:
 
 **Why the Syft-first principle is critical for vulnerability matching.**
 
-If sbom-sentry were to extract a JAR file into a flat directory and then
+If extract-sbom were to extract a JAR file into a flat directory and then
 scan that directory, Syft would see individual `.class` files and a
 `MANIFEST.MF` — it could still identify the Java package, but it would
 lose the JAR-level context (filename, embedded pom.xml properties). By
@@ -939,7 +956,7 @@ not match any known classifier, Syft cannot identify it. In this case:
 - The audit report flags these files under "unidentified binaries"
   as a coverage gap.
 - This is an inherent limitation of any SBOM tool and is not specific
-  to sbom-sentry's architecture.
+  to extract-sbom's architecture.
 
 **MSI name-mangling and CPE impact.** In physical mode, mangled internal
 CAB entry names from MSI packages are passed to Syft as-is. Since Syft's
@@ -953,7 +970,7 @@ principle and never reach the MSI extraction path.
 
 Syft cannot see the MSI database — it only sees the extracted files. But
 the MSI itself represents a product with a vendor, name, and version.
-sbom-sentry reads the MSI Property table (via `mscfb` + MSI table parser)
+extract-sbom reads the MSI Property table (via `mscfb` + MSI table parser)
 and uses it to create a proper CPE for the MSI component:
 
 ```
@@ -979,7 +996,7 @@ if suitable parsers become available.
 ### 5.9 Delivery Path Traceability in SBOM
 
 Every component in the consolidated SBOM carries a
-`sbom-sentry:delivery-path` property recording the nearest defensible
+`extract-sbom:delivery-path` property recording the nearest defensible
 physical artifact path within the original delivery, e.g.:
 
 ```
@@ -987,16 +1004,16 @@ sw_delivery.zip/server/webserver.tar.gz/java/component.jar
 ```
 
 This applies to:
-- **Container components** created by sbom-sentry (path = `ExtractionNode.Path`)
+- **Container components** created by extract-sbom (path = `ExtractionNode.Path`)
 - **Package components** discovered by Syft (path = the physical delivery
   artifact from which the package was observed, typically the scanned node path)
 
-If more precise internal provenance is available, sbom-sentry additionally
-stores one or more `sbom-sentry:evidence-path` properties for the exact
+If more precise internal provenance is available, extract-sbom additionally
+stores one or more `extract-sbom:evidence-path` properties for the exact
 manifest, archive member, or internal file that supported the identification.
 
 For the first implementation, this is intentionally limited to provenance that
-sbom-sentry can name directly and deterministically. Generic Syft-derived
+extract-sbom can name directly and deterministically. Generic Syft-derived
 package evidence is not reconstructed unless the underlying scan data provides
 it cleanly.
 
@@ -1028,10 +1045,10 @@ delivery without re-extracting it.
 5. `extract`: single-level extraction for ZIP/TAR via Go stdlib (`archive/zip`, `archive/tar`)
 6. `scan`: Syft library-mode integration (Syft-first: native leaves + extracted dirs)
 7. `assembly`: minimal unified BOM with root component, deterministic BOMRefs,
-  baseline `sbom-sentry:delivery-path` properties for all produced components,
+  baseline `extract-sbom:delivery-path` properties for all produced components,
   and CLI-driven root metadata
 8. `orchestrator`: wire everything, produce SBOM output file
-9. `cmd/sbom-sentry`: cobra CLI with core flags
+9. `cmd/extract-sbom`: cobra CLI with core flags
 10. Basic end-to-end test: ZIP → SBOM
 
 ### Phase 2 — Recursive Extraction and SBOM Modeling

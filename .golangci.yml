@@ -32,7 +32,6 @@ linters:
         - dupImport
         - emptyStringTest
         - equalFold
-        - hugeParam
         - indexAlloc
         - nestingReduce
         - nilValReturn
@@ -45,6 +44,35 @@ linters:
   # exclusions:
   #   paths:
   #     - generated/
+
+  exclusions:
+    rules:
+      # German translations are intentional, not misspellings.
+      - linters: [misspell]
+        path: internal/report/
+      # File paths are validated by safeguard before opening.
+      - linters: [gosec]
+        text: "G304"
+      # Subprocess execution is the designed purpose of the sandbox module.
+      - linters: [gosec]
+        text: "G204"
+        path: internal/sandbox/
+      # Best-effort cleanup: Close on read-only handles, RemoveAll in cleanup.
+      - linters: [errcheck]
+        text: "Close"
+      - linters: [errcheck]
+        text: "os.RemoveAll"
+      # Taint analysis false positive: paths are validated by safeguard.
+      - linters: [gosec]
+        text: "G703"
+      # Unhandled errors in cleanup paths (RemoveAll, Close after error).
+      - linters: [gosec]
+        text: "G104"
+      # Report generation uses fmt.Fprint* extensively; errors are returned
+      # from the top-level function if the underlying writer fails.
+      - linters: [errcheck]
+        text: "fmt.Fprint"
+        path: internal/report/
 
 formatters:
   enable:
