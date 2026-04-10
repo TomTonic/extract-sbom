@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/config"
 )
 
 // Sandbox defines the interface for executing external commands in an

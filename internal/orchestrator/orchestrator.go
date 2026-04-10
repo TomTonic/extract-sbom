@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/assembly"
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/sbom-sentry/internal/report"
-	"github.com/sbom-sentry/sbom-sentry/internal/sandbox"
-	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+	"github.com/sbom-sentry/internal/assembly"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/policy"
+	"github.com/sbom-sentry/internal/report"
+	"github.com/sbom-sentry/internal/sandbox"
+	"github.com/sbom-sentry/internal/scan"
 )
 
 // ExitCode represents the process exit status.

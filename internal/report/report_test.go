@@ -14,11 +14,11 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/identify"
+	"github.com/sbom-sentry/internal/policy"
+	"github.com/sbom-sentry/internal/scan"
 )
 
 // makeTestReportData creates a minimal ReportData suitable for testing.
