@@ -1,13 +1,13 @@
-# sbom-sentry — Design Specification
+# extract-sbom — Design Specification
 
 ## 1. Purpose and Context
 
 ### 1.1 Purpose
-sbom-sentry is a tool for the **standardized incoming inspection of software deliveries**.
+extract-sbom is a tool for the **standardized incoming inspection of software deliveries**.
 Its primary function is to make complex vendor deliveries auditable, reproducible,
 and suitable for downstream vulnerability assessment.
 
-Given exactly one delivery file as input, sbom-sentry produces:
+Given exactly one delivery file as input, extract-sbom produces:
 
 1. A **single, consolidated Software Bill of Materials (SBOM)**  
    - Default format: **CycloneDX JSON**
@@ -24,12 +24,12 @@ Software vendors frequently deliver products in deeply nested or installer-based
 ZIP files containing CABs, MSIs, further ZIPs, and similar constructs.
 
 Without controlled unpacking, SBOM generation and CVE analysis produce incomplete or misleading results.
-sbom-sentry addresses this by combining **safe recursive extraction** with **explicit SBOM modeling**
+extract-sbom addresses this by combining **safe recursive extraction** with **explicit SBOM modeling**
 of container artifacts and their contents.
 
 ### 1.3 Non-Goals
 - Performing CVE scanning (e.g., via Grype) is **explicitly excluded**
-- No malware or virus scanning — sbom-sentry inspects delivery structure and
+- No malware or virus scanning — extract-sbom inspects delivery structure and
   software components, but does not assess whether any content is malicious
 - No execution or dynamic analysis of delivered software
 - No online or service-based operation model
@@ -101,14 +101,14 @@ Every extraction attempt must be recorded, including:
 
 ### 4.3 Syft-First Principle
 Formats that Syft already understands natively (e.g. JAR, RPM, DEB, wheel,
-nupkg, apk) must be passed directly to Syft without extraction by sbom-sentry.
-sbom-sentry only extracts "dumb" container formats (ZIP, TAR, CAB, MSI) that
+nupkg, apk) must be passed directly to Syft without extraction by extract-sbom.
+extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI) that
 Syft cannot see through.
 
 This ensures:
 - Richer metadata from Syft's format-specific catalogers
 - Correct PURL and CPE generation for ecosystem packages
-- Reduced attack surface (fewer files parsed by sbom-sentry)
+- Reduced attack surface (fewer files parsed by extract-sbom)
 
 ### 4.4 Extraction Interpretation Modes
 The system shall support at least two configurable interpretation modes:
@@ -123,7 +123,7 @@ The selected mode must be included in the audit report and, where relevant, in S
 
 Vendor deliveries frequently use setup.exe wrappers that internally unpack CAB files, sometimes in combination with MSI installers. These CAB files may exhibit name mangling or non-standard filenames due to legacy packaging tools.
 
-sbom-sentry must:
+extract-sbom must:
 - Detect and extract CAB files from setup.exe/MSI contexts, including nested scenarios.
 - Restore original filenames and directory structures as accurately as possible.
 - Ensure that MSI-referenced CAB contents are represented according to installer logic.
@@ -171,7 +171,7 @@ The root component metadata model shall be:
 - **Extensible**: additional root-level metadata shall be attachable as
   explicit key/value properties where needed
 
-If a field is not supplied, sbom-sentry may derive a reasonable default from
+If a field is not supplied, extract-sbom may derive a reasonable default from
 the input file name or processing context, but explicit operator input always
 takes precedence.
 
@@ -185,16 +185,16 @@ the delivery root and including all nesting levels, e.g.:
     sw_delivery.zip/server/webserver.tar.gz/java/component.jar
 
 This physical artifact reference is stored as a CycloneDX component property
-(`sbom-sentry:delivery-path`). It is the main pointer used to show a supplier
+(`extract-sbom:delivery-path`). It is the main pointer used to show a supplier
 the exact defective or vulnerable artifact within the delivered package.
 
 If a component is derived from richer evidence than a single physical artifact
 (for example a package inferred from a manifest inside a JAR), the SBOM may
 add one or more optional provenance references such as
-`sbom-sentry:evidence-path` for the specific internal files or archive members
+`extract-sbom:evidence-path` for the specific internal files or archive members
 that support the identification.
 
-Such optional evidence references are required only where sbom-sentry itself can
+Such optional evidence references are required only where extract-sbom itself can
 deterministically name the supporting internal file or archive member. Generic
 package inferences without a defensible 1:1 evidence pointer may omit them.
 
@@ -270,7 +270,7 @@ Hard security violations — path traversal, symlink escape, special file
 materialization — are **never** overridable, regardless of any CLI flag or
 configuration. They abort the affected extraction subtree immediately.
 
-If the overall orchestration can still continue, sbom-sentry shall still write
+If the overall orchestration can still continue, extract-sbom shall still write
 the final SBOM and audit report. The affected subtree is then represented as
 incomplete or security-blocked, and the process exits with a non-success status.
 The audit report must always document the exact offending path or archive member
@@ -390,7 +390,7 @@ At minimum:
 ---
 
 ## 11. Acceptance Criteria
-sbom-sentry is complete when:
+extract-sbom is complete when:
 
 - One input file yields exactly one SBOM and one audit report
 - Nested container formats are processed safely and recursively
