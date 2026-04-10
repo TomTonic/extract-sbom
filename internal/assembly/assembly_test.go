@@ -26,7 +26,9 @@ func TestAssembleProducesValidBOM(t *testing.T) {
 
 	// Create a minimal input file so we can compute its hash.
 	inputPath := filepath.Join(dir, "delivery.zip")
-	os.WriteFile(inputPath, []byte("PK fake zip content"), 0o644)
+	if err := os.WriteFile(inputPath, []byte("PK fake zip content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.DefaultConfig()
 	cfg.InputPath = inputPath
@@ -87,7 +89,9 @@ func TestAssembleWithScanResultsMergesComponents(t *testing.T) {
 
 	dir := t.TempDir()
 	inputPath := filepath.Join(dir, "delivery.zip")
-	os.WriteFile(inputPath, []byte("PK fake"), 0o644)
+	if err := os.WriteFile(inputPath, []byte("PK fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.DefaultConfig()
 	cfg.InputPath = inputPath
@@ -134,10 +138,14 @@ func TestAssembleNestedTreeCreatesContainerComponents(t *testing.T) {
 
 	dir := t.TempDir()
 	inputPath := filepath.Join(dir, "outer.zip")
-	os.WriteFile(inputPath, []byte("PK fake"), 0o644)
+	if err := os.WriteFile(inputPath, []byte("PK fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	innerPath := filepath.Join(dir, "inner.zip")
-	os.WriteFile(innerPath, []byte("PK inner"), 0o644)
+	if err := os.WriteFile(innerPath, []byte("PK inner"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.DefaultConfig()
 	cfg.InputPath = inputPath
@@ -193,7 +201,9 @@ func TestAssembleDeriveRootNameFromFilename(t *testing.T) {
 
 	dir := t.TempDir()
 	inputPath := filepath.Join(dir, "my-delivery.zip")
-	os.WriteFile(inputPath, []byte("PK"), 0o644)
+	if err := os.WriteFile(inputPath, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.DefaultConfig()
 	cfg.InputPath = inputPath
@@ -314,7 +324,7 @@ func TestMakeBOMRefIsDeterministic(t *testing.T) {
 		t.Errorf("different inputs produced same ref: %q", ref1)
 	}
 
-	if len(ref1) == 0 {
+	if ref1 == "" {
 		t.Error("BOMRef is empty")
 	}
 
@@ -360,7 +370,9 @@ func TestAssembleWithCompositions(t *testing.T) {
 
 	dir := t.TempDir()
 	inputPath := filepath.Join(dir, "test.zip")
-	os.WriteFile(inputPath, []byte("PK"), 0o644)
+	if err := os.WriteFile(inputPath, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.DefaultConfig()
 	cfg.InputPath = inputPath
@@ -380,5 +392,192 @@ func TestAssembleWithCompositions(t *testing.T) {
 
 	if bom.Compositions == nil || len(*bom.Compositions) == 0 {
 		t.Error("expected at least one composition annotation")
+	}
+}
+
+// TestAssembleIncludesInterpretModeProperty verifies that the root component
+// includes an sbom-sentry:interpret-mode property reflecting the configured mode.
+func TestAssembleIncludesInterpretModeProperty(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "test.zip")
+	if err := os.WriteFile(inputPath, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mode := range []config.InterpretMode{config.InterpretPhysical, config.InterpretInstallerSemantic} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			cfg := config.DefaultConfig()
+			cfg.InputPath = inputPath
+			cfg.OutputDir = dir
+			cfg.InterpretMode = mode
+
+			tree := &extract.ExtractionNode{
+				Path:         "test.zip",
+				OriginalPath: inputPath,
+				Status:       extract.StatusExtracted,
+				Format:       identify.FormatInfo{Format: identify.ZIP},
+			}
+
+			bom, err := Assemble(tree, nil, cfg)
+			if err != nil {
+				t.Fatalf("Assemble error: %v", err)
+			}
+
+			props := bom.Metadata.Component.Properties
+			if props == nil {
+				t.Fatal("root component has no properties")
+			}
+
+			found := false
+			for _, p := range *props {
+				if p.Name == "sbom-sentry:interpret-mode" {
+					if p.Value != mode.String() {
+						t.Errorf("interpret-mode = %q, want %q", p.Value, mode.String())
+					}
+					found = true
+				}
+			}
+			if !found {
+				t.Error("sbom-sentry:interpret-mode property not found on root component")
+			}
+		})
+	}
+}
+
+// TestAssembleInstallerHintSurfacedOnMSINode verifies that when an extraction
+// node has an InstallerHint, it appears as an sbom-sentry:installer-hint
+// property on the corresponding SBOM component.
+func TestAssembleInstallerHintSurfacedOnMSINode(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "outer.zip")
+	if err := os.WriteFile(inputPath, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	msiPath := filepath.Join(dir, "setup.msi")
+	if err := os.WriteFile(msiPath, []byte("MSI fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.InterpretMode = config.InterpretInstallerSemantic
+
+	tree := &extract.ExtractionNode{
+		Path:         "outer.zip",
+		OriginalPath: inputPath,
+		Status:       extract.StatusExtracted,
+		Format:       identify.FormatInfo{Format: identify.ZIP},
+		Children: []*extract.ExtractionNode{
+			{
+				Path:         "outer.zip/setup.msi",
+				OriginalPath: msiPath,
+				Status:       extract.StatusExtracted,
+				Format:       identify.FormatInfo{Format: identify.MSI},
+				Metadata: &extract.ContainerMetadata{
+					ProductName:    "Acme Widget",
+					Manufacturer:   "Acme Corp",
+					ProductVersion: "3.0.0",
+				},
+				InstallerHint: "msi-file-table-remapping-available",
+			},
+		},
+	}
+
+	bom, err := Assemble(tree, nil, cfg)
+	if err != nil {
+		t.Fatalf("Assemble error: %v", err)
+	}
+
+	if bom.Components == nil {
+		t.Fatal("Components is nil")
+	}
+
+	var hintFound bool
+	for _, comp := range *bom.Components {
+		if comp.Properties == nil {
+			continue
+		}
+		for _, p := range *comp.Properties {
+			if p.Name == "sbom-sentry:installer-hint" {
+				if p.Value != "msi-file-table-remapping-available" {
+					t.Errorf("installer-hint = %q, want %q", p.Value, "msi-file-table-remapping-available")
+				}
+				hintFound = true
+			}
+		}
+	}
+
+	if !hintFound {
+		t.Error("sbom-sentry:installer-hint property not found on MSI component")
+	}
+}
+
+// TestAssembleNoInstallerHintInPhysicalMode verifies that when InstallerHint
+// is empty (physical mode), no installer-hint property appears.
+func TestAssembleNoInstallerHintInPhysicalMode(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "outer.zip")
+	if err := os.WriteFile(inputPath, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	msiPath := filepath.Join(dir, "setup.msi")
+	if err := os.WriteFile(msiPath, []byte("MSI fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.InterpretMode = config.InterpretPhysical
+
+	tree := &extract.ExtractionNode{
+		Path:         "outer.zip",
+		OriginalPath: inputPath,
+		Status:       extract.StatusExtracted,
+		Format:       identify.FormatInfo{Format: identify.ZIP},
+		Children: []*extract.ExtractionNode{
+			{
+				Path:         "outer.zip/setup.msi",
+				OriginalPath: msiPath,
+				Status:       extract.StatusExtracted,
+				Format:       identify.FormatInfo{Format: identify.MSI},
+				Metadata: &extract.ContainerMetadata{
+					ProductName:    "Acme Widget",
+					Manufacturer:   "Acme Corp",
+					ProductVersion: "3.0.0",
+				},
+				// InstallerHint is empty — physical mode doesn't set it.
+			},
+		},
+	}
+
+	bom, err := Assemble(tree, nil, cfg)
+	if err != nil {
+		t.Fatalf("Assemble error: %v", err)
+	}
+
+	if bom.Components == nil {
+		return // no components = no hint, that's fine
+	}
+
+	for _, comp := range *bom.Components {
+		if comp.Properties == nil {
+			continue
+		}
+		for _, p := range *comp.Properties {
+			if p.Name == "sbom-sentry:installer-hint" {
+				t.Errorf("unexpected installer-hint property in physical mode: %q", p.Value)
+			}
+		}
 	}
 }

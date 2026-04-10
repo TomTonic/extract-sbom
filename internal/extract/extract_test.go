@@ -315,7 +315,9 @@ func TestExtractZIPRejectsPathTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw.Write([]byte("safe"))
+	if _, wErr := fw.Write([]byte("safe")); wErr != nil {
+		t.Fatal(wErr)
+	}
 
 	// Write a path-traversal entry by directly setting the Name.
 	hdr := &zip.FileHeader{Name: "../../../etc/passwd"}
@@ -324,7 +326,9 @@ func TestExtractZIPRejectsPathTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw2.Write([]byte("evil"))
+	if _, wErr := fw2.Write([]byte("evil")); wErr != nil {
+		t.Fatal(wErr)
+	}
 
 	w.Close()
 	f.Close()
@@ -400,7 +404,9 @@ func TestCleanupNodeRemovesTemporaryDirectories(t *testing.T) {
 	}
 
 	// Write a file into the temp dir to verify deletion.
-	os.WriteFile(filepath.Join(childDir, "test.txt"), []byte("test"), 0o644)
+	if err := os.WriteFile(filepath.Join(childDir, "test.txt"), []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	CleanupNode(node)
 
@@ -427,19 +433,25 @@ func TestExtractTARWithSymlinkRejects(t *testing.T) {
 	tw := tar.NewWriter(f)
 
 	// Add a normal file.
-	tw.WriteHeader(&tar.Header{
+	if err := tw.WriteHeader(&tar.Header{
 		Name: "normal.txt",
 		Mode: 0o644,
 		Size: 4,
-	})
-	tw.Write([]byte("safe"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("safe")); err != nil {
+		t.Fatal(err)
+	}
 
 	// Add a symlink.
-	tw.WriteHeader(&tar.Header{
+	if err := tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeSymlink,
 		Name:     "evil-link",
 		Linkname: "/etc/passwd",
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	tw.Close()
 	f.Close()

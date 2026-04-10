@@ -99,19 +99,16 @@ func TestResolveReturnsPassthroughWhenUnsafe(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Unsafe = true
 
-	sb, err := Resolve(cfg)
-	if err != nil {
-		t.Fatalf("Resolve with unsafe=true returned error: %v", err)
-	}
+	sb := Resolve(cfg)
 
 	if sb.Name() != "passthrough" {
 		t.Errorf("Resolve returned %q, want passthrough", sb.Name())
 	}
 }
 
-// TestResolveReturnsErrorWhenNotUnsafeAndNoBwrap verifies that Resolve
-// returns an error when bwrap is unavailable and --unsafe is not set.
-func TestResolveReturnsErrorWhenNotUnsafeAndNoBwrap(t *testing.T) {
+// TestResolveReturnsDeniedWhenNotUnsafeAndNoBwrap verifies that Resolve
+// returns a DeniedSandbox when bwrap is unavailable and --unsafe is not set.
+func TestResolveReturnsDeniedWhenNotUnsafeAndNoBwrap(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "linux" {
@@ -121,9 +118,18 @@ func TestResolveReturnsErrorWhenNotUnsafeAndNoBwrap(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Unsafe = false
 
-	_, err := Resolve(cfg)
+	sb := Resolve(cfg)
+	if sb.Name() != "denied" {
+		t.Errorf("Resolve returned %q, want denied", sb.Name())
+	}
+	if sb.Available() {
+		t.Error("DeniedSandbox.Available() = true, want false")
+	}
+
+	// Verify that Run returns an error.
+	err := sb.Run(context.Background(), "7zz", nil, "/tmp/input", "/tmp/output")
 	if err == nil {
-		t.Error("Resolve with unsafe=false and no bwrap should return error")
+		t.Error("DeniedSandbox.Run should always return an error")
 	}
 }
 
@@ -175,4 +181,5 @@ func TestSandboxInterfaceCompliance(t *testing.T) {
 
 	var _ Sandbox = (*BwrapSandbox)(nil)
 	var _ Sandbox = (*PassthroughSandbox)(nil)
+	var _ Sandbox = (*DeniedSandbox)(nil)
 }

@@ -176,26 +176,53 @@ func (p *PassthroughSandbox) Run(ctx context.Context, cmd string, args []string,
 	return nil
 }
 
+// DeniedSandbox implements Sandbox by refusing all execution attempts.
+// It is used when bwrap is unavailable and --unsafe was not specified,
+// ensuring that external tools never run unsandboxed without explicit opt-in.
+type DeniedSandbox struct{}
+
+// NewDeniedSandbox creates a sandbox that blocks all execution.
+// This is the gated backend described in the design: external tool invocations
+// fail with a clear error message rather than silently running unsandboxed.
+func NewDeniedSandbox() *DeniedSandbox {
+	return &DeniedSandbox{}
+}
+
+// Available always returns false — this sandbox blocks execution.
+func (d *DeniedSandbox) Available() bool {
+	return false
+}
+
+// Name returns "denied" for audit logging.
+func (d *DeniedSandbox) Name() string {
+	return "denied"
+}
+
+// Run always returns an error explaining that sandboxed execution is not possible.
+func (d *DeniedSandbox) Run(_ context.Context, cmd string, _ []string, _ string, _ string) error {
+	return fmt.Errorf("sandbox: cannot execute %s: bwrap is not available and --unsafe was not specified; "+
+		"pass --unsafe to allow unsandboxed extraction", cmd)
+}
+
 // Resolve determines the appropriate sandbox implementation based on the
 // configuration. If bwrap is available, it returns a BwrapSandbox. If bwrap
 // is unavailable and cfg.Unsafe is true, it returns a PassthroughSandbox.
-// If bwrap is unavailable and cfg.Unsafe is false, it returns an error.
+// If bwrap is unavailable and cfg.Unsafe is false, it returns a DeniedSandbox
+// that blocks all external tool execution with a clear error.
 //
 // Parameters:
 //   - cfg: the run configuration, particularly the Unsafe flag
 //
-// Returns the selected Sandbox implementation, or an error if no safe
-// option is available.
-func Resolve(cfg config.Config) (Sandbox, error) {
+// Returns the selected Sandbox implementation. The returned Sandbox is never nil.
+func Resolve(cfg config.Config) Sandbox {
 	bwrap := NewBwrapSandbox()
 	if bwrap.Available() {
-		return bwrap, nil
+		return bwrap
 	}
 
 	if cfg.Unsafe {
-		return NewPassthroughSandbox(), nil
+		return NewPassthroughSandbox()
 	}
 
-	return nil, fmt.Errorf("sandbox: bwrap is not available and --unsafe was not specified; " +
-		"cannot safely execute external extraction tools")
+	return NewDeniedSandbox()
 }

@@ -56,7 +56,9 @@ func TestComputeInputSummaryComputesCorrectHashes(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.bin")
-	os.WriteFile(path, []byte("hello world"), 0o644)
+	if err := os.WriteFile(path, []byte("hello world"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	summary, err := ComputeInputSummary(path)
 	if err != nil {
@@ -134,7 +136,9 @@ func TestGenerateHumanContainsInputHashes(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, data.Input.SHA256) {
@@ -182,7 +186,9 @@ func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
 	data.SandboxInfo.UnsafeOvr = true
 
 	var buf bytes.Buffer
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "WARNING") {
@@ -210,7 +216,9 @@ func TestGenerateHumanWithPolicyDecisions(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "Policy Decisions") {
@@ -241,7 +249,9 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "2 components found") {
@@ -291,10 +301,14 @@ func TestGenerateMachineContainsTiming(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	GenerateMachine(data, &buf)
+	if err := GenerateMachine(data, &buf); err != nil {
+		t.Fatalf("GenerateMachine error: %v", err)
+	}
 
 	var report map[string]interface{}
-	json.Unmarshal(buf.Bytes(), &report)
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
 
 	if report["startTime"] == nil {
 		t.Error("missing startTime in JSON report")
@@ -318,7 +332,9 @@ func TestResidualRiskWithUnsafeMode(t *testing.T) {
 	data.SandboxInfo.UnsafeOvr = true
 
 	var buf bytes.Buffer
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "Residual Risk") {
@@ -344,7 +360,9 @@ func TestResidualRiskWithScanErrors(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	GenerateHuman(data, "en", &buf)
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "scan") || !strings.Contains(output, "errors") {
