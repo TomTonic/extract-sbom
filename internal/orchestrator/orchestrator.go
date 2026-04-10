@@ -71,20 +71,11 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	}
 
 	// Step 3: Resolve sandbox.
-	sb, sbErr := sandbox.Resolve(cfg)
+	sb := sandbox.Resolve(cfg)
 	sandboxInfo := report.SandboxSummary{
 		UnsafeOvr: cfg.Unsafe,
-	}
-
-	if sbErr != nil {
-		// If sandbox resolution fails and there are formats requiring external tools,
-		// we still proceed — those formats will be marked as tool-missing.
-		sb = sandbox.NewPassthroughSandbox()
-		sandboxInfo.Name = "none"
-		sandboxInfo.Available = false
-	} else {
-		sandboxInfo.Name = sb.Name()
-		sandboxInfo.Available = sb.Available()
+		Name:      sb.Name(),
+		Available: sb.Available(),
 	}
 
 	// Step 4: Extract.

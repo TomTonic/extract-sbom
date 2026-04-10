@@ -202,7 +202,7 @@ func TestConfigValidateRejectsInvalidConfig(t *testing.T) {
 	// Create a valid temporary input file and output directory.
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "test.zip")
-	if err := os.WriteFile(inputFile, []byte("test"), 0o644); err != nil {
+	if err := os.WriteFile(inputFile, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,7 +211,7 @@ func TestConfigValidateRejectsInvalidConfig(t *testing.T) {
 		modify  func(*Config)
 		wantErr bool
 	}{
-		{"valid config", func(c *Config) {}, false},
+		{"valid config", func(_ *Config) {}, false},
 		{"missing input path", func(c *Config) { c.InputPath = "" }, true},
 		{"missing output dir", func(c *Config) { c.OutputDir = "" }, true},
 		{"nonexistent input file", func(c *Config) { c.InputPath = "/nonexistent/file.zip" }, true},

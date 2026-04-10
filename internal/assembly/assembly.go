@@ -93,6 +93,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	// Add root properties.
 	rootProps := []cdx.Property{
 		{Name: "sbom-sentry:delivery-path", Value: tree.Path},
+		{Name: "sbom-sentry:interpret-mode", Value: cfg.InterpretMode.String()},
 	}
 
 	if cfg.RootMetadata.DeliveryDate != "" {
@@ -220,6 +221,13 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 					{Algorithm: cdx.HashAlgoSHA256, Value: hash},
 				}
 			}
+		}
+
+		// Record installer-semantic hint when the extraction layer flagged it.
+		if node.InstallerHint != "" {
+			props = append(props, cdx.Property{
+				Name: "sbom-sentry:installer-hint", Value: node.InstallerHint,
+			})
 		}
 
 		sort.Slice(props, func(i, j int) bool {

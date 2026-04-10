@@ -87,19 +87,20 @@ type ContainerMetadata struct {
 // The tree of nodes forms the extraction state from which both the SBOM
 // and audit report are derived.
 type ExtractionNode struct {
-	Path         string              // physical artifact path relative to delivery root
-	OriginalPath string              // absolute filesystem path of the original file
-	Format       identify.FormatInfo // detected format of this artifact
-	Status       ExtractionStatus    // processing outcome
-	StatusDetail string              // human-readable explanation
-	ExtractedDir string              // filesystem path of extracted contents (empty if SyftNative)
-	Children     []*ExtractionNode   // child nodes from recursive extraction
-	Metadata     *ContainerMetadata  // non-nil for formats with structured metadata (MSI)
-	Tool         string              // extraction tool used
-	SandboxUsed  string              // sandbox mechanism used
-	Duration     time.Duration       // time taken for extraction
-	EntriesCount int                 // number of entries extracted
-	TotalSize    int64               // total uncompressed size of extracted entries
+	Path          string              // physical artifact path relative to delivery root
+	OriginalPath  string              // absolute filesystem path of the original file
+	Format        identify.FormatInfo // detected format of this artifact
+	Status        ExtractionStatus    // processing outcome
+	StatusDetail  string              // human-readable explanation
+	ExtractedDir  string              // filesystem path of extracted contents (empty if SyftNative)
+	Children      []*ExtractionNode   // child nodes from recursive extraction
+	Metadata      *ContainerMetadata  // non-nil for formats with structured metadata (MSI)
+	InstallerHint string              // non-empty when installer-semantic mode could yield richer data
+	Tool          string              // extraction tool used
+	SandboxUsed   string              // sandbox mechanism used
+	Duration      time.Duration       // time taken for extraction
+	EntriesCount  int                 // number of entries extracted
+	TotalSize     int64               // total uncompressed size of extracted entries
 }
 
 // Extract recursively processes the given file according to configuration.
@@ -173,22 +174,41 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 	// Extract based on format.
 	start := time.Now()
 
+	// Apply per-extraction timeout from configuration.
+	extractCtx := ctx
+	if cfg.Limits.Timeout > 0 {
+		var cancel context.CancelFunc
+		extractCtx, cancel = context.WithTimeout(ctx, cfg.Limits.Timeout)
+		defer cancel()
+	}
+
 	switch info.Format {
 	case identify.ZIP:
-		err = extractZIP(ctx, node, filePath, cfg.Limits, stats)
+		err = extractZIP(extractCtx, node, filePath, cfg.Limits, stats)
 	case identify.TAR:
-		err = extractTAR(ctx, node, filePath, nil, cfg.Limits, stats)
+		err = extractTAR(extractCtx, node, filePath, nil, cfg.Limits, stats)
 	case identify.GzipTAR:
-		err = extractCompressedTAR(ctx, node, filePath, "gzip", cfg.Limits, stats)
+		err = extractCompressedTAR(extractCtx, node, filePath, "gzip", cfg.Limits, stats)
 	case identify.Bzip2TAR:
-		err = extractCompressedTAR(ctx, node, filePath, "bzip2", cfg.Limits, stats)
+		err = extractCompressedTAR(extractCtx, node, filePath, "bzip2", cfg.Limits, stats)
 	case identify.XzTAR, identify.ZstdTAR:
 		// XZ and Zstd require external libraries; for now mark as needing 7zz.
-		err = extract7z(ctx, node, filePath, sb)
-	case identify.CAB, identify.MSI, identify.SevenZip, identify.RAR:
-		err = extract7z(ctx, node, filePath, sb)
+		err = extract7z(extractCtx, node, filePath, sb, cfg.Limits)
+	case identify.CAB, identify.SevenZip, identify.RAR:
+		err = extract7z(extractCtx, node, filePath, sb, cfg.Limits)
+	case identify.MSI:
+		// Read MSI metadata directly from the OLE structure (independent of 7zz).
+		if meta, msiErr := ReadMSIMetadata(filePath); msiErr == nil {
+			node.Metadata = meta
+		}
+		// In installer-semantic mode, flag that MSI File-table remapping
+		// could provide richer path data (Phase 4 feature).
+		if cfg.InterpretMode == config.InterpretInstallerSemantic && node.Metadata != nil {
+			node.InstallerHint = "msi-file-table-remapping-available"
+		}
+		err = extract7z(extractCtx, node, filePath, sb, cfg.Limits)
 	case identify.InstallShieldCAB:
-		err = extractUnshield(ctx, node, filePath, sb)
+		err = extractUnshield(extractCtx, node, filePath, sb, cfg.Limits)
 	default:
 		node.Status = StatusSkipped
 		node.StatusDetail = fmt.Sprintf("no extraction handler for format %s", info.Format)
@@ -198,6 +218,17 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 	node.Duration = time.Since(start)
 
 	if err != nil {
+		// Check if it's a timeout error from the per-extraction deadline.
+		if extractCtx.Err() == context.DeadlineExceeded {
+			node.Status = StatusFailed
+			node.StatusDetail = fmt.Sprintf("per-extraction timeout (%s) exceeded", cfg.Limits.Timeout)
+			return &safeguard.ResourceLimitError{
+				Limit:   "timeout",
+				Current: int64(node.Duration.Seconds()),
+				Max:     int64(cfg.Limits.Timeout.Seconds()),
+				Path:    deliveryPath,
+			}
+		}
 		// Check if it's a security error.
 		if _, ok := err.(*safeguard.HardSecurityError); ok {
 			node.Status = StatusSecurityBlocked
@@ -519,7 +550,9 @@ func extractCompressedTAR(ctx context.Context, node *ExtractionNode, filePath st
 }
 
 // extract7z extracts CAB, MSI, 7z, or RAR files using 7-Zip via the sandbox.
-func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox) error {
+// After extraction, the output directory is validated by safeguard to detect
+// path traversal, symlinks, special files, and resource limit violations.
+func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, limits config.Limits) error {
 	// Check if 7zz is available.
 	if !isToolAvailable("7zz") {
 		node.Status = StatusToolMissing
@@ -543,6 +576,13 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 		return nil
 	}
 
+	// Post-extraction safeguard: validate all output paths and file types.
+	if err := safeguard.ValidatePostExtraction(outDir, limits); err != nil {
+		// Clean up the unsafe output.
+		os.RemoveAll(outDir)
+		return err
+	}
+
 	node.ExtractedDir = outDir
 	node.Status = StatusExtracted
 	node.StatusDetail = "extracted with 7zz"
@@ -551,7 +591,9 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 }
 
 // extractUnshield extracts InstallShield CABs using unshield via the sandbox.
-func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox) error {
+// After extraction, the output directory is validated by safeguard to detect
+// path traversal, symlinks, special files, and resource limit violations.
+func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, limits config.Limits) error {
 	if !isToolAvailable("unshield") {
 		node.Status = StatusToolMissing
 		node.StatusDetail = "unshield is not installed; cannot extract InstallShield CAB"
@@ -572,6 +614,13 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 		node.Status = StatusFailed
 		node.StatusDetail = fmt.Sprintf("unshield extraction failed: %v", err)
 		return nil
+	}
+
+	// Post-extraction safeguard: validate all output paths and file types.
+	if err := safeguard.ValidatePostExtraction(outDir, limits); err != nil {
+		// Clean up the unsafe output.
+		os.RemoveAll(outDir)
+		return err
 	}
 
 	node.ExtractedDir = outDir
