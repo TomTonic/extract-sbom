@@ -17,9 +17,9 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/scan"
 )
 
 // ToolVersion is the sbom-sentry version string, set at build time.

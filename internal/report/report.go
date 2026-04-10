@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/policy"
+	"github.com/sbom-sentry/internal/scan"
 )
 
 // InputSummary describes the input file for the report.

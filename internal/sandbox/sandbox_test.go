@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/config"
 )
 
 // TestPassthroughSandboxAlwaysAvailable verifies that the passthrough

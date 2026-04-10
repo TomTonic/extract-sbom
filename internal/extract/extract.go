@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/sbom-sentry/internal/safeguard"
-	"github.com/sbom-sentry/sbom-sentry/internal/sandbox"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/identify"
+	"github.com/sbom-sentry/internal/safeguard"
+	"github.com/sbom-sentry/internal/sandbox"
 )
 
 // ExtractionStatus represents the outcome of processing an extraction node.

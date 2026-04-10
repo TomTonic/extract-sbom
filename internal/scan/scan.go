@@ -18,8 +18,8 @@ import (
 	"github.com/anchore/syft/syft"
 	"github.com/anchore/syft/syft/format/cyclonedxjson"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
 )
 
 // ScanResult holds the CycloneDX BOM produced by scanning a single

@@ -7,8 +7,8 @@ package scan
 import (
 	"testing"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/identify"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/identify"
 )
 
 // TestCollectScanTargetsFindsExtractedNodes verifies that the scan target

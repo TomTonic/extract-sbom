@@ -10,10 +10,10 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/internal/identify"
+	"github.com/sbom-sentry/internal/scan"
 )
 
 // TestAssembleProducesValidBOM verifies that Assemble produces a well-formed

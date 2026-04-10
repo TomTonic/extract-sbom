@@ -1,4 +1,4 @@
-module github.com/sbom-sentry/sbom-sentry
+module github.com/sbom-sentry
 
 go 1.26.2
 

@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/orchestrator"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/orchestrator"
 )
 
 // version is set at build time via -ldflags.

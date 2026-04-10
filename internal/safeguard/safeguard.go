@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/config"
 )
 
 // HardSecurityError signals a non-overridable security violation.

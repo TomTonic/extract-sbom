@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sbom-sentry/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/sbom-sentry/internal/sandbox"
+	"github.com/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/internal/sandbox"
 )
 
 // createTestZIP creates a minimal ZIP file with the given entries.
