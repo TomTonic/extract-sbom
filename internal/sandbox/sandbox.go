@@ -213,16 +213,20 @@ func (d *DeniedSandbox) Run(_ context.Context, cmd string, _ []string, _ string,
 // Parameters:
 //   - cfg: the run configuration, particularly the Unsafe flag
 //
-// Returns the selected Sandbox implementation. The returned Sandbox is never nil.
-func Resolve(cfg config.Config) Sandbox {
+// Returns the selected Sandbox implementation and an optional resolution error.
+//
+// If bwrap is unavailable and cfg.Unsafe is false, Resolve returns a
+// DeniedSandbox together with a non-nil error so callers can surface the
+// condition explicitly while preserving deterministic denied behavior.
+func Resolve(cfg config.Config) (Sandbox, error) {
 	bwrap := NewBwrapSandbox()
 	if bwrap.Available() {
-		return bwrap
+		return bwrap, nil
 	}
 
 	if cfg.Unsafe {
-		return NewPassthroughSandbox()
+		return NewPassthroughSandbox(), nil
 	}
 
-	return NewDeniedSandbox()
+	return NewDeniedSandbox(), fmt.Errorf("sandbox: bwrap is not available and --unsafe was not specified")
 }
