@@ -103,9 +103,18 @@ Configuration can be set via:
 			viper.SetEnvPrefix("SBOM_SENTRY")
 			viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 			viper.AutomaticEnv()
+			var bindErr error
 			cmd.Flags().VisitAll(func(f *pflag.Flag) {
-				viper.BindPFlag(f.Name, f)
+				if bindErr != nil {
+					return
+				}
+				if err := viper.BindPFlag(f.Name, f); err != nil {
+					bindErr = fmt.Errorf("bind flag %s to viper: %w", f.Name, err)
+				}
 			})
+			if bindErr != nil {
+				return bindErr
+			}
 
 			// Build config from viper (merges flags, env, config file, defaults).
 			cfg := config.DefaultConfig()
