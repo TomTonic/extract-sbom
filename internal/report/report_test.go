@@ -1,0 +1,357 @@
+// Report module tests: Verify that audit reports are generated with
+// correct structure, content, and i18n support for both human-readable
+// Markdown and machine-readable JSON formats.
+package report
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	cdx "github.com/CycloneDX/cyclonedx-go"
+
+	"github.com/sbom-sentry/sbom-sentry/internal/config"
+	"github.com/sbom-sentry/sbom-sentry/internal/extract"
+	"github.com/sbom-sentry/sbom-sentry/internal/identify"
+	"github.com/sbom-sentry/sbom-sentry/internal/policy"
+	"github.com/sbom-sentry/sbom-sentry/internal/scan"
+)
+
+// makeTestReportData creates a minimal ReportData suitable for testing.
+func makeTestReportData() ReportData {
+	return ReportData{
+		Input: InputSummary{
+			Filename: "test.zip",
+			Size:     1024,
+			SHA256:   "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			SHA512:   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		Config: config.DefaultConfig(),
+		Tree: &extract.ExtractionNode{
+			Path:   "test.zip",
+			Status: extract.StatusExtracted,
+			Format: identify.FormatInfo{Format: identify.ZIP},
+		},
+		Scans:           []scan.ScanResult{},
+		PolicyDecisions: []policy.Decision{},
+		SandboxInfo: SandboxSummary{
+			Name:      "passthrough",
+			Available: true,
+			UnsafeOvr: false,
+		},
+		StartTime: time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
+		EndTime:   time.Date(2025, 1, 15, 10, 0, 5, 0, time.UTC),
+		SBOMPath:  "/output/test.cdx.json",
+	}
+}
+
+// TestComputeInputSummaryComputesCorrectHashes verifies that SHA-256
+// and SHA-512 hashes are computed correctly for the input file.
+func TestComputeInputSummaryComputesCorrectHashes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.bin")
+	os.WriteFile(path, []byte("hello world"), 0o644)
+
+	summary, err := ComputeInputSummary(path)
+	if err != nil {
+		t.Fatalf("ComputeInputSummary error: %v", err)
+	}
+
+	if summary.Filename != "test.bin" {
+		t.Errorf("Filename = %q, want %q", summary.Filename, "test.bin")
+	}
+
+	if summary.Size != 11 {
+		t.Errorf("Size = %d, want 11", summary.Size)
+	}
+
+	// "hello world" SHA-256: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+	expectedSHA256 := "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+	if summary.SHA256 != expectedSHA256 {
+		t.Errorf("SHA256 = %q, want %q", summary.SHA256, expectedSHA256)
+	}
+
+	if len(summary.SHA512) != 128 {
+		t.Errorf("SHA512 length = %d, want 128", len(summary.SHA512))
+	}
+}
+
+// TestComputeInputSummaryFailsForMissingFile verifies that a missing
+// file produces an error.
+func TestComputeInputSummaryFailsForMissingFile(t *testing.T) {
+	t.Parallel()
+
+	_, err := ComputeInputSummary("/nonexistent/file/path")
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+}
+
+// TestGenerateHumanContainsRequiredSections verifies that the English
+// Markdown report contains all required sections from DESIGN.md §10.4.
+func TestGenerateHumanContainsRequiredSections(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+
+	output := buf.String()
+
+	requiredSections := []string{
+		"# sbom-sentry Audit Report",
+		"## Input File",
+		"## Configuration",
+		"## Root SBOM Metadata",
+		"## Sandbox Configuration",
+		"## Extraction Log",
+		"## Scan Results",
+		"## Summary",
+		"## Residual Risk and Limitations",
+	}
+
+	for _, section := range requiredSections {
+		if !strings.Contains(output, section) {
+			t.Errorf("missing required section %q", section)
+		}
+	}
+}
+
+// TestGenerateHumanContainsInputHashes verifies that the report includes
+// both SHA-256 and SHA-512 hashes of the input file.
+func TestGenerateHumanContainsInputHashes(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, data.Input.SHA256) {
+		t.Error("report does not contain SHA-256 hash")
+	}
+
+	if !strings.Contains(output, data.Input.SHA512) {
+		t.Error("report does not contain SHA-512 hash")
+	}
+}
+
+// TestGenerateHumanGermanTranslation verifies that the German report
+// uses German section headers and labels.
+func TestGenerateHumanGermanTranslation(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "de", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+
+	output := buf.String()
+
+	germanHeaders := []string{
+		"# sbom-sentry Prüfbericht",
+		"## Eingabedatei",
+		"## Konfiguration",
+	}
+
+	for _, header := range germanHeaders {
+		if !strings.Contains(output, header) {
+			t.Errorf("missing German header %q", header)
+		}
+	}
+}
+
+// TestGenerateHumanWithUnsafeShowsWarning verifies that the report
+// clearly warns when --unsafe mode was used.
+func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.SandboxInfo.UnsafeOvr = true
+
+	var buf bytes.Buffer
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "WARNING") {
+		t.Error("unsafe mode report does not contain WARNING")
+	}
+
+	if !strings.Contains(output, "Unsafe mode active") || !strings.Contains(output, "no sandbox isolation") {
+		t.Error("unsafe mode report does not explain the risk")
+	}
+}
+
+// TestGenerateHumanWithPolicyDecisions verifies that policy decisions
+// are included in the report when present.
+func TestGenerateHumanWithPolicyDecisions(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.PolicyDecisions = []policy.Decision{
+		{
+			Trigger:  "max-depth",
+			NodePath: "/deeply/nested/archive.zip",
+			Action:   policy.ActionSkip,
+			Detail:   "Resource limit max-depth exceeded",
+		},
+	}
+
+	var buf bytes.Buffer
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "Policy Decisions") {
+		t.Error("report does not contain Policy Decisions section")
+	}
+
+	if !strings.Contains(output, "max-depth") {
+		t.Error("report does not contain the policy trigger")
+	}
+}
+
+// TestGenerateHumanWithScanResults verifies that scan results
+// are displayed in the report.
+func TestGenerateHumanWithScanResults(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Scans = []scan.ScanResult{
+		{
+			NodePath: "test.zip",
+			BOM: &cdx.BOM{
+				Components: &[]cdx.Component{
+					{Name: "express", Version: "4.18.0"},
+					{Name: "lodash", Version: "4.17.21"},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "2 components found") {
+		t.Error("report does not show component count")
+	}
+}
+
+// TestGenerateMachineProducesValidJSON verifies that the machine-readable
+// report is valid JSON with the expected schema.
+func TestGenerateMachineProducesValidJSON(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateMachine(data, &buf); err != nil {
+		t.Fatalf("GenerateMachine error: %v", err)
+	}
+
+	var report map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if report["schemaVersion"] != "1.0.0" {
+		t.Errorf("schemaVersion = %v, want %q", report["schemaVersion"], "1.0.0")
+	}
+
+	if report["input"] == nil {
+		t.Error("missing 'input' field in JSON report")
+	}
+
+	if report["config"] == nil {
+		t.Error("missing 'config' field in JSON report")
+	}
+
+	if report["extraction"] == nil {
+		t.Error("missing 'extraction' field in JSON report")
+	}
+}
+
+// TestGenerateMachineContainsTiming verifies that the machine report
+// includes start/end times and duration.
+func TestGenerateMachineContainsTiming(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	GenerateMachine(data, &buf)
+
+	var report map[string]interface{}
+	json.Unmarshal(buf.Bytes(), &report)
+
+	if report["startTime"] == nil {
+		t.Error("missing startTime in JSON report")
+	}
+
+	if report["endTime"] == nil {
+		t.Error("missing endTime in JSON report")
+	}
+
+	if report["duration"] == nil {
+		t.Error("missing duration in JSON report")
+	}
+}
+
+// TestResidualRiskWithUnsafeMode verifies that the residual risk section
+// identifies unsafe mode as a risk.
+func TestResidualRiskWithUnsafeMode(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.SandboxInfo.UnsafeOvr = true
+
+	var buf bytes.Buffer
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "Residual Risk") {
+		t.Error("missing residual risk section")
+	}
+
+	if !strings.Contains(output, "sandbox isolation") {
+		t.Error("residual risk does not mention sandbox isolation")
+	}
+}
+
+// TestResidualRiskWithScanErrors verifies that scan errors are reported
+// as a residual risk.
+func TestResidualRiskWithScanErrors(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Scans = []scan.ScanResult{
+		{
+			NodePath: "test.zip",
+			Error:    &testError{msg: "syft failed"},
+		},
+	}
+
+	var buf bytes.Buffer
+	GenerateHuman(data, "en", &buf)
+	output := buf.String()
+
+	if !strings.Contains(output, "scan") || !strings.Contains(output, "errors") {
+		t.Error("residual risk does not mention scan errors")
+	}
+}
+
+type testError struct{ msg string }
+
+func (e *testError) Error() string { return e.msg }
