@@ -231,13 +231,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	// Step 9: Determine exit code.
 	exitCode := ExitSuccess
-	if policyEngine.HasHardSecurityIncident() {
+	switch {
+	case fatalErr != nil:
 		exitCode = ExitHardSecurity
-	} else if policyEngine.HasSkip() || policyEngine.HasAbort() {
+	case policyEngine.HasHardSecurityIncident() || treeHasHardSecurity(tree):
+		exitCode = ExitHardSecurity
+	case policyEngine.HasSkip() || policyEngine.HasAbort() || treeHasIncomplete(tree) || hasScanFailures(scans):
 		exitCode = ExitPartial
-	}
-	if fatalErr != nil {
-		exitCode = ExitHardSecurity
 	}
 
 	return Result{
@@ -246,4 +246,44 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		ReportPath: reportPath,
 		Error:      fatalErr,
 	}
+}
+
+func treeHasHardSecurity(node *extract.ExtractionNode) bool {
+	if node == nil {
+		return false
+	}
+	if node.Status == extract.StatusSecurityBlocked {
+		return true
+	}
+	for _, child := range node.Children {
+		if treeHasHardSecurity(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func treeHasIncomplete(node *extract.ExtractionNode) bool {
+	if node == nil {
+		return false
+	}
+	switch node.Status {
+	case extract.StatusFailed, extract.StatusSkipped, extract.StatusToolMissing:
+		return true
+	}
+	for _, child := range node.Children {
+		if treeHasIncomplete(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasScanFailures(scans []scan.ScanResult) bool {
+	for _, scanResult := range scans {
+		if scanResult.Error != nil {
+			return true
+		}
+	}
+	return false
 }
