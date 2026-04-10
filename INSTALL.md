@@ -1,6 +1,6 @@
 # INSTALL
 
-This document explains how to install a release build of sbom-sentry, install its
+This document explains how to install a release build of extract-sbom, install its
 runtime dependencies, recognize missing dependencies, and get them in common
 environments.
 
@@ -11,22 +11,22 @@ For building from source or for development, see [BUILD.md](BUILD.md).
 Prebuilt binaries for Linux and macOS (amd64 and arm64) are available at:
 
 ```
-https://github.com/sbom-sentry/sbom-sentry/releases
+https://github.com/TomTonic/extract-sbom/extract-sbom/releases
 ```
 
 Each release ships:
 
-- `sbom-sentry_<version>_<os>_<arch>.tar.gz` — binary archive
+- `extract-sbom_<version>_<os>_<arch>.tar.gz` — binary archive
 - `checksums.txt` — SHA-256 checksums for all archives
 
 Example for Linux amd64:
 
 ```bash
 VERSION=v1.0.0
-curl -Lo sbom-sentry.tar.gz \
-  "https://github.com/sbom-sentry/sbom-sentry/releases/download/${VERSION}/sbom-sentry_${VERSION}_linux_amd64.tar.gz"
+curl -Lo extract-sbom.tar.gz \
+  "https://github.com/TomTonic/extract-sbom/extract-sbom/releases/download/${VERSION}/extract-sbom_${VERSION}_linux_amd64.tar.gz"
 curl -Lo checksums.txt \
-  "https://github.com/sbom-sentry/sbom-sentry/releases/download/${VERSION}/checksums.txt"
+  "https://github.com/TomTonic/extract-sbom/extract-sbom/releases/download/${VERSION}/checksums.txt"
 ```
 
 ## 2. Verify Checksum
@@ -38,7 +38,7 @@ sha256sum --check --ignore-missing checksums.txt
 Expected output:
 
 ```
-sbom-sentry.tar.gz: OK
+extract-sbom.tar.gz: OK
 ```
 
 Do not proceed if verification fails.
@@ -46,8 +46,8 @@ Do not proceed if verification fails.
 ## 3. Extract and Install
 
 ```bash
-tar xzf sbom-sentry.tar.gz
-sudo mv sbom-sentry /usr/local/bin/sbom-sentry
+tar xzf extract-sbom.tar.gz
+sudo mv extract-sbom /usr/local/bin/extract-sbom
 ```
 
 Or place the binary anywhere on your `PATH`.
@@ -68,7 +68,7 @@ Syft is compiled into the binary. No separate Syft installation is needed.
 Binary available:
 
 ```bash
-sbom-sentry --version
+extract-sbom --version
 ```
 
 Dependency checks:
@@ -114,7 +114,7 @@ If `bwrap` is unavailable and you did not pass `--unsafe`:
 - report/issues include sandbox resolution/execution denial
 - external extraction is denied with explicit message referring to `--unsafe`
 
-If you pass `--unsafe`, sbom-sentry will run external tools unsandboxed and prints a warning on startup.
+If you pass `--unsafe`, extract-sbom will run external tools unsandboxed and prints a warning on startup.
 
 ## 7. Getting Dependencies (Typical)
 
@@ -147,7 +147,7 @@ Package names can vary by distribution version. If a package is not found, searc
 
 ```bash
 mkdir -p out
-./sbom-sentry --unsafe --output-dir out integration/testdata/release/release-happy-path.zip
+extract-sbom --unsafe --output-dir out integration/testdata/release/release-happy-path.zip
 ```
 
 Expected:

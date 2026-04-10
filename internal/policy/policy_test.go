@@ -7,8 +7,8 @@ package policy
 import (
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/safeguard"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/safeguard"
 )
 
 // TestNewEngineCreatesEmptyEngine verifies that a freshly created engine

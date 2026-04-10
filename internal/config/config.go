@@ -1,5 +1,5 @@
 // Package config provides the central configuration types and defaults for
-// sbom-sentry. It defines the Config struct that all modules depend on, along
+// extract-sbom. It defines the Config struct that all modules depend on, along
 // with validation logic and sensible default limits matching the design
 // specification.
 package config
@@ -192,7 +192,7 @@ func DefaultLimits() Limits {
 	}
 }
 
-// Config is the central configuration for an sbom-sentry run.
+// Config is the central configuration for an extract-sbom run.
 // It is constructed from CLI flags and passed to all modules.
 type Config struct {
 	InputPath     string
@@ -250,7 +250,7 @@ func (c *Config) Validate() error {
 	if !outInfo.IsDir() {
 		return fmt.Errorf("output path must be a directory: %s", c.OutputDir)
 	}
-	if outputWriteErr := validateWritableDir(c.OutputDir, "sbom-sentry-output-writecheck-*"); outputWriteErr != nil {
+	if outputWriteErr := validateWritableDir(c.OutputDir, "extract-sbom-output-writecheck-*"); outputWriteErr != nil {
 		return fmt.Errorf("output directory is not writable: %w", outputWriteErr)
 	}
 
@@ -265,7 +265,7 @@ func (c *Config) Validate() error {
 	if !workInfo.IsDir() {
 		return fmt.Errorf("work path must be a directory: %s", c.WorkDir)
 	}
-	if workWriteErr := validateWritableDir(c.WorkDir, "sbom-sentry-work-writecheck-*"); workWriteErr != nil {
+	if workWriteErr := validateWritableDir(c.WorkDir, "extract-sbom-work-writecheck-*"); workWriteErr != nil {
 		return fmt.Errorf("work directory is not writable: %w", workWriteErr)
 	}
 

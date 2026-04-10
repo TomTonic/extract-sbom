@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/config"
 )
 
 // FuzzValidatePath verifies that path safety checking never panics on

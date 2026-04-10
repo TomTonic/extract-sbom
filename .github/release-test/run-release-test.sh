@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-candidate="/opt/sbom-sentry/sbom-sentry"
-input_zip="/opt/sbom-sentry/testdata/release-happy-path.zip"
-expected_paths="/opt/sbom-sentry/testdata/expected-delivery-paths.txt"
-out_dir="$(mktemp -d /tmp/sbom-sentry-release-test.XXXXXX)"
+candidate="/opt/extract-sbom/extract-sbom"
+input_zip="/opt/extract-sbom/testdata/release-happy-path.zip"
+expected_paths="/opt/extract-sbom/testdata/expected-delivery-paths.txt"
+out_dir="$(mktemp -d /tmp/extract-sbom-release-test.XXXXXX)"
 
 cleanup() {
   rm -rf "$out_dir"
@@ -17,7 +17,7 @@ exit_code=$?
 set -e
 
 if [[ "$exit_code" -ne 0 && "$exit_code" -ne 1 ]]; then
-  echo "unexpected sbom-sentry exit code: $exit_code"
+  echo "unexpected extract-sbom exit code: $exit_code"
   exit 1
 fi
 
@@ -32,7 +32,7 @@ jq -e '.metadata.component.name == "release-fixture"' "$sbom_path" >/dev/null
 
 while IFS= read -r expected; do
   [[ -z "$expected" ]] && continue
-  jq -e --arg p "$expected" '[.components[]? | .properties[]? | select(.name == "sbom-sentry:delivery-path") | .value] | index($p) != null' "$sbom_path" >/dev/null
+  jq -e --arg p "$expected" '[.components[]? | .properties[]? | select(.name == "extract-sbom:delivery-path") | .value] | index($p) != null' "$sbom_path" >/dev/null
   echo "validated delivery-path: $expected"
 done < "$expected_paths"
 
@@ -40,8 +40,8 @@ jq -e '[
   .components[]? as $c
   | ($c.properties // []) as $props
   | {
-      path: ($props[]? | select(.name == "sbom-sentry:delivery-path") | .value),
-      status: ($props[]? | select(.name == "sbom-sentry:extraction-status") | .value)
+      path: ($props[]? | select(.name == "extract-sbom:delivery-path") | .value),
+      status: ($props[]? | select(.name == "extract-sbom:extraction-status") | .value)
     }
 ] as $rows
 | any($rows[]; (.path | endswith(".7z")) and .status == "extracted")

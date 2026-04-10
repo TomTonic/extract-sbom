@@ -23,8 +23,8 @@ import (
 	"github.com/anchore/syft/syft"
 	"github.com/anchore/syft/syft/format/cyclonedxjson"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
 )
 
 // ScanResult holds the CycloneDX BOM produced by scanning a single
@@ -36,7 +36,7 @@ type ScanResult struct { //nolint:revive // stuttering is acceptable for clarity
 	Error         error               // non-nil if scanning failed
 }
 
-// Version is the sbom-sentry version string, set at build time.
+// Version is the extract-sbom version string, set at build time.
 var Version = "dev"
 
 // ScanAll walks the extraction tree and invokes Syft on each scannable node.
@@ -165,7 +165,7 @@ func scanNode(ctx context.Context, result *ScanResult, root *extract.ExtractionN
 }
 
 // collectEvidencePaths derives optional, deterministic evidence pointers for
-// scan results where sbom-sentry can name the specific internal file that
+// scan results where extract-sbom can name the specific internal file that
 // materially supports component identification.
 func collectEvidencePaths(node *extract.ExtractionNode, target string, bom *cdx.BOM) map[string][]string {
 	if node == nil || bom == nil || bom.Components == nil || len(*bom.Components) == 0 {

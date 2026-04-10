@@ -1,4 +1,4 @@
-// Package safeguard provides the hard security boundary for sbom-sentry's
+// Package safeguard provides the hard security boundary for extract-sbom's
 // archive extraction. It validates paths, symlinks, file types, and
 // compression ratios before any bytes are written to disk.
 //
@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sbom-sentry/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/config"
 )
 
 // HardSecurityError signals a non-overridable security violation.

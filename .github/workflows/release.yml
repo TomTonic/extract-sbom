@@ -27,13 +27,13 @@ jobs:
           mkdir -p dist
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -ldflags "-s -w -X main.scriptVersion=${VERSION}" \
-            -o dist/sbom-sentry-linux-amd64 ./cmd/sbom-sentry
+            -o dist/extract-sbom-linux-amd64 ./cmd/extract-sbom
 
       - name: Build release-test container
-        run: docker build -f .github/release-test/Dockerfile -t sbom-sentry-release-test:${{ github.sha }} .
+        run: docker build -f .github/release-test/Dockerfile -t extract-sbom-release-test:${{ github.sha }} .
 
       - name: Run release-test in container
-        run: docker run --rm sbom-sentry-release-test:${{ github.sha }}
+        run: docker run --rm extract-sbom-release-test:${{ github.sha }}
 
   publish:
     runs-on: ubuntu-latest

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/config"
 )
 
 // createMinimalZIP creates a minimal valid ZIP file for pipeline testing.

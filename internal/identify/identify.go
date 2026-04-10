@@ -1,5 +1,5 @@
 // Package identify detects the format of a file and determines whether Syft
-// can handle it natively or whether sbom-sentry needs to extract it.
+// can handle it natively or whether extract-sbom needs to extract it.
 // Detection uses file-magic bytes and file extension, never attempting
 // extraction. All I/O is read-only and bounded.
 package identify
@@ -74,18 +74,18 @@ func (f Format) String() string {
 }
 
 // FormatInfo holds the detection result for a file, including whether Syft
-// handles it natively and whether sbom-sentry can extract it.
+// handles it natively and whether extract-sbom can extract it.
 type FormatInfo struct {
 	Format      Format
 	MIMEType    string
 	Extension   string
 	SyftNative  bool // true if Syft already understands this format
-	Extractable bool // true if sbom-sentry can extract it
+	Extractable bool // true if extract-sbom can extract it
 }
 
 // syftNativeExtensions lists file extensions for formats that Syft handles
 // natively via its dedicated catalogers. These are never extracted by
-// sbom-sentry and instead passed directly to Syft for richer metadata.
+// extract-sbom and instead passed directly to Syft for richer metadata.
 var syftNativeExtensions = map[string]bool{
 	".jar":   true,
 	".war":   true,

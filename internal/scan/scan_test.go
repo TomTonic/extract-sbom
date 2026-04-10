@@ -14,9 +14,9 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/identify"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/identify"
 )
 
 // TestCollectScanTargetsFindsExtractedNodes verifies that the scan target

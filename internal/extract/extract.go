@@ -1,6 +1,6 @@
 // Package extract implements recursive, auditable extraction of archive formats.
 // It applies the Syft-first principle: every file is first checked for Syft-native
-// handling; sbom-sentry only extracts when Syft cannot see through a container
+// handling; extract-sbom only extracts when Syft cannot see through a container
 // format.
 //
 // Supported extraction paths:
@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/internal/safeguard"
-	"github.com/sbom-sentry/internal/sandbox"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/identify"
+	"github.com/TomTonic/extract-sbom/internal/safeguard"
+	"github.com/TomTonic/extract-sbom/internal/sandbox"
 )
 
 // ExtractionStatus represents the outcome of processing an extraction node.
@@ -325,7 +325,7 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 	}
 	defer r.Close()
 
-	outDir, err := os.MkdirTemp(workDir, "sbom-sentry-zip-*")
+	outDir, err := os.MkdirTemp(workDir, "extract-sbom-zip-*")
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
@@ -439,7 +439,7 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 		reader = f
 	}
 
-	outDir, err := os.MkdirTemp(workDir, "sbom-sentry-tar-*")
+	outDir, err := os.MkdirTemp(workDir, "extract-sbom-tar-*")
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
@@ -583,7 +583,7 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 		return nil
 	}
 
-	outDir, err := os.MkdirTemp(workDir, "sbom-sentry-7z-*")
+	outDir, err := os.MkdirTemp(workDir, "extract-sbom-7z-*")
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
@@ -613,7 +613,7 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 		return nil
 	}
 
-	outDir, err := os.MkdirTemp(workDir, "sbom-sentry-unshield-*")
+	outDir, err := os.MkdirTemp(workDir, "extract-sbom-unshield-*")
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}

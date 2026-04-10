@@ -1,6 +1,6 @@
-# sbom-sentry
+# extract-sbom
 
-sbom-sentry performs standardized incoming inspection for software deliveries.
+extract-sbom performs standardized incoming inspection for software deliveries.
 Given one input file, it produces:
 
 - one consolidated CycloneDX SBOM
@@ -8,7 +8,7 @@ Given one input file, it produces:
 
 It recursively processes nested containers and archive formats, applies safety
 limits, records extraction/scanning decisions, and keeps traceability via
-`sbom-sentry:delivery-path` metadata.
+`extract-sbom:delivery-path` metadata.
 
 ## What It Does
 
@@ -27,7 +27,7 @@ Run (sandboxed mode on Linux with `bwrap`):
 
 ```bash
 mkdir -p out
-sbom-sentry \
+extract-sbom \
   --output-dir out \
   sample-delivery.zip
 ```
@@ -36,7 +36,7 @@ Run (unsandboxed, e.g., macOS or trusted CI):
 
 ```bash
 mkdir -p out
-sbom-sentry \
+extract-sbom \
   --unsafe \
   --output-dir out \
   sample-delivery.zip

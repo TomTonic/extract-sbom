@@ -17,12 +17,12 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
-// ToolVersion is the sbom-sentry version string, set at build time.
+// ToolVersion is the extract-sbom version string, set at build time.
 var ToolVersion = "dev"
 
 // Assemble builds the final, unified CycloneDX BOM from the extraction tree
@@ -54,7 +54,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 			Components: &[]cdx.Component{
 				{
 					Type:    cdx.ComponentTypeApplication,
-					Name:    "sbom-sentry",
+					Name:    "extract-sbom",
 					Version: ToolVersion,
 				},
 				{
@@ -92,13 +92,13 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 
 	// Add root properties.
 	rootProps := []cdx.Property{
-		{Name: "sbom-sentry:delivery-path", Value: tree.Path},
-		{Name: "sbom-sentry:interpret-mode", Value: cfg.InterpretMode.String()},
+		{Name: "extract-sbom:delivery-path", Value: tree.Path},
+		{Name: "extract-sbom:interpret-mode", Value: cfg.InterpretMode.String()},
 	}
 
 	if cfg.RootMetadata.DeliveryDate != "" {
 		rootProps = append(rootProps, cdx.Property{
-			Name: "sbom-sentry:delivery-date", Value: cfg.RootMetadata.DeliveryDate,
+			Name: "extract-sbom:delivery-date", Value: cfg.RootMetadata.DeliveryDate,
 		})
 	}
 
@@ -179,12 +179,12 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 		}
 
 		props := []cdx.Property{
-			{Name: "sbom-sentry:delivery-path", Value: node.Path},
+			{Name: "extract-sbom:delivery-path", Value: node.Path},
 		}
 
 		if node.Status != extract.StatusPending {
 			props = append(props, cdx.Property{
-				Name: "sbom-sentry:extraction-status", Value: node.Status.String(),
+				Name: "extract-sbom:extraction-status", Value: node.Status.String(),
 			})
 		}
 
@@ -207,13 +207,13 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 				}
 			}
 			if node.Metadata.ProductCode != "" {
-				props = append(props, cdx.Property{Name: "sbom-sentry:msi-product-code", Value: node.Metadata.ProductCode})
+				props = append(props, cdx.Property{Name: "extract-sbom:msi-product-code", Value: node.Metadata.ProductCode})
 			}
 			if node.Metadata.UpgradeCode != "" {
-				props = append(props, cdx.Property{Name: "sbom-sentry:msi-upgrade-code", Value: node.Metadata.UpgradeCode})
+				props = append(props, cdx.Property{Name: "extract-sbom:msi-upgrade-code", Value: node.Metadata.UpgradeCode})
 			}
 			if node.Metadata.Language != "" {
-				props = append(props, cdx.Property{Name: "sbom-sentry:msi-language", Value: node.Metadata.Language})
+				props = append(props, cdx.Property{Name: "extract-sbom:msi-language", Value: node.Metadata.Language})
 			}
 		}
 
@@ -229,7 +229,7 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 		// Record installer-semantic hint when the extraction layer flagged it.
 		if node.InstallerHint != "" {
 			props = append(props, cdx.Property{
-				Name: "sbom-sentry:installer-hint", Value: node.InstallerHint,
+				Name: "extract-sbom:installer-hint", Value: node.InstallerHint,
 			})
 		}
 
@@ -281,10 +281,10 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 				// Add delivery-path property.
 				deliveryPath := node.Path
 				props := []cdx.Property{
-					{Name: "sbom-sentry:delivery-path", Value: deliveryPath},
+					{Name: "extract-sbom:delivery-path", Value: deliveryPath},
 				}
 				for _, evidencePath := range sr.EvidencePaths[originalRef] {
-					props = append(props, cdx.Property{Name: "sbom-sentry:evidence-path", Value: evidencePath})
+					props = append(props, cdx.Property{Name: "extract-sbom:evidence-path", Value: evidencePath})
 				}
 				if comp.Properties != nil {
 					props = append(props, *comp.Properties...)
@@ -400,7 +400,7 @@ func deriveRootName(cfg config.Config) string {
 // makeBOMRef creates a deterministic BOMRef from a delivery path.
 func makeBOMRef(deliveryPath string) string {
 	h := sha256.Sum256([]byte(deliveryPath))
-	return "sbom-sentry:" + hex.EncodeToString(h[:8])
+	return "extract-sbom:" + hex.EncodeToString(h[:8])
 }
 
 // generateCPE creates a CPE 2.3 string from manufacturer, product, and version.

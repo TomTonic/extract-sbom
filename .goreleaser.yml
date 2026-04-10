@@ -2,15 +2,15 @@
 ---
 version: 2
 
-project_name: sbom-sentry
+project_name: extract-sbom
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - main: ./cmd/sbom-sentry
-    binary: sbom-sentry
+  - main: ./cmd/extract-sbom
+    binary: extract-sbom
     env:
       - CGO_ENABLED=0
     flags:

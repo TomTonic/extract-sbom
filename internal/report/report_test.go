@@ -15,11 +15,11 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/identify"
+	"github.com/TomTonic/extract-sbom/internal/policy"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
 // makeTestReportData creates a minimal ReportData suitable for testing.
@@ -111,7 +111,7 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 	output := buf.String()
 
 	requiredSections := []string{
-		"# sbom-sentry Audit Report",
+		"# extract-sbom Audit Report",
 		"## Input File",
 		"## Configuration",
 		"## Root SBOM Metadata",
@@ -166,7 +166,7 @@ func TestGenerateHumanGermanTranslation(t *testing.T) {
 	output := buf.String()
 
 	germanHeaders := []string{
-		"# sbom-sentry Prüfbericht",
+		"# extract-sbom Prüfbericht",
 		"## Eingabedatei",
 		"## Konfiguration",
 	}

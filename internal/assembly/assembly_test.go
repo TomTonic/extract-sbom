@@ -11,10 +11,10 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/identify"
-	"github.com/sbom-sentry/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/identify"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
 // TestAssembleProducesValidBOM verifies that Assemble produces a well-formed
@@ -193,11 +193,11 @@ func TestAssembleNestedScenarioBuildsDependencyGraph(t *testing.T) {
 		for _, prop := range *comp.Properties {
 			props[prop.Name] = append(props[prop.Name], prop.Value)
 		}
-		if !reflect.DeepEqual(props["sbom-sentry:delivery-path"], []string{jarNodePath}) {
-			t.Fatalf("delivery-path = %v, want [%s]", props["sbom-sentry:delivery-path"], jarNodePath)
+		if !reflect.DeepEqual(props["extract-sbom:delivery-path"], []string{jarNodePath}) {
+			t.Fatalf("delivery-path = %v, want [%s]", props["extract-sbom:delivery-path"], jarNodePath)
 		}
-		if !reflect.DeepEqual(props["sbom-sentry:evidence-path"], []string{jarNodePath + "/META-INF/MANIFEST.MF"}) {
-			t.Fatalf("evidence-path = %v, want manifest path", props["sbom-sentry:evidence-path"])
+		if !reflect.DeepEqual(props["extract-sbom:evidence-path"], []string{jarNodePath + "/META-INF/MANIFEST.MF"}) {
+			t.Fatalf("evidence-path = %v, want manifest path", props["extract-sbom:evidence-path"])
 		}
 	}
 	if !packageFound {
@@ -452,8 +452,8 @@ func TestMakeBOMRefIsDeterministic(t *testing.T) {
 	}
 
 	// Should have the expected prefix.
-	if ref1[:12] != "sbom-sentry:" {
-		t.Errorf("BOMRef doesn't start with 'sbom-sentry:', got %q", ref1)
+	if ref1[:12] != "extract-sbom:" {
+		t.Errorf("BOMRef doesn't start with 'extract-sbom:', got %q", ref1)
 	}
 }
 
@@ -519,7 +519,7 @@ func TestAssembleWithCompositions(t *testing.T) {
 }
 
 // TestAssembleIncludesInterpretModeProperty verifies that the root component
-// includes an sbom-sentry:interpret-mode property reflecting the configured mode.
+// includes an extract-sbom:interpret-mode property reflecting the configured mode.
 func TestAssembleIncludesInterpretModeProperty(t *testing.T) {
 	t.Parallel()
 
@@ -556,7 +556,7 @@ func TestAssembleIncludesInterpretModeProperty(t *testing.T) {
 
 			found := false
 			for _, p := range *props {
-				if p.Name == "sbom-sentry:interpret-mode" {
+				if p.Name == "extract-sbom:interpret-mode" {
 					if p.Value != mode.String() {
 						t.Errorf("interpret-mode = %q, want %q", p.Value, mode.String())
 					}
@@ -564,14 +564,14 @@ func TestAssembleIncludesInterpretModeProperty(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Error("sbom-sentry:interpret-mode property not found on root component")
+				t.Error("extract-sbom:interpret-mode property not found on root component")
 			}
 		})
 	}
 }
 
 // TestAssembleInstallerHintSurfacedOnMSINode verifies that when an extraction
-// node has an InstallerHint, it appears as an sbom-sentry:installer-hint
+// node has an InstallerHint, it appears as an extract-sbom:installer-hint
 // property on the corresponding SBOM component.
 func TestAssembleInstallerHintSurfacedOnMSINode(t *testing.T) {
 	t.Parallel()
@@ -628,7 +628,7 @@ func TestAssembleInstallerHintSurfacedOnMSINode(t *testing.T) {
 			continue
 		}
 		for _, p := range *comp.Properties {
-			if p.Name == "sbom-sentry:installer-hint" {
+			if p.Name == "extract-sbom:installer-hint" {
 				if p.Value != "msi-file-table-remapping-available" {
 					t.Errorf("installer-hint = %q, want %q", p.Value, "msi-file-table-remapping-available")
 				}
@@ -638,7 +638,7 @@ func TestAssembleInstallerHintSurfacedOnMSINode(t *testing.T) {
 	}
 
 	if !hintFound {
-		t.Error("sbom-sentry:installer-hint property not found on MSI component")
+		t.Error("extract-sbom:installer-hint property not found on MSI component")
 	}
 }
 
@@ -698,7 +698,7 @@ func TestAssembleNoInstallerHintInPhysicalMode(t *testing.T) {
 			continue
 		}
 		for _, p := range *comp.Properties {
-			if p.Name == "sbom-sentry:installer-hint" {
+			if p.Name == "extract-sbom:installer-hint" {
 				t.Errorf("unexpected installer-hint property in physical mode: %q", p.Value)
 			}
 		}

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/safeguard"
-	"github.com/sbom-sentry/internal/sandbox"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/safeguard"
+	"github.com/TomTonic/extract-sbom/internal/sandbox"
 )
 
 func writeExecutable(t *testing.T, dir, name, scriptBody string) {

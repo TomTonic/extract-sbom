@@ -1,5 +1,5 @@
 // Package orchestrator coordinates the end-to-end processing pipeline of
-// sbom-sentry. It validates configuration, computes input hashes, resolves
+// extract-sbom. It validates configuration, computes input hashes, resolves
 // the sandbox, performs extraction, scanning, SBOM assembly, and report
 // generation in sequence. It owns the lifecycle of temporary directories
 // and produces deterministic exit codes.
@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sbom-sentry/internal/assembly"
-	"github.com/sbom-sentry/internal/config"
-	"github.com/sbom-sentry/internal/extract"
-	"github.com/sbom-sentry/internal/policy"
-	"github.com/sbom-sentry/internal/report"
-	"github.com/sbom-sentry/internal/sandbox"
-	"github.com/sbom-sentry/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/assembly"
+	"github.com/TomTonic/extract-sbom/internal/config"
+	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/policy"
+	"github.com/TomTonic/extract-sbom/internal/report"
+	"github.com/TomTonic/extract-sbom/internal/sandbox"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
 // ExitCode represents the process exit status.
@@ -34,7 +34,7 @@ const (
 	ExitHardSecurity ExitCode = 2
 )
 
-// Result holds the outcome of a complete sbom-sentry run.
+// Result holds the outcome of a complete extract-sbom run.
 type Result struct {
 	ExitCode   ExitCode
 	SBOMPath   string
@@ -42,7 +42,7 @@ type Result struct {
 	Error      error
 }
 
-// Run executes the complete sbom-sentry processing pipeline.
+// Run executes the complete extract-sbom processing pipeline.
 // It validates configuration, computes input hashes, resolves the sandbox,
 // extracts archives recursively, invokes Syft for SBOM generation, assembles
 // the consolidated SBOM, and generates the audit report.
