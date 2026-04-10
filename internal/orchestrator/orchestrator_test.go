@@ -8,8 +8,10 @@ package orchestrator
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sbom-sentry/internal/config"
@@ -392,7 +394,7 @@ func createZIPWithNestedZIP(t *testing.T, dir string, outerName string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fw.Write([]byte("outer readme")); err != nil {
+	if _, err = fw.Write([]byte("outer readme")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -407,6 +409,83 @@ func createZIPWithNestedZIP(t *testing.T, dir string, outerName string) string {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
+	return outerPath
+}
+
+// createJARWithManifestBytes creates a minimal JAR payload in memory containing
+// a manifest, used to exercise Syft-native JAR handling through nested archives.
+func createJARWithManifestBytes(t *testing.T) []byte {
+	t.Helper()
+
+	var jarBuf []byte
+	jarW := zip.NewWriter(newBytesWriter(&jarBuf))
+	manifest, err := jarW.Create("META-INF/MANIFEST.MF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = manifest.Write([]byte("Manifest-Version: 1.0\n")); err != nil {
+		t.Fatal(err)
+	}
+	classFile, err := jarW.Create("com/example/App.class")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := classFile.Write([]byte("CAFE")); err != nil {
+		t.Fatal(err)
+	}
+	if err := jarW.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return jarBuf
+}
+
+// createZIPWithNestedZIPAndJAR creates a delivery ZIP containing an inner ZIP
+// that itself contains a JAR with a manifest.
+func createZIPWithNestedZIPAndJAR(t *testing.T, dir string, outerName string) string {
+	t.Helper()
+
+	jarBytes := createJARWithManifestBytes(t)
+
+	var innerBuf []byte
+	innerW := zip.NewWriter(newBytesWriter(&innerBuf))
+	jarEntry, err := innerW.Create("lib/app.jar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = jarEntry.Write(jarBytes); err != nil {
+		t.Fatal(err)
+	}
+	if closeErr := innerW.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	outerPath := filepath.Join(dir, outerName)
+	f, err := os.Create(outerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	w := zip.NewWriter(f)
+	innerEntry, err := w.Create("inner.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = innerEntry.Write(innerBuf); err != nil {
+		t.Fatal(err)
+	}
+	readmeEntry, err := w.Create("readme.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readmeEntry.Write([]byte("nested delivery")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	return outerPath
 }
 
@@ -540,5 +619,142 @@ func TestRunResourceLimitStrictModeExitsPartial(t *testing.T) {
 
 	if result.ExitCode == ExitSuccess {
 		t.Errorf("ExitCode = Success with MaxFiles limit exceeded in strict mode, want non-success")
+	}
+}
+
+// TestRunNestedZIPReportContainsExtractionLogAndScans verifies end-to-end report
+// integration for nested archives: extraction log includes all relevant nodes,
+// and machine report scan entries are present for the traversed scan targets.
+func TestRunNestedZIPReportContainsExtractionLogAndScans(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := createZIPWithNestedZIPAndJAR(t, dir, "nested-with-jar.zip")
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.ReportMode = config.ReportBoth
+
+	result := Run(context.Background(), cfg)
+	if result.ExitCode == ExitHardSecurity && result.Error != nil {
+		t.Fatalf("pipeline fatal error: %v", result.Error)
+	}
+
+	if result.ReportPath == "" {
+		t.Fatal("ReportPath is empty")
+	}
+
+	human, err := os.ReadFile(result.ReportPath)
+	if err != nil {
+		t.Fatalf("cannot read human report: %v", err)
+	}
+	humanStr := string(human)
+
+	for _, fragment := range []string{
+		"## Extraction Log",
+		"nested-with-jar.zip",
+		"nested-with-jar.zip/inner.zip",
+		"nested-with-jar.zip/inner.zip/lib/app.jar",
+		"## Scan Results",
+		"nested-with-jar.zip",
+		"nested-with-jar.zip/inner.zip",
+		"nested-with-jar.zip/inner.zip/lib/app.jar",
+	} {
+		if !strings.Contains(humanStr, fragment) {
+			t.Fatalf("human report missing %q", fragment)
+		}
+	}
+
+	jsonPath := strings.TrimSuffix(result.ReportPath, ".report.md") + ".report.json"
+	machine, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatalf("cannot read machine report: %v", err)
+	}
+
+	var parsed struct {
+		Extraction struct {
+			Path string `json:"path"`
+		} `json:"extraction"`
+		Scans []struct {
+			NodePath string `json:"nodePath"`
+		} `json:"scans"`
+	}
+	if err := json.Unmarshal(machine, &parsed); err != nil {
+		t.Fatalf("invalid machine report JSON: %v", err)
+	}
+	if parsed.Extraction.Path != "nested-with-jar.zip" {
+		t.Fatalf("machine extraction root path = %q, want %q", parsed.Extraction.Path, "nested-with-jar.zip")
+	}
+
+	nodePaths := make(map[string]bool)
+	for _, s := range parsed.Scans {
+		nodePaths[s.NodePath] = true
+	}
+	for _, want := range []string{
+		"nested-with-jar.zip",
+		"nested-with-jar.zip/inner.zip",
+		"nested-with-jar.zip/inner.zip/lib/app.jar",
+	} {
+		if !nodePaths[want] {
+			t.Fatalf("machine report scans missing nodePath %q", want)
+		}
+	}
+}
+
+// TestRunPartialPolicyReportExplainsDecision verifies that when policy mode is
+// partial and a resource limit is hit, the human report explains the decision
+// with trigger and action rationale.
+func TestRunPartialPolicyReportExplainsDecision(t *testing.T) {
+	dir := t.TempDir()
+
+	zipPath := filepath.Join(dir, "limit.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	for i := 0; i < 4; i++ {
+		fw, wErr := w.Create(filepath.Join("data", "f"+string(rune('a'+i))+".txt"))
+		if wErr != nil {
+			t.Fatal(wErr)
+		}
+		if _, wErr = fw.Write([]byte("x")); wErr != nil {
+			t.Fatal(wErr)
+		}
+	}
+	if closeErr := w.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	if closeErr := f.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = zipPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.PolicyMode = config.PolicyPartial
+	cfg.ReportMode = config.ReportHuman
+	cfg.Limits.MaxFiles = 1
+
+	result := Run(context.Background(), cfg)
+	if result.ReportPath == "" {
+		t.Fatal("ReportPath is empty")
+	}
+
+	human, err := os.ReadFile(result.ReportPath)
+	if err != nil {
+		t.Fatalf("cannot read human report: %v", err)
+	}
+	humanStr := string(human)
+
+	for _, fragment := range []string{
+		"## Policy Decisions",
+		"max-files",
+		"partial mode: skipping subtree",
+	} {
+		if !strings.Contains(humanStr, fragment) {
+			t.Fatalf("policy report missing %q", fragment)
+		}
 	}
 }
