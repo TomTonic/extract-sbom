@@ -49,6 +49,7 @@ func rootCmd() *cobra.Command {
 		policyStr  string
 		modeStr    string
 		reportStr  string
+		progress   string
 		language   string
 		mfg        string
 		name       string
@@ -86,6 +87,9 @@ Configuration can be set via:
 			cfg, err := loadConfig(cmd, args)
 			if err != nil {
 				return err
+			}
+			cfg.ProgressFn = func(_ config.ProgressLevel, message string) {
+				fmt.Fprintf(os.Stderr, "%s\n", message)
 			}
 
 			fmt.Fprintf(os.Stderr, "Generator: extract-sbom %s\n", bi.String())
@@ -139,6 +143,7 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&policyStr, "policy", "strict", "Policy mode: strict (abort on limit) or partial (skip and continue)")
 	cmd.Flags().StringVar(&modeStr, "mode", "installer-semantic", "Interpretation mode: physical or installer-semantic")
 	cmd.Flags().StringVar(&reportStr, "report", "human", "Report output mode: human, machine, or both")
+	cmd.Flags().StringVar(&progress, "progress", "normal", "Progress output verbosity: quiet, normal, or verbose")
 	cmd.Flags().StringVar(&language, "language", "en", "Report language: en or de")
 	cmd.Flags().StringVar(&mfg, "root-manufacturer", "", "Manufacturer/supplier for the SBOM root component")
 	cmd.Flags().StringVar(&name, "root-name", "", "Software/product name for the SBOM root component")
@@ -230,6 +235,12 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 		return config.Config{}, err
 	}
 	cfg.ReportMode = reportMode
+
+	progressLevel, err := config.ParseProgressLevel(v.GetString("progress"))
+	if err != nil {
+		return config.Config{}, err
+	}
+	cfg.ProgressLevel = progressLevel
 
 	timeoutValue := v.GetString("timeout")
 	if timeoutValue != "" {

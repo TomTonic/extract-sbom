@@ -59,6 +59,9 @@ func TestDefaultConfigHasSensibleValues(t *testing.T) {
 	if cfg.ReportMode != ReportHuman {
 		t.Errorf("ReportMode = %v, want human", cfg.ReportMode)
 	}
+	if cfg.ProgressLevel != ProgressNormal {
+		t.Errorf("ProgressLevel = %v, want normal", cfg.ProgressLevel)
+	}
 	if cfg.Language != "en" {
 		t.Errorf("Language = %q, want en", cfg.Language)
 	}
@@ -154,6 +157,38 @@ func TestParseReportModeAcceptsValidValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := ParseReportMode(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseProgressLevelAcceptsValidValues verifies that progress verbosity
+// parsing supports all documented levels.
+func TestParseProgressLevelAcceptsValidValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   string
+		want    ProgressLevel
+		wantErr bool
+	}{
+		{"quiet", "quiet", ProgressQuiet, false},
+		{"normal", "normal", ProgressNormal, false},
+		{"verbose", "verbose", ProgressVerbose, false},
+		{"mixed case", "VerBose", ProgressVerbose, false},
+		{"invalid rejected", "chatty", ProgressNormal, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseProgressLevel(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -323,5 +358,20 @@ func TestReportModeStringReturnsReadableName(t *testing.T) {
 	}
 	if ReportBoth.String() != "both" {
 		t.Errorf("got %q", ReportBoth.String())
+	}
+}
+
+// TestProgressLevelStringReturnsReadableName verifies progress labels used by
+// CLI and config display.
+func TestProgressLevelStringReturnsReadableName(t *testing.T) {
+	t.Parallel()
+	if ProgressQuiet.String() != "quiet" {
+		t.Errorf("got %q", ProgressQuiet.String())
+	}
+	if ProgressNormal.String() != "normal" {
+		t.Errorf("got %q", ProgressNormal.String())
+	}
+	if ProgressVerbose.String() != "verbose" {
+		t.Errorf("got %q", ProgressVerbose.String())
 	}
 }

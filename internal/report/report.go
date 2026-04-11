@@ -137,6 +137,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, data.Config.Limits.MaxRatio)
 	fmt.Fprintf(w, "| %s | %s |\n", t.timeout, data.Config.Limits.Timeout)
 	fmt.Fprintf(w, "| %s | %s |\n", t.generator, data.Generator.String())
+	fmt.Fprintf(w, "| %s | %s |\n", t.progressLevel, data.Config.ProgressLevel.String())
 	fmt.Fprintln(w)
 
 	// Root SBOM metadata.
@@ -429,6 +430,7 @@ type translations struct {
 	maxEntrySize            string
 	maxRatio                string
 	timeout                 string
+	progressLevel           string
 	generator               string
 	sandboxName             string
 	sandboxAvail            string
@@ -476,6 +478,7 @@ func getTranslations(lang string) translations {
 			maxEntrySize:            "Maximale Eintragsgröße",
 			maxRatio:                "Maximales Verhältnis",
 			timeout:                 "Zeitlimit",
+			progressLevel:           "Fortschritt",
 			generator:               "extract-sbom Build",
 			sandboxName:             "Sandbox",
 			sandboxAvail:            "Verfügbar",
@@ -520,6 +523,7 @@ func getTranslations(lang string) translations {
 			maxEntrySize:            "Max entry size",
 			maxRatio:                "Max ratio",
 			timeout:                 "Timeout",
+			progressLevel:           "Progress",
 			generator:               "extract-sbom build",
 			sandboxName:             "Sandbox",
 			sandboxAvail:            "Available",

@@ -154,6 +154,7 @@ func TestRootCmdFlagsExist(t *testing.T) {
 		"max-entry-size",
 		"max-ratio",
 		"timeout",
+		"progress",
 	}
 
 	for _, flagName := range expectedFlags {

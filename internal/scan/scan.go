@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/anchore/syft/syft"
@@ -54,9 +55,43 @@ var Version = "dev"
 func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Config) ([]ScanResult, error) { //nolint:revive // stuttering is acceptable
 	var results []ScanResult
 	collectScanTargets(root, &results)
+	if len(results) == 0 {
+		cfg.EmitProgress(config.ProgressNormal, "[scan] no scan targets discovered")
+		return results, nil
+	}
 
 	for i := range results {
+		cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] start: %s", i+1, len(results), results[i].NodePath)
+		start := time.Now()
+		done := make(chan struct{})
+		if cfg.ProgressLevel >= config.ProgressNormal {
+			go func(idx int, total int, nodePath string) {
+				ticker := time.NewTicker(15 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-done:
+						return
+					case <-ticker.C:
+						cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] still running: %s", idx, total, nodePath)
+					}
+				}
+			}(i+1, len(results), results[i].NodePath)
+		}
 		scanNode(ctx, &results[i], root)
+		close(done)
+
+		duration := time.Since(start).Round(time.Millisecond)
+		if results[i].Error != nil {
+			cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] failed after %s: %s", i+1, len(results), duration, results[i].NodePath)
+			continue
+		}
+
+		componentCount := 0
+		if results[i].BOM != nil && results[i].BOM.Components != nil {
+			componentCount = len(*results[i].BOM.Components)
+		}
+		cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] done in %s: %s (%d components)", i+1, len(results), duration, results[i].NodePath, componentCount)
 	}
 
 	return results, nil

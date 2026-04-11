@@ -12,6 +12,50 @@ import (
 	"time"
 )
 
+// ProgressLevel controls runtime progress output verbosity.
+type ProgressLevel int
+
+const (
+	// ProgressQuiet disables runtime progress output.
+	ProgressQuiet ProgressLevel = iota
+	// ProgressNormal emits stage-level and periodic keep-alive updates.
+	ProgressNormal
+	// ProgressVerbose emits detailed per-target/per-container updates.
+	ProgressVerbose
+)
+
+// String returns the human-readable name of the progress level.
+func (p ProgressLevel) String() string {
+	switch p {
+	case ProgressQuiet:
+		return "quiet"
+	case ProgressNormal:
+		return "normal"
+	case ProgressVerbose:
+		return "verbose"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseProgressLevel converts a string to a ProgressLevel.
+// Valid values are "quiet", "normal", and "verbose" (case-insensitive).
+func ParseProgressLevel(s string) (ProgressLevel, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "quiet":
+		return ProgressQuiet, nil
+	case "normal":
+		return ProgressNormal, nil
+	case "verbose":
+		return ProgressVerbose, nil
+	default:
+		return ProgressNormal, fmt.Errorf("unknown progress level: %q (valid: quiet, normal, verbose)", s)
+	}
+}
+
+// ProgressReporter receives emitted progress messages.
+type ProgressReporter func(level ProgressLevel, message string)
+
 // PolicyMode controls behavior when resource limits are reached during extraction.
 type PolicyMode int
 
@@ -202,10 +246,12 @@ type Config struct {
 	PolicyMode    PolicyMode    // Strict | Partial
 	InterpretMode InterpretMode // Physical | InstallerSemantic
 	ReportMode    ReportMode    // Human | Machine | Both
+	ProgressLevel ProgressLevel // Quiet | Normal | Verbose
 	Language      string        // "en" | "de"
 	RootMetadata  RootMetadata
 	Unsafe        bool
 	Limits        Limits
+	ProgressFn    ProgressReporter // optional runtime progress sink
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -216,10 +262,22 @@ func DefaultConfig() Config {
 		PolicyMode:    PolicyStrict,
 		InterpretMode: InterpretInstallerSemantic,
 		ReportMode:    ReportHuman,
+		ProgressLevel: ProgressNormal,
 		Language:      "en",
 		WorkDir:       os.TempDir(),
 		Limits:        DefaultLimits(),
 	}
+}
+
+// EmitProgress sends a progress update when the configured verbosity allows it.
+func (c Config) EmitProgress(level ProgressLevel, format string, args ...interface{}) {
+	if c.ProgressFn == nil {
+		return
+	}
+	if c.ProgressLevel < level {
+		return
+	}
+	c.ProgressFn(level, fmt.Sprintf(format, args...))
 }
 
 // Validate checks the configuration for consistency and required fields.

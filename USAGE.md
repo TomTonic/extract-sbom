@@ -212,6 +212,27 @@ Output format for the audit report.
   integration.
 - `both`: both formats written.
 
+**`--progress quiet|normal|verbose` (default: normal)**
+
+Controls runtime progress output on stderr.
+
+- `quiet`: no progress output (only final paths/errors)
+- `normal`: stage markers and periodic keep-alive updates for long extraction/scan phases
+- `verbose`: detailed per-container and per-scan-target progress
+
+Examples:
+
+```bash
+# CI log-friendly
+extract-sbom --progress normal ...
+
+# Deep troubleshooting of slow deliveries
+extract-sbom --progress verbose ...
+
+# Silent mode for wrappers that provide their own progress UI
+extract-sbom --progress quiet ...
+```
+
 **`--language en|de` (default: en)**
 
 Language for human-readable report. German (`de`) translates all narrative

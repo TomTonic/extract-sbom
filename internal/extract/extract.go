@@ -137,6 +137,8 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sb sandbo
 // extractRecursive handles one level of extraction and recurses into children.
 func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string, deliveryPath string,
 	depth int, cfg config.Config, sb sandbox.Sandbox, stats *safeguard.ExtractionStats) error {
+	cfg.EmitProgress(config.ProgressVerbose, "[extract] depth=%d path=%s", depth, deliveryPath)
+
 	// Check depth limit.
 	if depth > cfg.Limits.MaxDepth {
 		node.Status = StatusSkipped
@@ -175,6 +177,7 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 
 	// Extract based on format.
 	start := time.Now()
+	cfg.EmitProgress(config.ProgressVerbose, "[extract] start: %s (%s)", deliveryPath, info.Format.String())
 
 	// Apply per-extraction timeout from configuration.
 	extractCtx := ctx
@@ -186,13 +189,13 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 
 	switch info.Format {
 	case identify.ZIP:
-		err = extractZIP(extractCtx, node, filePath, cfg.WorkDir, cfg.Limits, stats)
+		err = extractZIP(extractCtx, node, filePath, cfg.WorkDir, cfg.Limits, stats, cfg)
 	case identify.TAR:
-		err = extractTAR(extractCtx, node, filePath, nil, cfg.WorkDir, cfg.Limits, stats)
+		err = extractTAR(extractCtx, node, filePath, nil, cfg.WorkDir, cfg.Limits, stats, cfg)
 	case identify.GzipTAR:
-		err = extractCompressedTAR(extractCtx, node, filePath, "gzip", cfg.WorkDir, cfg.Limits, stats)
+		err = extractCompressedTAR(extractCtx, node, filePath, "gzip", cfg.WorkDir, cfg.Limits, stats, cfg)
 	case identify.Bzip2TAR:
-		err = extractCompressedTAR(extractCtx, node, filePath, "bzip2", cfg.WorkDir, cfg.Limits, stats)
+		err = extractCompressedTAR(extractCtx, node, filePath, "bzip2", cfg.WorkDir, cfg.Limits, stats, cfg)
 	case identify.XzTAR, identify.ZstdTAR:
 		// XZ and Zstd require external libraries; for now mark as needing 7zz.
 		err = extract7z(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits)
@@ -250,6 +253,8 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 		}
 		return nil
 	}
+
+	cfg.EmitProgress(config.ProgressVerbose, "[extract] done: %s in %s (%s)", deliveryPath, node.Duration.Round(time.Millisecond), node.Status.String())
 
 	// Recurse into extracted contents.
 	if node.ExtractedDir != "" {
@@ -320,7 +325,7 @@ func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, par
 
 // extractZIP extracts a ZIP archive using Go's archive/zip stdlib.
 // Each entry header is validated by safeguard before any bytes are written.
-func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, workDir string, limits config.Limits, stats *safeguard.ExtractionStats) error {
+func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, workDir string, limits config.Limits, stats *safeguard.ExtractionStats, cfg config.Config) error {
 	r, err := zip.OpenReader(filePath)
 	if err != nil {
 		return fmt.Errorf("extract: open zip %s: %w", filePath, err)
@@ -341,6 +346,7 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 
 	node.Tool = "archive/zip"
 	sanitizedNames := 0
+	nextProgress := time.Now().Add(5 * time.Second)
 
 	for _, f := range r.File {
 		select {
@@ -396,6 +402,12 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 
 		node.EntriesCount++
 		node.TotalSize += safeUint64ToInt64(f.UncompressedSize64)
+
+		if time.Now().After(nextProgress) {
+			totalGiB := float64(node.TotalSize) / (1024.0 * 1024.0 * 1024.0)
+			cfg.EmitProgress(config.ProgressNormal, "[extract] %s: %d entries, %.2f GiB unpacked", node.Path, node.EntriesCount, totalGiB)
+			nextProgress = time.Now().Add(5 * time.Second)
+		}
 	}
 
 	node.ExtractedDir = outDir
@@ -461,7 +473,7 @@ func extractZIPEntry(f *zip.File, targetPath string, limits config.Limits) error
 
 // extractTAR extracts a TAR archive using Go's archive/tar stdlib.
 // If reader is nil, the file is opened directly.
-func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, reader io.Reader, workDir string, limits config.Limits, stats *safeguard.ExtractionStats) error {
+func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, reader io.Reader, workDir string, limits config.Limits, stats *safeguard.ExtractionStats, cfg config.Config) error {
 	if reader == nil {
 		f, err := os.Open(filePath)
 		if err != nil {
@@ -484,6 +496,7 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 	}()
 
 	node.Tool = "archive/tar"
+	nextProgress := time.Now().Add(5 * time.Second)
 
 	tr := tar.NewReader(reader)
 
@@ -536,6 +549,11 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 			}
 			node.EntriesCount++
 			node.TotalSize += hdr.Size
+			if time.Now().After(nextProgress) {
+				totalGiB := float64(node.TotalSize) / (1024.0 * 1024.0 * 1024.0)
+				cfg.EmitProgress(config.ProgressNormal, "[extract] %s: %d entries, %.2f GiB unpacked", node.Path, node.EntriesCount, totalGiB)
+				nextProgress = time.Now().Add(5 * time.Second)
+			}
 		default:
 			// Skip other types (symlinks are rejected by safeguard).
 			continue
@@ -578,7 +596,7 @@ func extractTAREntry(tr *tar.Reader, targetPath string, size int64, limits confi
 }
 
 // extractCompressedTAR handles gzip and bzip2 compressed TAR archives.
-func extractCompressedTAR(ctx context.Context, node *ExtractionNode, filePath string, compression string, workDir string, limits config.Limits, stats *safeguard.ExtractionStats) error {
+func extractCompressedTAR(ctx context.Context, node *ExtractionNode, filePath string, compression string, workDir string, limits config.Limits, stats *safeguard.ExtractionStats, cfg config.Config) error {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("extract: open %s: %w", filePath, err)
@@ -600,7 +618,7 @@ func extractCompressedTAR(ctx context.Context, node *ExtractionNode, filePath st
 		return fmt.Errorf("extract: unsupported compression %s", compression)
 	}
 
-	return extractTAR(ctx, node, filePath, reader, workDir, limits, stats)
+	return extractTAR(ctx, node, filePath, reader, workDir, limits, stats, cfg)
 }
 
 // extract7z extracts CAB, MSI, 7z, or RAR files using 7-Zip via the sandbox.
