@@ -63,6 +63,7 @@ func rootCmd() *cobra.Command {
 		maxEntry   int64
 		maxRatio   int
 		timeout    string
+		parallel   int
 	)
 
 	cmd := &cobra.Command{
@@ -157,6 +158,7 @@ Configuration can be set via:
 	cmd.Flags().Int64Var(&maxEntry, "max-entry-size", defaults.Limits.MaxEntrySize, "Maximum single entry size in bytes")
 	cmd.Flags().IntVar(&maxRatio, "max-ratio", defaults.Limits.MaxRatio, "Maximum compression ratio per entry")
 	cmd.Flags().StringVar(&timeout, "timeout", "", "Per-extraction timeout")
+	cmd.Flags().IntVar(&parallel, "parallel", defaults.ParallelScanners, "Number of concurrent Syft scan workers")
 
 	return cmd
 }
@@ -217,6 +219,7 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	cfg.Limits.MaxTotalSize = v.GetInt64("max-size")
 	cfg.Limits.MaxEntrySize = v.GetInt64("max-entry-size")
 	cfg.Limits.MaxRatio = v.GetInt("max-ratio")
+	cfg.ParallelScanners = v.GetInt("parallel")
 
 	policyMode, err := config.ParsePolicyMode(v.GetString("policy"))
 	if err != nil {

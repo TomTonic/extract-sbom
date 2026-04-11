@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -47,6 +48,9 @@ var Version = "dev"
 // SyftNative leaves are scanned using the original file path; extracted
 // directories are scanned at their extraction output path.
 //
+// Scanning is parallelized across multiple workers (controlled by cfg.ParallelScanners).
+// Results are maintained in the same order as the extraction tree walk.
+//
 // Parameters:
 //   - ctx: context for cancellation and timeout
 //   - root: the root of the extraction tree from extract.Extract
@@ -63,39 +67,66 @@ func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Confi
 		return results, nil
 	}
 
-	for i := range results {
-		cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] start: %s", i+1, len(results), results[i].NodePath)
-		start := time.Now()
-		done := make(chan struct{})
-		if cfg.ProgressLevel >= config.ProgressNormal {
-			go func(idx int, total int, nodePath string) {
-				ticker := time.NewTicker(15 * time.Second)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-done:
-						return
-					case <-ticker.C:
-						cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] still running: %s", idx, total, nodePath)
-					}
-				}
-			}(i+1, len(results), results[i].NodePath)
-		}
-		scanNode(ctx, &results[i], root)
-		close(done)
-
-		duration := time.Since(start).Round(time.Millisecond)
-		if results[i].Error != nil {
-			cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] failed after %s: %s (%v)", i+1, len(results), duration, results[i].NodePath, results[i].Error)
-			continue
-		}
-
-		componentCount := 0
-		if results[i].BOM != nil && results[i].BOM.Components != nil {
-			componentCount = len(*results[i].BOM.Components)
-		}
-		cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] done in %s: %s (%d components)", i+1, len(results), duration, results[i].NodePath, componentCount)
+	numWorkers := cfg.ParallelScanners
+	if numWorkers < 1 {
+		numWorkers = 1
 	}
+
+	cfg.EmitProgress(config.ProgressNormal, "[scan] starting %d scan workers for %d targets", numWorkers, len(results))
+
+	// Create a work queue for scan indices.
+	workQueue := make(chan int, len(results))
+	var wg sync.WaitGroup
+
+	// Spawn worker goroutines.
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func(_ int) {
+			defer wg.Done()
+			for idx := range workQueue {
+				cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] start: %s", idx+1, len(results), results[idx].NodePath)
+				start := time.Now()
+				done := make(chan struct{})
+				if cfg.ProgressLevel >= config.ProgressNormal {
+					go func(idx int, total int, nodePath string) {
+						ticker := time.NewTicker(15 * time.Second)
+						defer ticker.Stop()
+						for {
+							select {
+							case <-done:
+								return
+							case <-ticker.C:
+								cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] still running: %s", idx+1, total, nodePath)
+							}
+						}
+					}(idx+1, len(results), results[idx].NodePath)
+				}
+				scanNode(ctx, &results[idx], root)
+				close(done)
+
+				duration := time.Since(start).Round(time.Millisecond)
+				if results[idx].Error != nil {
+					cfg.EmitProgress(config.ProgressNormal, "[scan %d/%d] failed after %s: %s (%v)", idx+1, len(results), duration, results[idx].NodePath, results[idx].Error)
+					continue
+				}
+
+				componentCount := 0
+				if results[idx].BOM != nil && results[idx].BOM.Components != nil {
+					componentCount = len(*results[idx].BOM.Components)
+				}
+				cfg.EmitProgress(config.ProgressVerbose, "[scan %d/%d] done in %s: %s (%d components)", idx+1, len(results), duration, results[idx].NodePath, componentCount)
+			}
+		}(w)
+	}
+
+	// Queue all scan indices.
+	for i := 0; i < len(results); i++ {
+		workQueue <- i
+	}
+	close(workQueue)
+
+	// Wait for all workers to finish.
+	wg.Wait()
 
 	return results, nil
 }

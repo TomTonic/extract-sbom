@@ -239,33 +239,35 @@ func DefaultLimits() Limits {
 // Config is the central configuration for an extract-sbom run.
 // It is constructed from CLI flags and passed to all modules.
 type Config struct {
-	InputPath     string
-	OutputDir     string
-	WorkDir       string        // base directory for temporary extraction work
-	SBOMFormat    string        // "cyclonedx-json"
-	PolicyMode    PolicyMode    // Strict | Partial
-	InterpretMode InterpretMode // Physical | InstallerSemantic
-	ReportMode    ReportMode    // Human | Machine | Both
-	ProgressLevel ProgressLevel // Quiet | Normal | Verbose
-	Language      string        // "en" | "de"
-	RootMetadata  RootMetadata
-	Unsafe        bool
-	Limits        Limits
-	ProgressFn    ProgressReporter // optional runtime progress sink
+	InputPath        string
+	OutputDir        string
+	WorkDir          string        // base directory for temporary extraction work
+	SBOMFormat       string        // "cyclonedx-json"
+	PolicyMode       PolicyMode    // Strict | Partial
+	InterpretMode    InterpretMode // Physical | InstallerSemantic
+	ReportMode       ReportMode    // Human | Machine | Both
+	ProgressLevel    ProgressLevel // Quiet | Normal | Verbose
+	Language         string        // "en" | "de"
+	RootMetadata     RootMetadata
+	Unsafe           bool
+	Limits           Limits
+	ProgressFn       ProgressReporter // optional runtime progress sink
+	ParallelScanners int              // number of concurrent Syft scan workers (default: 4)
 }
 
 // DefaultConfig returns a Config with sensible defaults.
 // InputPath and OutputDir must still be set by the caller.
 func DefaultConfig() Config {
 	return Config{
-		SBOMFormat:    "cyclonedx-json",
-		PolicyMode:    PolicyStrict,
-		InterpretMode: InterpretInstallerSemantic,
-		ReportMode:    ReportHuman,
-		ProgressLevel: ProgressNormal,
-		Language:      "en",
-		WorkDir:       os.TempDir(),
-		Limits:        DefaultLimits(),
+		SBOMFormat:       "cyclonedx-json",
+		PolicyMode:       PolicyStrict,
+		InterpretMode:    InterpretInstallerSemantic,
+		ReportMode:       ReportHuman,
+		ProgressLevel:    ProgressNormal,
+		Language:         "en",
+		WorkDir:          os.TempDir(),
+		Limits:           DefaultLimits(),
+		ParallelScanners: 4,
 	}
 }
 
