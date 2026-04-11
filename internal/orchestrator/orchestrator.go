@@ -61,6 +61,7 @@ type Result struct {
 func Run(ctx context.Context, cfg config.Config) Result {
 	startTime := time.Now()
 	generatorInfo := buildinfo.Read()
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] start: %s", filepath.Base(cfg.InputPath))
 	issues := make([]report.ProcessingIssue, 0)
 	addIssue := func(stage string, err error) {
 		if err == nil {
@@ -72,17 +73,22 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	var fatalErr error
 
 	// Step 1: Validate configuration.
+	cfg.EmitProgress(config.ProgressVerbose, "[extract-sbom] step 1/7: validating configuration")
 	if err := cfg.Validate(); err != nil {
 		return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("configuration: %w", err)}
 	}
 
 	// Step 2: Compute input file hashes.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 2/7: hashing input file")
+	hashStart := time.Now()
 	inputSummary, err := report.ComputeInputSummary(cfg.InputPath)
 	if err != nil {
 		return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("input hash: %w", err)}
 	}
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] hashing done in %s", time.Since(hashStart).Round(time.Millisecond))
 
 	// Step 3: Resolve sandbox.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/7: resolving sandbox")
 	sb, resolveErr := sandbox.Resolve(cfg)
 	addIssue("sandbox-resolve", resolveErr)
 	sandboxInfo := report.SandboxSummary{
@@ -90,11 +96,15 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		Name:      sb.Name(),
 		Available: sb.Available(),
 	}
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] sandbox: %s (available=%t)", sandboxInfo.Name, sandboxInfo.Available)
 
 	// Step 4: Extract.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 4/7: extracting containers")
+	extractStart := time.Now()
 	policyEngine := policy.NewEngine(cfg.PolicyMode)
 
 	tree, extractErr := extract.Extract(ctx, cfg.InputPath, cfg, sb)
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] extraction done in %s", time.Since(extractStart).Round(time.Millisecond))
 	if extractErr != nil {
 		addIssue("extract", extractErr)
 		// Record the policy decision.
@@ -112,7 +122,10 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	// Step 5: Scan with Syft.
 	var scans []scan.ScanResult
 	if tree != nil {
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 5/7: scanning with syft")
+		scanStart := time.Now()
 		scans, err = scan.ScanAll(ctx, tree, cfg)
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] scanning done in %s (%d targets)", time.Since(scanStart).Round(time.Millisecond), len(scans))
 		if err != nil {
 			addIssue("scan", err)
 			// Non-fatal: proceed with whatever we have.
@@ -127,7 +140,10 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	// Step 6: Assemble SBOM.
 	var sbomPath string
 	if tree != nil {
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/7: assembling sbom")
+		assembleStart := time.Now()
 		bom, asmErr := assembly.Assemble(tree, scans, cfg)
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] assembly done in %s", time.Since(assembleStart).Round(time.Millisecond))
 		if asmErr != nil {
 			addIssue("assembly", asmErr)
 			policyEngine.Evaluate(policy.Violation{
@@ -156,6 +172,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	}
 
 	// Step 7: Generate report.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 7/7: writing report(s)")
 	endTime := time.Now()
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
@@ -287,6 +304,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	case policyEngine.HasSkip() || policyEngine.HasAbort() || treeHasIncomplete(tree) || hasScanFailures(scans):
 		exitCode = ExitPartial
 	}
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] done in %s (exit=%d)", time.Since(startTime).Round(time.Millisecond), exitCode)
 
 	return Result{
 		ExitCode:   exitCode,
