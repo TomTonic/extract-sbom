@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -182,6 +183,64 @@ func TestExtractZIPProducesExtractionTree(t *testing.T) {
 	}
 
 	// Clean up.
+	CleanupNode(tree)
+}
+
+// TestExtractZIPInvalidUTF8EntryNameIsSanitized verifies that ZIP entries with
+// invalid UTF-8 names are still extracted with a filesystem-safe fallback name
+// instead of failing the entire extraction.
+func TestExtractZIPInvalidUTF8EntryNameIsSanitized(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	zipPath := filepath.Join(dir, "invalid-name.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+
+	rawNameBytes := []byte{'0', '1', '_', 'D', 'B', '-', 0x84, 'n', 'd', 'e', 'r', 'u', 'n', 'g', 'e', 'n', '.', 't', 'x', 't'}
+	hdr := &zip.FileHeader{Name: string(rawNameBytes), Method: zip.Deflate}
+	fw, err := w.CreateHeader(hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("content")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = zipPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	tree, err := Extract(context.Background(), zipPath, cfg, sandbox.NewPassthroughSandbox())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree.Status != StatusExtracted {
+		t.Fatalf("status = %v, want %v", tree.Status, StatusExtracted)
+	}
+	if !strings.Contains(tree.StatusDetail, "sanitized 1 ZIP entry names") {
+		t.Fatalf("StatusDetail = %q, want sanitization hint", tree.StatusDetail)
+	}
+
+	if tree.ExtractedDir == "" {
+		t.Fatal("ExtractedDir is empty")
+	}
+
+	sanitizedName := sanitizeArchiveEntryName(string(rawNameBytes))
+	if _, err := os.Stat(filepath.Join(tree.ExtractedDir, sanitizedName)); err != nil {
+		t.Fatalf("sanitized entry not found: %v", err)
+	}
+
 	CleanupNode(tree)
 }
 

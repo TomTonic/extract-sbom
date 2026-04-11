@@ -19,9 +19,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/identify"
@@ -338,6 +340,7 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 	}()
 
 	node.Tool = "archive/zip"
+	sanitizedNames := 0
 
 	for _, f := range r.File {
 		select {
@@ -346,13 +349,22 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 		default:
 		}
 
-		// Validate path safety.
+		entryName := sanitizeArchiveEntryName(f.Name)
+		if entryName != f.Name {
+			sanitizedNames++
+		}
+
+		// Validate path safety against both the original ZIP entry name and
+		// the filesystem-safe name that will actually be written.
 		if err := safeguard.ValidatePath(f.Name, outDir); err != nil {
+			return err
+		}
+		if err := safeguard.ValidatePath(entryName, outDir); err != nil {
 			return err
 		}
 
 		header := safeguard.EntryHeader{
-			Name:             f.Name,
+			Name:             entryName,
 			UncompressedSize: safeUint64ToInt64(f.UncompressedSize64),
 			CompressedSize:   safeUint64ToInt64(f.CompressedSize64),
 			Mode:             f.Mode(),
@@ -364,7 +376,7 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 			return err
 		}
 
-		targetPath := filepath.Join(outDir, filepath.Clean(f.Name))
+		targetPath := filepath.Join(outDir, filepath.Clean(entryName))
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(targetPath, 0o750); err != nil {
@@ -389,9 +401,29 @@ func extractZIP(ctx context.Context, node *ExtractionNode, filePath string, work
 	node.ExtractedDir = outDir
 	node.Status = StatusExtracted
 	node.StatusDetail = fmt.Sprintf("extracted %d entries", node.EntriesCount)
+	if sanitizedNames > 0 {
+		node.StatusDetail = fmt.Sprintf("%s (sanitized %d ZIP entry names for filesystem compatibility)", node.StatusDetail, sanitizedNames)
+	}
 	zipOK = true
 
 	return nil
+}
+
+// sanitizeArchiveEntryName turns invalid UTF-8 bytes in archive entry names
+// into a stable replacement sequence so hosts with strict filesystem APIs
+// (notably macOS) can still create files.
+func sanitizeArchiveEntryName(name string) string {
+	if utf8.ValidString(name) {
+		return name
+	}
+
+	normalized := strings.ToValidUTF8(name, "_")
+	normalized = strings.ReplaceAll(normalized, "\\", "/")
+	cleaned := path.Clean(normalized)
+	if cleaned == "." {
+		return "_"
+	}
+	return cleaned
 }
 
 // extractZIPEntry writes a single ZIP entry to disk with size-bounded copying.
