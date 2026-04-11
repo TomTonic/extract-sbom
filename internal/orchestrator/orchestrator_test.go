@@ -233,6 +233,17 @@ func TestRunSurvivingHumanReportIncludesLaterMachineFailure(t *testing.T) {
 
 	result := Run(context.Background(), cfg)
 
+	foundMachineIssue := false
+	for _, issue := range result.Issues {
+		if issue.Stage == "create-report-machine" {
+			foundMachineIssue = true
+			break
+		}
+	}
+	if !foundMachineIssue {
+		t.Fatal("result issues missing create-report-machine")
+	}
+
 	if result.ReportPath == "" {
 		t.Fatal("ReportPath is empty; expected surviving human report")
 	}

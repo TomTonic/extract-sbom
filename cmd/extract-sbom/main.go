@@ -103,6 +103,13 @@ Configuration can be set via:
 
 			// Run the pipeline.
 			result := orchestrator.Run(ctx, cfg)
+			if len(result.Issues) > 0 {
+				fmt.Fprintln(os.Stderr, "Processing notes:")
+				for _, issue := range result.Issues {
+					fmt.Fprintf(os.Stderr, "  - %s: %s\n", issue.Stage, issue.Message)
+				}
+				fmt.Fprintln(os.Stderr)
+			}
 			if result.Error != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", result.Error)
 			}

@@ -40,6 +40,7 @@ type Result struct {
 	ExitCode   ExitCode
 	SBOMPath   string
 	ReportPath string
+	Issues     []report.ProcessingIssue
 	Error      error
 }
 
@@ -291,6 +292,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		ExitCode:   exitCode,
 		SBOMPath:   sbomPath,
 		ReportPath: reportPath,
+		Issues:     append([]report.ProcessingIssue(nil), issues...),
 		Error:      fatalErr,
 	}
 }
