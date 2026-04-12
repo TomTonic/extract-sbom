@@ -252,6 +252,9 @@ func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) 
 	merged, mergeSuppressed := mergeDuplicateScanCandidates(candidates)
 	suppressions = append(suppressions, mergeSuppressed...)
 
+	merged, purlSuppressed := mergePURLDuplicateScanCandidates(merged)
+	suppressions = append(suppressions, purlSuppressed...)
+
 	sort.Slice(merged, func(i, j int) bool {
 		return compareScanCandidates(merged[i], merged[j]) < 0
 	})
@@ -311,6 +314,90 @@ func mergeDuplicateScanCandidates(candidates []scanComponentCandidate) ([]scanCo
 
 func scanCandidateLocusKey(candidate scanComponentCandidate) string {
 	return candidate.deliveryPath + "\x00" + strings.Join(candidate.evidence, "\x1f")
+}
+
+// mergePURLDuplicateScanCandidates performs a second-pass deduplication that
+// collapses candidates with the same PURL and delivery path regardless of
+// evidence differences. Syft occasionally emits two entries for the same
+// physical JAR — one cataloged from the filename pattern (no evidence) and
+// one from its MANIFEST.MF (with evidence). Both carry the same PURL and
+// delivery path but different evidence sets; the first pass cannot catch them
+// because its locus key includes evidence. This pass groups by (PURL,
+// deliveryPath) and keeps the candidate with the most evidence.
+func mergePURLDuplicateScanCandidates(candidates []scanComponentCandidate) ([]scanComponentCandidate, []SuppressionRecord) {
+	if len(candidates) < 2 {
+		return candidates, nil
+	}
+
+	type purlLocusKey struct{ purl, deliveryPath string }
+	groups := make(map[purlLocusKey][]int) // key → indices into candidates
+	var keyOrder []purlLocusKey
+
+	for i := range candidates {
+		if candidates[i].component.PackageURL == "" {
+			continue
+		}
+		k := purlLocusKey{candidates[i].component.PackageURL, candidates[i].deliveryPath}
+		if _, exists := groups[k]; !exists {
+			keyOrder = append(keyOrder, k)
+		}
+		groups[k] = append(groups[k], i)
+	}
+
+	suppress := make(map[int]struct{})
+	var suppressions []SuppressionRecord
+
+	for _, k := range keyOrder {
+		idxs := groups[k]
+		if len(idxs) < 2 {
+			continue
+		}
+
+		// Pick the candidate with the most evidence; break ties by quality
+		// score then order.
+		bestIdx := idxs[0]
+		for _, idx := range idxs[1:] {
+			c := candidates[idx]
+			b := candidates[bestIdx]
+			if len(c.evidence) > len(b.evidence) {
+				bestIdx = idx
+			} else if len(c.evidence) == len(b.evidence) {
+				cs := scanCandidateQualityScore(c)
+				bs := scanCandidateQualityScore(b)
+				if cs > bs || (cs == bs && c.order < b.order) {
+					bestIdx = idx
+				}
+			}
+		}
+
+		best := candidates[bestIdx]
+		for _, idx := range idxs {
+			if idx == bestIdx {
+				continue
+			}
+			suppress[idx] = struct{}{}
+			suppressions = append(suppressions, SuppressionRecord{
+				Reason:       SuppressionWeakDuplicate,
+				Component:    candidates[idx].component,
+				FoundBy:      candidates[idx].foundBy,
+				DeliveryPath: candidates[idx].deliveryPath,
+				KeptName:     best.component.Name,
+				KeptFoundBy:  best.foundBy,
+			})
+		}
+	}
+
+	if len(suppress) == 0 {
+		return candidates, suppressions
+	}
+
+	merged := make([]scanComponentCandidate, 0, len(candidates)-len(suppress))
+	for i := range candidates {
+		if _, ok := suppress[i]; !ok {
+			merged = append(merged, candidates[i])
+		}
+	}
+	return merged, suppressions
 }
 
 func pickBestScanCandidate(group []scanComponentCandidate) scanComponentCandidate {

@@ -1026,6 +1026,119 @@ func TestAssembleMergesWeakDuplicatePlaceholders(t *testing.T) {
 	}
 }
 
+// TestAssembleMergesSamePURLAtSameLocationWithDifferentEvidence verifies that
+// two Syft entries for the same PURL at the same delivery path are collapsed
+// into one component, keeping the entry that has evidence. This happens when
+// Syft catalogs a JAR once from the filename pattern (no evidence) and once
+// from its MANIFEST.MF (with evidence).
+func TestAssembleMergesSamePURLAtSameLocationWithDifferentEvidence(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+
+	tree := &extract.ExtractionNode{
+		Path:         "delivery.zip",
+		OriginalPath: inputPath,
+		Status:       extract.StatusExtracted,
+		Format:       identify.FormatInfo{Format: identify.ZIP},
+	}
+
+	const (
+		jarPath      = "/lib/gis/gt-xsd-wfs-28.0.jar"
+		deliveryPath = "delivery.zip/lib/gis/gt-xsd-wfs-28.0.jar"
+		purl         = "pkg:maven/org.geotools.xsd/gt-xsd-wfs@28.0"
+		manifestPath = "delivery.zip/lib/gis/gt-xsd-wfs-28.0.jar/META-INF/MANIFEST.MF"
+	)
+
+	// no-evidence entry (filename-pattern detection)
+	noEvidenceBOMRef := "syft-no-evidence"
+	// with-evidence entry (MANIFEST.MF detection)
+	withEvidenceBOMRef := "syft-with-evidence"
+
+	scans := []scan.ScanResult{{
+		NodePath: "delivery.zip",
+		BOM: &cdx.BOM{Components: &[]cdx.Component{
+			{
+				BOMRef:     noEvidenceBOMRef,
+				Type:       cdx.ComponentTypeLibrary,
+				Name:       "gt-xsd-wfs",
+				Version:    "28.0",
+				PackageURL: purl,
+				Properties: &[]cdx.Property{
+					{Name: "syft:location:0:path", Value: jarPath},
+					{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+				},
+			},
+			{
+				BOMRef:     withEvidenceBOMRef,
+				Type:       cdx.ComponentTypeLibrary,
+				Name:       "gt-xsd-wfs",
+				Version:    "28.0",
+				PackageURL: purl,
+				Properties: &[]cdx.Property{
+					{Name: "syft:location:0:path", Value: jarPath},
+					{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+				},
+			},
+		}},
+		EvidencePaths: map[string][]string{
+			withEvidenceBOMRef: {manifestPath},
+		},
+	}}
+
+	bom, suppressions, err := Assemble(tree, scans, cfg)
+	if err != nil {
+		t.Fatalf("Assemble error: %v", err)
+	}
+	if bom.Components == nil {
+		t.Fatal("Components is nil")
+	}
+
+	var matches []cdx.Component
+	for _, comp := range *bom.Components {
+		if comp.PackageURL == purl {
+			matches = append(matches, comp)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected exactly 1 gt-xsd-wfs component, got %d", len(matches))
+	}
+
+	// The surviving entry must carry the evidence path.
+	comp := matches[0]
+	if comp.Properties == nil {
+		t.Fatal("surviving component has no properties")
+	}
+	var evidenceFound bool
+	for _, p := range *comp.Properties {
+		if p.Name == "extract-sbom:evidence-path" && p.Value == manifestPath {
+			evidenceFound = true
+		}
+	}
+	if !evidenceFound {
+		t.Errorf("surviving component is missing evidence-path %q", manifestPath)
+	}
+
+	// Exactly one suppression for weak-duplicate.
+	weakCount := 0
+	for _, s := range suppressions {
+		if s.Reason == SuppressionWeakDuplicate && s.Component.PackageURL == purl {
+			weakCount++
+		}
+	}
+	if weakCount != 1 {
+		t.Errorf("expected 1 SuppressionWeakDuplicate for %s, got %d", purl, weakCount)
+	}
+}
+
 // TestAssembleKeepsDistinctStrongDuplicates verifies that if multiple strong
 // package records exist at the same location, assembly does not collapse them.
 func TestAssembleKeepsDistinctStrongDuplicates(t *testing.T) {
