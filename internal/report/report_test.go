@@ -147,6 +147,7 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"## Residual Risk and Limitations",
 		"## Policy Decisions",
 		"## Component Occurrence Index",
+		"## Component Normalization",
 		"## Extraction Log",
 		"## Scan Results",
 		"End of report.",
@@ -306,6 +307,8 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
 		"- [Policy Decisions](#policy-decisions)",
+		"- [Component Occurrence Index](#component-occurrence-index)",
+		"- [Component Normalization](#component-normalization)",
 		"- [Scan Results](#scan-results)",
 		"- [Extraction Log](#extraction-log)",
 	} {

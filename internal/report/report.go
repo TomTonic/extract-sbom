@@ -20,6 +20,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
@@ -65,6 +66,9 @@ type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 	EndTime          time.Time
 	BOM              *cdx.BOM
 	SBOMPath         string
+	// Suppressions records every component that assembly removed from the SBOM
+	// during normalization or deduplication. The report must document each one.
+	Suppressions []assembly.SuppressionRecord
 }
 
 type componentOccurrence struct {
@@ -139,6 +143,7 @@ const (
 	anchorResidualRisk     = "residual-risk-and-limitations"
 	anchorPolicy           = "policy-decisions"
 	anchorComponentIndex   = "component-occurrence-index"
+	anchorSuppression      = "component-normalization"
 	anchorScan             = "scan-results"
 	anchorExtraction       = "extraction-log"
 )
@@ -266,6 +271,11 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	// Component occurrence index.
 	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
 	writeComponentOccurrenceIndex(w, occurrences, t)
+	fmt.Fprintln(w)
+
+	// Component normalization (suppression traceability).
+	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
+	writeSuppressionReport(w, data.Suppressions, t)
 	fmt.Fprintln(w)
 
 	// Scan results.
@@ -556,6 +566,14 @@ type translations struct {
 	summaryProcessingIssues string
 	summaryFindings         string
 	endOfReport             string
+
+	componentNormalizationSection  string
+	componentNormalizationLead     string
+	noSuppressions                 string
+	suppressionReasonFSArtifact    string
+	suppressionReasonLowValueFile  string
+	suppressionReasonWeakDuplicate string
+	suppressionReplacedBy          string
 }
 
 func getTranslations(lang string) translations {
@@ -624,6 +642,14 @@ func getTranslations(lang string) translations {
 			summaryProcessingIssues: "Verarbeitungsfehler",
 			summaryFindings:         "Wesentliche Befunde",
 			endOfReport:             "Ende des Berichts.",
+
+			componentNormalizationSection:  "Komponentennormalisierung",
+			componentNormalizationLead:     "Alle Komponenten, die aus dem SBOM entfernt wurden, sind hier mit Begründung aufgeführt. Dies gewährleistet die vollständige Nachverfolgbarkeit zwischen SBOM und Prüfbericht.",
+			noSuppressions:                 "Keine Komponenten entfernt.",
+			suppressionReasonFSArtifact:    "FS-Cataloger-Artefakt",
+			suppressionReasonLowValueFile:  "Datei ohne Identifikationsmerkmale",
+			suppressionReasonWeakDuplicate: "Schwaches Duplikat",
+			suppressionReplacedBy:          "Ersetzt durch",
 		}
 	default:
 		return translations{
@@ -689,6 +715,14 @@ func getTranslations(lang string) translations {
 			summaryProcessingIssues: "Processing issues",
 			summaryFindings:         "Key findings",
 			endOfReport:             "End of report.",
+
+			componentNormalizationSection:  "Component Normalization",
+			componentNormalizationLead:     "Every component removed from the SBOM during normalization or deduplication is listed here with its reason. This ensures full traceability between the SBOM and the audit report.",
+			noSuppressions:                 "No components removed.",
+			suppressionReasonFSArtifact:    "FS-cataloger artifact",
+			suppressionReasonLowValueFile:  "File with no identification metadata",
+			suppressionReasonWeakDuplicate: "Weak duplicate",
+			suppressionReplacedBy:          "Replaced by",
 		}
 	}
 }
@@ -741,6 +775,7 @@ func reportSections(t translations) []reportSection {
 		{title: t.residualRiskSection, anchor: anchorResidualRisk},
 		{title: t.policySection, anchor: anchorPolicy},
 		{title: t.componentIndexSection, anchor: anchorComponentIndex},
+		{title: t.componentNormalizationSection, anchor: anchorSuppression},
 		{title: t.scanSection, anchor: anchorScan},
 		{title: t.extractionSection, anchor: anchorExtraction},
 	}
@@ -931,6 +966,104 @@ func escapeMarkdownCell(value string) string {
 	value = strings.ReplaceAll(value, "|", "\\|")
 	value = strings.ReplaceAll(value, "\n", " ")
 	return value
+}
+
+func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionRecord, t translations) {
+	fmt.Fprintf(w, "%s\n\n", t.componentNormalizationLead)
+
+	if len(suppressions) == 0 {
+		fmt.Fprintf(w, "- %s\n", t.noSuppressions)
+		return
+	}
+
+	// Group by reason for a structured overview.
+	var fsArtifacts, lowValue, weakDups []assembly.SuppressionRecord
+	for i := range suppressions {
+		switch suppressions[i].Reason {
+		case assembly.SuppressionFSArtifact:
+			fsArtifacts = append(fsArtifacts, suppressions[i])
+		case assembly.SuppressionLowValueFile:
+			lowValue = append(lowValue, suppressions[i])
+		case assembly.SuppressionWeakDuplicate:
+			weakDups = append(weakDups, suppressions[i])
+		}
+	}
+
+	// Summary counts.
+	fmt.Fprintf(w, "| %s | Count |\n", "Reason")
+	fmt.Fprintln(w, "|---|---|")
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonFSArtifact, len(fsArtifacts))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonLowValueFile, len(lowValue))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonWeakDuplicate, len(weakDups))
+	fmt.Fprintln(w)
+
+	// FS-cataloger artifacts.
+	if len(fsArtifacts) > 0 {
+		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonFSArtifact, len(fsArtifacts))
+		fmt.Fprintln(w, "Syft file-cataloger emits a `type=file` entry whose Name is the absolute temp-directory path. These entries are suppressed to prevent filesystem-path leakage. A dedicated package cataloger identifies the same file as a library entry with a PURL and version.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "| Name (suppressed) | Delivery path |")
+		fmt.Fprintln(w, "|---|---|")
+		maxRows := 20
+		for i := range fsArtifacts {
+			if i >= maxRows {
+				fmt.Fprintf(w, "| ... | %d additional entries omitted |\n", len(fsArtifacts)-maxRows)
+				break
+			}
+			r := fsArtifacts[i]
+			fmt.Fprintf(w, "| `%s` | `%s` |\n",
+				escapeMarkdownCell(r.Component.Name),
+				escapeMarkdownCell(r.DeliveryPath))
+		}
+		fmt.Fprintln(w)
+	}
+
+	// Low-value file artifacts.
+	if len(lowValue) > 0 {
+		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonLowValueFile, len(lowValue))
+		fmt.Fprintln(w, "These `type=file` entries have no PURL, no version, and no `foundBy` cataloger. They cannot be matched to a vulnerability database and provide no identification value.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "| Name (suppressed) | Delivery path |")
+		fmt.Fprintln(w, "|---|---|")
+		maxRows := 20
+		for i := range lowValue {
+			if i >= maxRows {
+				fmt.Fprintf(w, "| ... | %d additional entries omitted |\n", len(lowValue)-maxRows)
+				break
+			}
+			r := lowValue[i]
+			fmt.Fprintf(w, "| `%s` | `%s` |\n",
+				escapeMarkdownCell(r.Component.Name),
+				escapeMarkdownCell(r.DeliveryPath))
+		}
+		fmt.Fprintln(w)
+	}
+
+	// Weak duplicates.
+	if len(weakDups) > 0 {
+		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonWeakDuplicate, len(weakDups))
+		fmt.Fprintln(w, "At the same (delivery-path, evidence-path) locus a stronger entry existed. The weaker entry (no PURL, no version, no cataloger) was suppressed. Only entries where the kept component has a PURL are collapsed.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "| Name (suppressed) | Delivery path | "+t.suppressionReplacedBy+" |")
+		fmt.Fprintln(w, "|---|---|---|")
+		maxRows := 20
+		for i := range weakDups {
+			if i >= maxRows {
+				fmt.Fprintf(w, "| ... | ... | %d additional entries omitted |\n", len(weakDups)-maxRows)
+				break
+			}
+			r := weakDups[i]
+			keptBy := r.KeptName
+			if r.KeptFoundBy != "" {
+				keptBy += " (" + r.KeptFoundBy + ")"
+			}
+			fmt.Fprintf(w, "| `%s` | `%s` | `%s` |\n",
+				escapeMarkdownCell(r.Component.Name),
+				escapeMarkdownCell(r.DeliveryPath),
+				escapeMarkdownCell(keptBy))
+		}
+		fmt.Fprintln(w)
+	}
 }
 
 func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrence, t translations) {

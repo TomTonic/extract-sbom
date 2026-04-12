@@ -27,6 +27,48 @@ import (
 
 var shortBOMRefEncoding = base32.NewEncoding("0123456789ABCDEFGHJKMNPQRSTVWXYZ").WithPadding(base32.NoPadding)
 
+// Suppression reason constants used in SuppressionRecord.
+const (
+	// SuppressionFSArtifact identifies Syft file-cataloger entries that carry
+	// an absolute temp-directory path as the component Name. These represent
+	// the physical file record and are always superseded by a dedicated
+	// package cataloger (e.g. java-archive-cataloger) when one is present.
+	// When no package cataloger identifies the file, the entry is dropped to
+	// prevent temp-path leakage and SBOM noise.
+	SuppressionFSArtifact = "fs-cataloger-artifact"
+
+	// SuppressionLowValueFile identifies type=file entries that carry no
+	// PURL, version, or foundBy metadata. They convey no identification
+	// value and cannot be matched to a vulnerability database.
+	SuppressionLowValueFile = "low-value-file"
+
+	// SuppressionWeakDuplicate identifies entries at the same
+	// (delivery-path, evidence-path) locus whose quality score is lower than
+	// the best entry in that group. Only dropped when the best entry is
+	// clearly superior (score ≥ 4, i.e. has a PURL).
+	SuppressionWeakDuplicate = "weak-duplicate"
+)
+
+// SuppressionRecord documents a component that was removed from the SBOM
+// during normalization or deduplication. Every record that appears here must
+// also appear in the audit report so that the suppression decision is traceable.
+type SuppressionRecord struct {
+	// Reason is one of the Suppression* constants.
+	Reason string
+	// Component is the suppressed entry exactly as emitted by Syft.
+	Component cdx.Component
+	// FoundBy is the syft:package:foundBy value of the suppressed entry.
+	FoundBy string
+	// DeliveryPath is the delivery-path context at the time of suppression.
+	DeliveryPath string
+	// KeptName is the name of the component that replaced this one.
+	// Only set for SuppressionWeakDuplicate.
+	KeptName string
+	// KeptFoundBy is the foundBy of the replacement component.
+	// Only set for SuppressionWeakDuplicate.
+	KeptFoundBy string
+}
+
 type bomRefAssigner struct {
 	byKey   map[string]string
 	byRef   map[string]string
@@ -99,7 +141,7 @@ func collectBOMRefKeys(tree *extract.ExtractionNode, scanMap map[string]*scan.Sc
 
 		seen[node.Path] = struct{}{}
 		if sr, ok := scanMap[node.Path]; ok && sr != nil && sr.Error == nil && sr.BOM != nil && sr.BOM.Components != nil {
-			candidates := normalizeScanComponents(node, sr)
+			candidates, _ := normalizeScanComponents(node, sr)
 			for i := range candidates {
 				seen[componentRefKey(node.Path, candidates[i].component, i)] = struct{}{}
 			}
@@ -157,20 +199,34 @@ func syftLocationPath(comp cdx.Component) string {
 	return ""
 }
 
-func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) []scanComponentCandidate {
+func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) ([]scanComponentCandidate, []SuppressionRecord) {
 	if node == nil || sr == nil || sr.BOM == nil || sr.BOM.Components == nil {
-		return nil
+		return nil, nil
 	}
 
+	var suppressions []SuppressionRecord
 	candidates := make([]scanComponentCandidate, 0, len(*sr.BOM.Components))
 	for i := range *sr.BOM.Components {
 		comp := (*sr.BOM.Components)[i]
 		if isFileCatalogerArtifact(comp) {
+			foundBy := firstComponentPropertyValue(comp, "syft:package:foundBy")
+			suppressions = append(suppressions, SuppressionRecord{
+				Reason:       SuppressionFSArtifact,
+				Component:    comp,
+				FoundBy:      foundBy,
+				DeliveryPath: node.Path,
+			})
 			continue
 		}
 
 		foundBy := firstComponentPropertyValue(comp, "syft:package:foundBy")
 		if isLowValueFileArtifact(comp, foundBy) {
+			suppressions = append(suppressions, SuppressionRecord{
+				Reason:       SuppressionLowValueFile,
+				Component:    comp,
+				FoundBy:      foundBy,
+				DeliveryPath: node.Path,
+			})
 			continue
 		}
 
@@ -193,18 +249,19 @@ func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) 
 		})
 	}
 
-	candidates = mergeDuplicateScanCandidates(candidates)
+	merged, mergeSuppressed := mergeDuplicateScanCandidates(candidates)
+	suppressions = append(suppressions, mergeSuppressed...)
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return compareScanCandidates(candidates[i], candidates[j]) < 0
+	sort.Slice(merged, func(i, j int) bool {
+		return compareScanCandidates(merged[i], merged[j]) < 0
 	})
 
-	return candidates
+	return merged, suppressions
 }
 
-func mergeDuplicateScanCandidates(candidates []scanComponentCandidate) []scanComponentCandidate {
+func mergeDuplicateScanCandidates(candidates []scanComponentCandidate) ([]scanComponentCandidate, []SuppressionRecord) {
 	if len(candidates) < 2 {
-		return candidates
+		return candidates, nil
 	}
 
 	groups := make(map[string][]scanComponentCandidate)
@@ -218,6 +275,7 @@ func mergeDuplicateScanCandidates(candidates []scanComponentCandidate) []scanCom
 	}
 	sort.Strings(keys)
 
+	var suppressions []SuppressionRecord
 	merged := make([]scanComponentCandidate, 0, len(candidates))
 	for _, key := range keys {
 		group := groups[key]
@@ -229,13 +287,26 @@ func mergeDuplicateScanCandidates(candidates []scanComponentCandidate) []scanCom
 		best := pickBestScanCandidate(group)
 		if shouldCollapseScanCandidateGroup(group, best) {
 			merged = append(merged, best)
+			for i := range group {
+				if group[i].component.BOMRef == best.component.BOMRef && group[i].order == best.order {
+					continue
+				}
+				suppressions = append(suppressions, SuppressionRecord{
+					Reason:       SuppressionWeakDuplicate,
+					Component:    group[i].component,
+					FoundBy:      group[i].foundBy,
+					DeliveryPath: group[i].deliveryPath,
+					KeptName:     best.component.Name,
+					KeptFoundBy:  best.foundBy,
+				})
+			}
 			continue
 		}
 
 		merged = append(merged, group...)
 	}
 
-	return merged
+	return merged, suppressions
 }
 
 func scanCandidateLocusKey(candidate scanComponentCandidate) string {
@@ -397,7 +468,7 @@ func firstComponentPropertyValue(comp cdx.Component, name string) string {
 //   - cfg: the run configuration (for root metadata and formatting)
 //
 // Returns the consolidated CycloneDX BOM or an error if assembly fails.
-func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cdx.BOM, error) {
+func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cdx.BOM, []SuppressionRecord, error) {
 	generatorInfo := buildinfo.Read()
 
 	bom := cdx.NewBOM()
@@ -504,8 +575,9 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	// Root dependency.
 	rootDep := cdx.Dependency{Ref: rootRef}
 
-	// Process the tree.
-	processNode(tree, &components, &dependencies, &rootDep, &compositions, scanMap, refAssigner, true)
+	// Process the tree, collecting suppression records for the audit report.
+	var suppressions []SuppressionRecord
+	processNode(tree, &components, &dependencies, &rootDep, &compositions, scanMap, refAssigner, true, &suppressions)
 
 	dependencies = append(dependencies, rootDep)
 
@@ -532,14 +604,14 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 		bom.Compositions = &compositions
 	}
 
-	return bom, nil
+	return bom, suppressions, nil
 }
 
 // processNode recursively processes the extraction tree, creating components,
 // dependencies, and composition annotations.
 func processNode(node *extract.ExtractionNode, components *[]cdx.Component, dependencies *[]cdx.Dependency,
 	parentDep *cdx.Dependency, compositions *[]cdx.Composition, scanMap map[string]*scan.ScanResult,
-	refAssigner *bomRefAssigner, isRoot bool) {
+	refAssigner *bomRefAssigner, isRoot bool, suppressions *[]SuppressionRecord) {
 	nodeRef := refAssigner.RefForNode(node.Path)
 
 	// Add container component for non-root nodes.
@@ -643,7 +715,8 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 
 	// Merge scan results.
 	if sr, ok := scanMap[node.Path]; ok && sr.Error == nil && sr.BOM != nil {
-		candidates := normalizeScanComponents(node, sr)
+		candidates, nodeSuppressed := normalizeScanComponents(node, sr)
+		*suppressions = append(*suppressions, nodeSuppressed...)
 		for i := range candidates {
 			comp := candidates[i].component
 			comp.BOMRef = refAssigner.RefForComponent(node.Path, comp, i)
@@ -682,7 +755,7 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 
 	// Recurse into children.
 	for _, child := range node.Children {
-		processNode(child, components, dependencies, &nodeDep, compositions, scanMap, refAssigner, false)
+		processNode(child, components, dependencies, &nodeDep, compositions, scanMap, refAssigner, false, suppressions)
 	}
 
 	if !isRoot {

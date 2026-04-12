@@ -505,7 +505,7 @@ func TestVendorSuiteSBOMAssembly(t *testing.T) {
 		t.Logf("scan error (may be partial): %v", err)
 	}
 
-	bom, err := assembly.Assemble(tree, scans, cfg)
+	bom, _, err := assembly.Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("assembly failed: %v", err)
 	}
@@ -637,7 +637,7 @@ func TestVendorSuiteDeterminism(t *testing.T) {
 			t.Fatal("extraction returned nil tree")
 		}
 		scans, _ := scan.ScanAll(context.Background(), tree, cfg)
-		bom, err := assembly.Assemble(tree, scans, cfg)
+		bom, _, err := assembly.Assemble(tree, scans, cfg)
 		if err != nil {
 			t.Fatalf("assembly failed: %v", err)
 		}

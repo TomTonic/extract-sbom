@@ -50,7 +50,7 @@ func TestAssembleProducesValidBOM(t *testing.T) {
 		Format:       identify.FormatInfo{Format: identify.ZIP},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestAssembleIncludesGeneratorVersionInMetadata(t *testing.T) {
 		Format:       identify.FormatInfo{Format: identify.ZIP},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestAssembleNestedScenarioBuildsDependencyGraph(t *testing.T) {
 		},
 	}}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestAssembleWithScanResultsMergesComponents(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestAssembleNestedTreeCreatesContainerComponents(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestAssembleDeriveRootNameFromFilename(t *testing.T) {
 		Format:       identify.FormatInfo{Format: identify.ZIP},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestAssembleWithCompositions(t *testing.T) {
 		Format:       identify.FormatInfo{Format: identify.ZIP},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -638,7 +638,7 @@ func TestAssembleIncludesInterpretModeProperty(t *testing.T) {
 				Format:       identify.FormatInfo{Format: identify.ZIP},
 			}
 
-			bom, err := Assemble(tree, nil, cfg)
+			bom, _, err := Assemble(tree, nil, cfg)
 			if err != nil {
 				t.Fatalf("Assemble error: %v", err)
 			}
@@ -707,7 +707,7 @@ func TestAssembleInstallerHintSurfacedOnMSINode(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -778,7 +778,7 @@ func TestAssembleNoInstallerHintInPhysicalMode(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, nil, cfg)
+	bom, _, err := Assemble(tree, nil, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -846,7 +846,7 @@ func TestAssembleFiltersFileCatalogerArtifacts(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -917,7 +917,7 @@ func TestAssembleRefinesDeliveryPathFromSyftLocation(t *testing.T) {
 		},
 	}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -999,7 +999,7 @@ func TestAssembleMergesWeakDuplicatePlaceholders(t *testing.T) {
 		},
 	}}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
@@ -1074,7 +1074,7 @@ func TestAssembleKeepsDistinctStrongDuplicates(t *testing.T) {
 		},
 	}}
 
-	bom, err := Assemble(tree, scans, cfg)
+	bom, _, err := Assemble(tree, scans, cfg)
 	if err != nil {
 		t.Fatalf("Assemble error: %v", err)
 	}
