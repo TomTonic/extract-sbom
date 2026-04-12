@@ -162,10 +162,12 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	// Step 6: Assemble SBOM.
 	var assembledBOM *cdx.BOM
 	var sbomPath string
+	var suppressions []assembly.SuppressionRecord
 	if tree != nil {
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/7: assembling sbom")
 		assembleStart := time.Now()
-		bom, asmErr := assembly.Assemble(tree, scans, cfg)
+		bom, asmSuppressions, asmErr := assembly.Assemble(tree, scans, cfg)
+		suppressions = asmSuppressions
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] assembly done in %s", time.Since(assembleStart).Round(time.Millisecond))
 		if asmErr != nil {
 			addIssue("assembly", asmErr)
@@ -214,6 +216,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 			EndTime:          endTime,
 			BOM:              assembledBOM,
 			SBOMPath:         sbomPath,
+			Suppressions:     suppressions,
 		}
 	}
 
