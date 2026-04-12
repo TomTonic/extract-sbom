@@ -630,6 +630,7 @@ func TestRunNestedZIPEndToEndProducesOutputFiles(t *testing.T) {
 	cfg.OutputDir = dir
 	cfg.Unsafe = true
 	cfg.ReportMode = config.ReportBoth
+	cfg.ParallelScanners = 1 // avoid concurrent Syft calls that race on stereoscope internals
 
 	result := Run(context.Background(), cfg)
 
@@ -753,6 +754,7 @@ func TestRunNestedZIPReportContainsExtractionLogAndScans(t *testing.T) {
 	cfg.OutputDir = dir
 	cfg.Unsafe = true
 	cfg.ReportMode = config.ReportBoth
+	cfg.ParallelScanners = 1 // avoid concurrent Syft calls that race on stereoscope internals
 
 	result := Run(context.Background(), cfg)
 	if result.ExitCode == ExitHardSecurity && result.Error != nil {
