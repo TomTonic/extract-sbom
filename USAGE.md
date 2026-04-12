@@ -161,7 +161,7 @@ InstallShield CAB) or container (OCI image, Docker archive).
 Writable directory where SBOM and report files are written. Created if
 missing. Files are named after the input file:
 
-```
+```text
 --output-dir out → out/delivery.cdx.json, out/delivery.report.md
 ```
 
@@ -217,8 +217,10 @@ Output format for the audit report.
 Controls runtime progress output on stderr.
 
 - `quiet`: no progress output (only final paths/errors)
-- `normal`: stage markers, periodic extraction counters, aggregated native-scan completion updates, and keep-alive output for genuinely long scan tasks
-- `verbose`: everything from `normal`, plus detailed extracted-directory scan progress and slow or failing native-file scans; short native scans are intentionally coalesced to keep logs readable
+- `normal`: stage markers, periodic extraction counters, aggregated native-scan completion updates,
+  and keep-alive output for genuinely long scan tasks
+- `verbose`: everything from `normal`, plus detailed extracted-directory scan progress and slow or
+  failing native-file scans; short native scans are intentionally coalesced to keep logs readable
 
 Examples:
 

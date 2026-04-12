@@ -3,6 +3,7 @@
 ## 1. Purpose and Context
 
 ### 1.1 Purpose
+
 extract-sbom is a tool for the **standardized incoming inspection of software deliveries**.
 Its primary function is to make complex vendor deliveries auditable, reproducible,
 and suitable for downstream vulnerability assessment.
@@ -20,6 +21,7 @@ The tool is designed for procurement, compliance, and security assurance context
 including dispute resolution with suppliers.
 
 ### 1.2 Problem Statement
+
 Software vendors frequently deliver products in deeply nested or installer-based formats:
 ZIP files containing CABs, MSIs, further ZIPs, and similar constructs.
 
@@ -28,6 +30,7 @@ extract-sbom addresses this by combining **safe recursive extraction** with **ex
 of container artifacts and their contents.
 
 ### 1.3 Non-Goals
+
 - Performing CVE scanning (e.g., via Grype) is **explicitly excluded**
 - No malware or virus scanning — extract-sbom inspects delivery structure and
   software components, but does not assess whether any content is malicious
@@ -39,6 +42,7 @@ of container artifacts and their contents.
 ## 2. Platforms and Execution Modes
 
 ### 2.1 Supported Platforms
+
 - **Linux** (mandatory)
 - **macOS** (optional, best-effort target)
 
@@ -46,11 +50,13 @@ macOS support must only be added if it does not significantly complicate
 the overall design or compromise safety guarantees.
 
 ### 2.2 Execution Modes
+
 - Native execution is the primary mode
 - Containerized execution is optional and intended for reproducibility
 - A container runtime must **not** be a hard prerequisite
 
 ### 2.3 Container Environment
+
 If provided, container images must be based on **Alpine Linux** and act as
 a convenience wrapper, not as a mandatory runtime dependency.
 
@@ -59,6 +65,7 @@ a convenience wrapper, not as a mandatory runtime dependency.
 ## 3. Core Processing Model
 
 ### 3.1 End-to-End Flow
+
 1. Validate the input file (existence, supported format, size, cryptographic hash)
 2. Prepare an isolated working context
 3. Recursively analyze the delivery contents:
@@ -69,7 +76,9 @@ a convenience wrapper, not as a mandatory runtime dependency.
 6. Produce a detailed audit report
 
 ### 3.2 Determinism
+
 For a given input archive and configuration:
+
 - SBOM structure must be reproducible
 - Dependency relationships must be stable
 - Non-deterministic behavior must be avoided or explicitly documented
@@ -79,9 +88,11 @@ For a given input archive and configuration:
 ## 4. Recursive Extraction Semantics
 
 ### 4.1 Scope of Extraction
+
 Recursive extraction applies **only to container formats not directly supported by Syft**.
 
 Examples include:
+
 - ZIP, CAB, MSI, 7z, TAR variants
 - Arbitrary nesting combinations thereof
 
@@ -89,28 +100,34 @@ Formats already handled by Syft (e.g., directory trees or recognized ecosystems)
 are passed directly to Syft without forced unpacking.
 
 ### 4.2 Depth-First, Auditable Traversal
+
 Extraction proceeds recursively until a stopping condition is met:
+
 - Configured depth limit
 - Resource or safety limit
 - Explicit policy decision
 
 Every extraction attempt must be recorded, including:
+
 - Input container
 - Extraction tool used
 - Outcome and reason
 
 ### 4.3 Syft-First Principle
+
 Formats that Syft already understands natively (e.g. JAR, RPM, DEB, wheel,
 nupkg, apk) must be passed directly to Syft without extraction by extract-sbom.
 extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI) that
 Syft cannot see through.
 
 This ensures:
+
 - Richer metadata from Syft's format-specific catalogers
 - Correct PURL and CPE generation for ecosystem packages
 - Reduced attack surface (fewer files parsed by extract-sbom)
 
 ### 4.4 Extraction Interpretation Modes
+
 The system shall support at least two configurable interpretation modes:
 
 - **physical**: model only artifacts that are directly present or can be materially extracted
@@ -121,9 +138,12 @@ The selected mode must be included in the audit report and, where relevant, in S
 
 ### 4.5 Special Handling: CAB Files from Setup.exe/MSI Contexts
 
-Vendor deliveries frequently use setup.exe wrappers that internally unpack CAB files, sometimes in combination with MSI installers. These CAB files may exhibit name mangling or non-standard filenames due to legacy packaging tools.
+Vendor deliveries frequently use setup.exe wrappers that internally unpack CAB files,
+sometimes in combination with MSI installers.
+These CAB files may exhibit name mangling or non-standard filenames due to legacy packaging tools.
 
 extract-sbom must:
+
 - Detect and extract CAB files from setup.exe/MSI contexts, including nested scenarios.
 - Restore original filenames and directory structures as accurately as possible.
 - Ensure that MSI-referenced CAB contents are represented according to installer logic.
@@ -136,25 +156,31 @@ This applies recursively for multi-layered delivery structures.
 ## 5. SBOM Semantics (CycloneDX)
 
 ### 5.1 Container-as-Module Principle
+
 Every container artifact encountered:
+
 - Is represented as a **first-class SBOM component**
 - Exists independently of extraction success
 - Acts as the provenance anchor for its extracted contents
 
 ### 5.2 Dependency Graph
+
 Relationships between containers and their contents are expressed via
 a **dependency graph** within the SBOM.
 
 This graph:
+
 - Represents containment and origin, not runtime linkage
 - Is fully machine-readable
 - Does not require any visual (DOT/graphical) representation
 
 ### 5.3 Root Component Metadata
+
 The top-level SBOM component representing the delivered software must support
 explicit metadata supplied by the operator via the command line.
 
 At minimum, the following root metadata fields must be supported:
+
 - Manufacturer / supplier
 - Software or product name
 - Version
@@ -165,6 +191,7 @@ procurement or incoming-inspection perspective, even when they are not
 reliably inferable from the delivery file itself.
 
 The root component metadata model shall be:
+
 - **Operator-overridable** via explicit CLI parameters
 - **Deterministic** for a given input and CLI configuration
 - **Auditable**: the report must show which values were user-supplied
@@ -176,6 +203,7 @@ the input file name or processing context, but explicit operator input always
 takes precedence.
 
 ### 5.4 Delivery Path Traceability
+
 Every component in the SBOM must carry at least one provenance reference into
 the original delivery structure.
 
@@ -199,6 +227,7 @@ deterministically name the supporting internal file or archive member. Generic
 package inferences without a defensible 1:1 evidence pointer may omit them.
 
 This model ensures:
+
 - Every component has a stable, defensible pointer back into the original delivery
 - File and container components point to the exact physical artifact in question
 - Logically derived packages can retain additional evidence without pretending
@@ -207,12 +236,14 @@ This model ensures:
   for dispute resolution
 
 ### 5.5 Container Metadata Enrichment
+
 Container formats that carry structured metadata about their contents must be
 parsed for that metadata, even in physical mode. The extracted metadata is used
 to enrich the SBOM component representing the container with accurate
 identifiers (CPE, PURL) for downstream vulnerability matching.
 
 The primary case is **MSI packages**, whose Property table contains:
+
 - `Manufacturer` (required) → CPE vendor
 - `ProductName` (required) → CPE product
 - `ProductVersion` (required) → CPE version
@@ -233,7 +264,9 @@ This principle extends to any future container format that provides
 structured product metadata.
 
 ### 5.6 Partial and Failed Extraction
+
 If extraction fails or is restricted:
+
 - The container component remains in the SBOM
 - The SBOM and report must clearly indicate the limitation
 - Downstream consumers must be able to assess resulting coverage gaps
@@ -246,6 +279,7 @@ If extraction fails or is restricted:
 ## 6. Safety and Resource Limits
 
 ### 6.1 Default Limits
+
 Unless overridden, the following defaults apply:
 
 - Maximum recursion depth: 6
@@ -258,7 +292,9 @@ Unless overridden, the following defaults apply:
 All limits must be configurable.
 
 ### 6.2 Zip-Bomb and Abuse Protection
+
 The extraction logic must robustly prevent:
+
 - Zip-bomb style amplification
 - Path traversal (absolute paths, `..` segments)
 - Symlink escapes
@@ -266,6 +302,7 @@ The extraction logic must robustly prevent:
 - Inheritance of unsafe permissions
 
 ### 6.3 Hard Security Events
+
 Hard security violations — path traversal, symlink escape, special file
 materialization — are **never** overridable, regardless of any CLI flag or
 configuration. They abort the affected extraction subtree immediately.
@@ -281,10 +318,12 @@ processing state has been initialized, any later hard security event must not by
 itself suppress final SBOM or report generation.
 
 ### 6.4 Explicit Unsafe Override Mode
+
 If the preferred technical isolation mechanism is unavailable, the operator may explicitly opt into
 an unsafe recursive extraction mode via a dedicated command-line parameter.
 
 This mode:
+
 - Is intended only for controlled environments and forensic fallback use
 - Affects **only** the sandbox isolation requirement; hard security checks
   (§6.3) remain fully enforced
@@ -296,12 +335,14 @@ This mode:
 ## 7. Policy Model
 
 ### 7.1 Policy Modes
+
 Policy determines behavior when limits are reached:
 
 - **strict** (default): abort processing, document fully
 - **partial**: skip offending subtree, continue elsewhere, document clearly
 
 ### 7.2 Policy Transparency
+
 All policy decisions must be explicitly recorded in the audit report,
 including their impact on SBOM completeness.
 
@@ -310,9 +351,11 @@ including their impact on SBOM completeness.
 ## 8. Sandbox and Isolation
 
 ### 8.1 Isolation Principle
+
 All extraction tools must be executed in an isolated environment whenever feasible.
 
 Suitable lightweight mechanisms include:
+
 - Bubblewrap
 - Firejail
 - gVisor
@@ -320,6 +363,7 @@ Suitable lightweight mechanisms include:
 - Wasmtime (for WASI-compatible tools)
 
 No specific mechanism is mandated, but:
+
 - Docker must **not** be assumed
 - Isolation failures must be detectable and reportable
 - The concrete isolation mechanism is a solution design decision and must be documented,
@@ -330,9 +374,11 @@ No specific mechanism is mandated, but:
 ## 9. Toolchain Constraints
 
 ### 9.1 Programming Language
+
 All relevant code must be written in **Go**.
 
 ### 9.2 External Dependencies
+
 - Dependencies on external binaries and libraries must be kept minimal
 - The concrete selection of helper tools is a solution design decision and must be documented
 - **7-Zip** is the preferred extractor for Microsoft CAB, MSI, and related formats
@@ -349,19 +395,23 @@ All relevant code must be written in **Go**.
 ## 10. Reporting and Localization
 
 ### 10.1 Audit Report Purpose
+
 The report must enable a third party to answer:
+
 - What was inspected?
 - How was it processed?
 - Which parts are complete, incomplete, or unverifiable?
 
 ### 10.2 Language Support
+
 - Project language: English
 - Report output language:
-   - English (default)
-   - German
+  - English (default)
+  - German
 - Additional languages must be easy to add
 
 ### 10.3 Report Representation Modes
+
 The audit output shall support both of the following forms:
 
 - **Human-readable report** (default)
@@ -370,7 +420,9 @@ The audit output shall support both of the following forms:
 The chosen output mode or modes must be selectable explicitly.
 
 ### 10.4 Required Report Content
+
 At minimum:
+
 - Input identification (hashes, metadata)
 - Configuration and limits
 - Root SBOM metadata, including which fields were supplied explicitly via CLI
@@ -390,6 +442,7 @@ At minimum:
 ---
 
 ## 11. Acceptance Criteria
+
 extract-sbom is complete when:
 
 - One input file yields exactly one SBOM and one audit report
