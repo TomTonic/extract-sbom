@@ -6,8 +6,6 @@ import (
 )
 
 func TestReadUsesReleaseVersionOverride(t *testing.T) {
-	t.Parallel()
-
 	old := ReleaseVersion
 	ReleaseVersion = "v9.9.9"
 	t.Cleanup(func() { ReleaseVersion = old })
@@ -36,8 +34,6 @@ func TestInfoStringFormatsFields(t *testing.T) {
 }
 
 func TestReadReleaseVersionSuppressesDirtyMarker(t *testing.T) {
-	t.Parallel()
-
 	old := ReleaseVersion
 	ReleaseVersion = "v1.2.3"
 	t.Cleanup(func() { ReleaseVersion = old })
