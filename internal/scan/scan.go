@@ -519,24 +519,57 @@ func collectEvidencePaths(node *extract.ExtractionNode, target string, bom *cdx.
 		return nil
 	}
 
-	evidencePath := findManifestEvidencePath(node, target)
-	if evidencePath == "" {
-		return nil
-	}
-
-	evidence := make(map[string][]string, len(*bom.Components))
-	for i := range *bom.Components {
-		component := (*bom.Components)[i]
-		if component.BOMRef == "" {
-			continue
+	// SyftNative path: for JAR-type archives, find the MANIFEST.MF file and
+	// record it as evidence for every component in the scan result.
+	if node.Status == extract.StatusSyftNative {
+		evidencePath := findManifestEvidencePath(node, target)
+		if evidencePath == "" {
+			return nil
 		}
-		evidence[component.BOMRef] = []string{evidencePath}
-	}
-	if len(evidence) == 0 {
-		return nil
+		evidence := make(map[string][]string, len(*bom.Components))
+		for i := range *bom.Components {
+			component := (*bom.Components)[i]
+			if component.BOMRef == "" {
+				continue
+			}
+			evidence[component.BOMRef] = []string{evidencePath}
+		}
+		if len(evidence) == 0 {
+			return nil
+		}
+		return evidence
 	}
 
-	return evidence
+	// Extracted-directory path: for each component, derive per-component
+	// evidence from syft:location:0:path. For binary formats (PE, dotnet)
+	// the source file itself is the evidence — the cataloger reads version
+	// metadata directly from the binary. JAR-type files are excluded here
+	// because their evidence (MANIFEST.MF) is handled via the SyftNative
+	// path when the child node is scanned directly.
+	if node.Status == extract.StatusExtracted {
+		evidence := make(map[string][]string)
+		for i := range *bom.Components {
+			comp := (*bom.Components)[i]
+			if comp.BOMRef == "" {
+				continue
+			}
+			loc := firstPropertyValue(comp, "syft:location:0:path")
+			if loc == "" {
+				continue
+			}
+			if isManifestEvidenceCandidate(loc) {
+				continue // handled by SyftNative child scan
+			}
+			evidencePath := path.Clean(node.Path + "/" + strings.TrimPrefix(loc, "/"))
+			evidence[comp.BOMRef] = []string{evidencePath}
+		}
+		if len(evidence) == 0 {
+			return nil
+		}
+		return evidence
+	}
+
+	return nil
 }
 
 // findManifestEvidencePath returns a delivery-relative pointer to a JAR-style
@@ -569,6 +602,20 @@ func isManifestEvidenceCandidate(target string) bool {
 	default:
 		return false
 	}
+}
+
+// firstPropertyValue returns the value of the first CycloneDX property with
+// the given name, or "" if not found.
+func firstPropertyValue(comp cdx.Component, name string) string {
+	if comp.Properties == nil {
+		return ""
+	}
+	for _, prop := range *comp.Properties {
+		if prop.Name == name {
+			return prop.Value
+		}
+	}
+	return ""
 }
 
 // FlattenEvidencePaths returns the unique, sorted evidence paths associated

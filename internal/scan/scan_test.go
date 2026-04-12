@@ -222,6 +222,83 @@ func TestCollectEvidencePathsFromJARManifest(t *testing.T) {
 	}
 }
 
+// TestCollectEvidencePathsFromExtractedDirPEBinary verifies that for an
+// extracted-directory node, collectEvidencePaths derives per-component
+// evidence from syft:location:0:path for non-JAR files (PE binaries, dotnet
+// DLLs, etc.), where the binary itself is the identity evidence.
+func TestCollectEvidencePathsFromExtractedDirPEBinary(t *testing.T) {
+	t.Parallel()
+
+	node := &extract.ExtractionNode{
+		Path:   "delivery.zip/setup.msi",
+		Status: extract.StatusExtracted,
+		Format: identify.FormatInfo{Format: identify.MSI},
+	}
+
+	bom := &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:  "syft-dll-1",
+			Name:    "mfc42u.dll",
+			Version: "6.02.400",
+			Properties: &[]cdx.Property{
+				{Name: "syft:location:0:path", Value: "/mfc42u.dll"},
+				{Name: "syft:package:foundBy", Value: "pe-binary-package-cataloger"},
+			},
+		},
+		{
+			BOMRef:  "syft-dll-2",
+			Name:    "combit.CSharpScript28.Engine",
+			Version: "28.3.0.0",
+			Properties: &[]cdx.Property{
+				{Name: "syft:location:0:path", Value: "/native/lib/28/combit.CSharpScript28.Engine.x64.dll"},
+				{Name: "syft:package:foundBy", Value: "dotnet-deps-binary-cataloger"},
+			},
+		},
+	}}
+
+	evidence := collectEvidencePaths(node, "/tmp/extracted-msi-xyz", bom)
+
+	want1 := []string{"delivery.zip/setup.msi/mfc42u.dll"}
+	if got := evidence["syft-dll-1"]; !reflect.DeepEqual(got, want1) {
+		t.Errorf("mfc42u.dll evidence = %v, want %v", got, want1)
+	}
+
+	want2 := []string{"delivery.zip/setup.msi/native/lib/28/combit.CSharpScript28.Engine.x64.dll"}
+	if got := evidence["syft-dll-2"]; !reflect.DeepEqual(got, want2) {
+		t.Errorf("combit dll evidence = %v, want %v", got, want2)
+	}
+}
+
+// TestCollectEvidencePathsFromExtractedDirSkipsJARs verifies that JAR files
+// found in an extracted directory do NOT get location-based evidence, since
+// they are handled separately via the SyftNative + MANIFEST.MF path.
+func TestCollectEvidencePathsFromExtractedDirSkipsJARs(t *testing.T) {
+	t.Parallel()
+
+	node := &extract.ExtractionNode{
+		Path:   "delivery.zip",
+		Status: extract.StatusExtracted,
+		Format: identify.FormatInfo{Format: identify.ZIP},
+	}
+
+	bom := &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:  "syft-jar",
+			Name:    "gt-xsd-wfs",
+			Version: "28.0",
+			Properties: &[]cdx.Property{
+				{Name: "syft:location:0:path", Value: "/lib/gis/gt-xsd-wfs-28.0.jar"},
+				{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+			},
+		},
+	}}
+
+	evidence := collectEvidencePaths(node, "/tmp/extracted-zip-abc", bom)
+	if evidence != nil {
+		t.Errorf("expected nil evidence for JAR in extracted dir, got %v", evidence)
+	}
+}
+
 // TestFlattenEvidencePathsReturnsSortedUniqueValues verifies that report and
 // machine-report generation can safely flatten evidence paths without duplicates.
 func TestFlattenEvidencePathsReturnsSortedUniqueValues(t *testing.T) {
