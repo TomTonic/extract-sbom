@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM debian:12-slim
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -14,7 +14,7 @@ WORKDIR /opt/extract-sbom
 COPY dist/extract-sbom-linux-amd64 /opt/extract-sbom/extract-sbom
 COPY .github/release-test/run-release-test.sh /opt/extract-sbom/run-release-test.sh
 COPY .github/release-test/expected-delivery-paths.txt /opt/extract-sbom/testdata/expected-delivery-paths.txt
-COPY integration/testdata/release/release-happy-path.zip /opt/extract-sbom/testdata/release-happy-path.zip
+COPY integration/vendorsuite/testdata/vendor-suite-3.2.zip /opt/extract-sbom/testdata/vendor-suite-3.2.zip
 
 RUN chmod +x /opt/extract-sbom/extract-sbom /opt/extract-sbom/run-release-test.sh
 
