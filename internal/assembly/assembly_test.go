@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -220,12 +221,14 @@ func TestAssembleNestedScenarioBuildsDependencyGraph(t *testing.T) {
 			depsByRef[dep.Ref] = append([]string(nil), *dep.Dependencies...)
 		}
 	}
+	scanMap := map[string]*scan.ScanResult{jarNodePath: &scans[0]}
+	refAssigner := newBOMRefAssigner(tree, scanMap)
 
-	tarRef := makeBOMRef("delivery.cab/layer.tar")
-	zipRef := makeBOMRef("delivery.cab/layer.tar/app.zip")
-	jarRef := makeBOMRef(jarNodePath)
-	pkgRef := jarRef + "/pkg:maven/com.acme/demo@1.0.0"
-	rootRef := makeBOMRef("delivery.cab")
+	tarRef := refAssigner.RefForNode("delivery.cab/layer.tar")
+	zipRef := refAssigner.RefForNode("delivery.cab/layer.tar/app.zip")
+	jarRef := refAssigner.RefForNode(jarNodePath)
+	pkgRef := refAssigner.RefForComponent(jarNodePath, (*scans[0].BOM.Components)[0], 0)
+	rootRef := refAssigner.RefForNode("delivery.cab")
 
 	if !reflect.DeepEqual(depsByRef[rootRef], []string{tarRef}) {
 		t.Fatalf("root deps = %v, want [%s]", depsByRef[rootRef], tarRef)
@@ -515,9 +518,36 @@ func TestMakeBOMRefIsDeterministic(t *testing.T) {
 		t.Error("BOMRef is empty")
 	}
 
-	// Should have the expected prefix.
-	if ref1[:13] != "extract-sbom:" {
+	if !strings.HasPrefix(ref1, "extract-sbom:") {
 		t.Errorf("BOMRef doesn't start with 'extract-sbom:', got %q", ref1)
+	}
+
+	token := strings.TrimPrefix(ref1, "extract-sbom:")
+	if len(token) != 9 || token[4] != '_' {
+		t.Errorf("BOMRef token = %q, want 8 chars grouped as XXXX_XXXX", token)
+	}
+}
+
+// TestBOMRefAssignerResolvesCollisionsDeterministically verifies that
+// short BOM refs are collision-checked and resolved in stable sorted-key order.
+func TestBOMRefAssignerResolvesCollisionsDeterministically(t *testing.T) {
+	t.Parallel()
+
+	assigner := newBOMRefAssignerWithKeys([]string{"node-b", "node-a"}, func(key string, salt int) string {
+		if salt == 0 {
+			return "extract-sbom:AAAA_AAAA"
+		}
+		if key == "node-a" {
+			return "extract-sbom:BBBB_BBBB"
+		}
+		return "extract-sbom:CCCC_CCCC"
+	})
+
+	if got := assigner.RefForNode("node-a"); got != "extract-sbom:AAAA_AAAA" {
+		t.Fatalf("node-a ref = %q, want extract-sbom:AAAA_AAAA", got)
+	}
+	if got := assigner.RefForNode("node-b"); got != "extract-sbom:CCCC_CCCC" {
+		t.Fatalf("node-b ref = %q, want extract-sbom:CCCC_CCCC", got)
 	}
 }
 

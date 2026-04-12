@@ -137,10 +137,12 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 
 	requiredSections := []string{
 		"# extract-sbom Audit Report",
+		"## Table of Contents",
 		"## Input File",
 		"## Configuration",
 		"## Root SBOM Metadata",
 		"## Sandbox Configuration",
+		"## Component Occurrence Index",
 		"## Extraction Log",
 		"## Scan Results",
 		"## Summary",
@@ -307,6 +309,63 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 
 	if !strings.Contains(output, "2 components found") {
 		t.Error("report does not show component count")
+	}
+}
+
+// TestGenerateHumanComponentIndexUsesFinalBOMRefs verifies that the human
+// report exposes final component occurrence IDs from the assembled SBOM and
+// orders entries by delivery path rather than by object ID.
+func TestGenerateHumanComponentIndexUsesFinalBOMRefs(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:ZZZZ_ZZZZ",
+			Name:       "zlib",
+			Version:    "1.2.13",
+			PackageURL: "pkg:generic/zlib@1.2.13",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "b/path/zlib.jar"}},
+		},
+		{
+			BOMRef:     "extract-sbom:AAAA_AAAA",
+			Name:       "alpha",
+			Version:    "1.0.0",
+			PackageURL: "pkg:maven/com.acme/alpha@1.0.0",
+			Properties: &[]cdx.Property{
+				{Name: "extract-sbom:delivery-path", Value: "a/path/alpha.jar"},
+				{Name: "extract-sbom:evidence-path", Value: "a/path/alpha.jar/META-INF/MANIFEST.MF"},
+				{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+			},
+		},
+	}}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	alphaIdx := strings.Index(output, "### extract-sbom:AAAA_AAAA")
+	zlibIdx := strings.Index(output, "### extract-sbom:ZZZZ_ZZZZ")
+	if alphaIdx == -1 || zlibIdx == -1 {
+		t.Fatal("component occurrence headings missing from report")
+	}
+	if alphaIdx >= zlibIdx {
+		t.Fatalf("component occurrences are not sorted by delivery path: alpha=%d zlib=%d", alphaIdx, zlibIdx)
+	}
+
+	for _, fragment := range []string{
+		"Object ID: `extract-sbom:AAAA_AAAA`",
+		"Package: `alpha`",
+		"PURL: `pkg:maven/com.acme/alpha@1.0.0`",
+		"Delivery path: `a/path/alpha.jar`",
+		"Evidence path: `a/path/alpha.jar/META-INF/MANIFEST.MF`",
+		"Found by: `java-archive-cataloger`",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("report output missing %q", fragment)
+		}
 	}
 }
 

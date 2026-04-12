@@ -6,6 +6,7 @@ package assembly
 
 import (
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -22,6 +23,105 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
+
+var shortBOMRefEncoding = base32.NewEncoding("0123456789ABCDEFGHJKMNPQRSTVWXYZ").WithPadding(base32.NoPadding)
+
+type bomRefAssigner struct {
+	byKey   map[string]string
+	byRef   map[string]string
+	makeRef func(string, int) string
+}
+
+func newBOMRefAssigner(tree *extract.ExtractionNode, scanMap map[string]*scan.ScanResult) *bomRefAssigner {
+	return newBOMRefAssignerWithKeys(collectBOMRefKeys(tree, scanMap), makeBOMRefWithSalt)
+}
+
+func newBOMRefAssignerWithKeys(keys []string, factory func(string, int) string) *bomRefAssigner {
+	assigner := &bomRefAssigner{
+		byKey:   make(map[string]string, len(keys)),
+		byRef:   make(map[string]string, len(keys)),
+		makeRef: factory,
+	}
+
+	sortedKeys := append([]string(nil), keys...)
+	sort.Strings(sortedKeys)
+	for _, key := range sortedKeys {
+		assigner.assign(key)
+	}
+
+	return assigner
+}
+
+func (a *bomRefAssigner) RefForNode(deliveryPath string) string {
+	return a.assign(deliveryPath)
+}
+
+func (a *bomRefAssigner) RefForComponent(nodePath string, component cdx.Component, index int) string {
+	return a.assign(componentRefKey(nodePath, component, index))
+}
+
+func (a *bomRefAssigner) assign(key string) string {
+	if ref, ok := a.byKey[key]; ok {
+		return ref
+	}
+
+	for salt := 0; ; salt++ {
+		ref := a.makeRef(key, salt)
+		existingKey, exists := a.byRef[ref]
+		if !exists || existingKey == key {
+			a.byKey[key] = ref
+			a.byRef[ref] = key
+			return ref
+		}
+	}
+}
+
+func collectBOMRefKeys(tree *extract.ExtractionNode, scanMap map[string]*scan.ScanResult) []string {
+	if tree == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var visit func(node *extract.ExtractionNode)
+	visit = func(node *extract.ExtractionNode) {
+		if node == nil {
+			return
+		}
+
+		seen[node.Path] = struct{}{}
+		if sr, ok := scanMap[node.Path]; ok && sr != nil && sr.Error == nil && sr.BOM != nil && sr.BOM.Components != nil {
+			for i := range *sr.BOM.Components {
+				seen[componentRefKey(node.Path, (*sr.BOM.Components)[i], i)] = struct{}{}
+			}
+		}
+
+		for _, child := range node.Children {
+			visit(child)
+		}
+	}
+	visit(tree)
+
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func componentRefKey(nodePath string, component cdx.Component, index int) string {
+	if component.BOMRef != "" {
+		return "component\x00" + nodePath + "\x00" + component.BOMRef
+	}
+
+	return fmt.Sprintf(
+		"component\x00%s\x00%d\x00%s\x00%s\x00%s",
+		nodePath,
+		index,
+		component.Type,
+		component.Name,
+		component.Version,
+	)
+}
 
 // Assemble builds the final, unified CycloneDX BOM from the extraction tree
 // and per-node scan results. It creates container-as-module components,
@@ -77,9 +177,10 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	for i := range scans {
 		scanMap[scans[i].NodePath] = &scans[i]
 	}
+	refAssigner := newBOMRefAssigner(tree, scanMap)
 
 	// Create the root component.
-	rootRef := makeBOMRef(tree.Path)
+	rootRef := refAssigner.RefForNode(tree.Path)
 	rootComponent := cdx.Component{
 		BOMRef: rootRef,
 		Type:   cdx.ComponentTypeApplication,
@@ -141,7 +242,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	rootDep := cdx.Dependency{Ref: rootRef}
 
 	// Process the tree.
-	processNode(tree, &components, &dependencies, &rootDep, &compositions, scanMap, "", true)
+	processNode(tree, &components, &dependencies, &rootDep, &compositions, scanMap, refAssigner, true)
 
 	dependencies = append(dependencies, rootDep)
 
@@ -175,8 +276,8 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 // dependencies, and composition annotations.
 func processNode(node *extract.ExtractionNode, components *[]cdx.Component, dependencies *[]cdx.Dependency,
 	parentDep *cdx.Dependency, compositions *[]cdx.Composition, scanMap map[string]*scan.ScanResult,
-	_ string, isRoot bool) {
-	nodeRef := makeBOMRef(node.Path)
+	refAssigner *bomRefAssigner, isRoot bool) {
+	nodeRef := refAssigner.RefForNode(node.Path)
 
 	// Add container component for non-root nodes.
 	if !isRoot {
@@ -283,8 +384,7 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 			for i := range *sr.BOM.Components {
 				comp := (*sr.BOM.Components)[i]
 				originalRef := comp.BOMRef
-				// Namespace BOMRef to avoid collisions.
-				comp.BOMRef = nodeRef + "/" + comp.BOMRef
+				comp.BOMRef = refAssigner.RefForComponent(node.Path, comp, i)
 
 				// Add delivery-path property.
 				deliveryPath := node.Path
@@ -323,7 +423,7 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 
 	// Recurse into children.
 	for _, child := range node.Children {
-		processNode(child, components, dependencies, &nodeDep, compositions, scanMap, nodeRef, false)
+		processNode(child, components, dependencies, &nodeDep, compositions, scanMap, refAssigner, false)
 	}
 
 	if !isRoot {
@@ -407,8 +507,18 @@ func deriveRootName(cfg config.Config) string {
 
 // makeBOMRef creates a deterministic BOMRef from a delivery path.
 func makeBOMRef(deliveryPath string) string {
-	h := sha256.Sum256([]byte(deliveryPath))
-	return "extract-sbom:" + hex.EncodeToString(h[:8])
+	return makeBOMRefWithSalt(deliveryPath, 0)
+}
+
+func makeBOMRefWithSalt(key string, salt int) string {
+	payload := key
+	if salt > 0 {
+		payload = fmt.Sprintf("%s\x00%d", key, salt)
+	}
+
+	h := sha256.Sum256([]byte(payload))
+	token := shortBOMRefEncoding.EncodeToString(h[:5])
+	return "extract-sbom:" + token[:4] + "_" + token[4:8]
 }
 
 // generateCPE creates a CPE 2.3 string from manufacturer, product, and version.

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	cdx "github.com/CycloneDX/cyclonedx-go"
+
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
@@ -138,6 +140,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	}
 
 	// Step 6: Assemble SBOM.
+	var assembledBOM *cdx.BOM
 	var sbomPath string
 	if tree != nil {
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/7: assembling sbom")
@@ -167,6 +170,8 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("write SBOM: %w", writeErr)
 				}
+			} else {
+				assembledBOM = bom
 			}
 		}
 	}
@@ -187,6 +192,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 			ProcessingIssues: processingIssues,
 			StartTime:        startTime,
 			EndTime:          endTime,
+			BOM:              assembledBOM,
 			SBOMPath:         sbomPath,
 		}
 	}

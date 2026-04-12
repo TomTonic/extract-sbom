@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	cdx "github.com/CycloneDX/cyclonedx-go"
+
 	"github.com/TomTonic/extract-sbom/internal/buildinfo"
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
@@ -60,7 +62,18 @@ type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 	ProcessingIssues []ProcessingIssue
 	StartTime        time.Time
 	EndTime          time.Time
+	BOM              *cdx.BOM
 	SBOMPath         string
+}
+
+type componentOccurrence struct {
+	ObjectID      string
+	PackageName   string
+	Version       string
+	PURL          string
+	DeliveryPath  string
+	EvidencePaths []string
+	FoundBy       string
 }
 
 // ComputeInputSummary computes the file hashes and metadata for the input file.
@@ -112,6 +125,9 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	t := getTranslations(lang)
 
 	fmt.Fprintf(w, "# %s\n\n", t.title)
+	fmt.Fprintf(w, "## %s\n\n", t.tableOfContentsSection)
+	writeTableOfContents(w, t)
+	fmt.Fprintln(w)
 
 	// Input identification.
 	fmt.Fprintf(w, "## %s\n\n", t.inputSection)
@@ -155,9 +171,9 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	}
 	fmt.Fprintln(w)
 
-	// Extraction log.
-	fmt.Fprintf(w, "## %s\n\n", t.extractionSection)
-	writeExtractionTree(w, data.Tree, 0, t)
+	// Component occurrence index.
+	fmt.Fprintf(w, "## %s\n\n", t.componentIndexSection)
+	writeComponentOccurrenceIndex(w, data.BOM, t)
 	fmt.Fprintln(w)
 
 	// Scan results.
@@ -176,6 +192,11 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 			fmt.Fprintf(w, "- **%s**: %s\n", sr.NodePath, t.noComponents)
 		}
 	}
+	fmt.Fprintln(w)
+
+	// Extraction log.
+	fmt.Fprintf(w, "## %s\n\n", t.extractionSection)
+	writeExtractionTree(w, data.Tree, 0, t)
 	fmt.Fprintln(w)
 
 	// Policy decisions.
@@ -436,6 +457,17 @@ type translations struct {
 	sandboxAvail            string
 	unsafeWarning           string
 	unsafeActive            string
+	tableOfContentsSection  string
+	componentIndexSection   string
+	componentIndexLead      string
+	noIndexedComponents     string
+	objectID                string
+	packageName             string
+	version                 string
+	purl                    string
+	evidencePath            string
+	foundBy                 string
+	noEvidenceRecorded      string
 	processingTime          string
 	scanError               string
 	componentsFound         string
@@ -484,6 +516,17 @@ func getTranslations(lang string) translations {
 			sandboxAvail:            "Verfügbar",
 			unsafeWarning:           "WARNUNG",
 			unsafeActive:            "Unsicherer Modus aktiv — keine Sandbox-Isolation",
+			tableOfContentsSection:  "Inhaltsverzeichnis",
+			componentIndexSection:   "Komponentenindex",
+			componentIndexLead:      "Die Einträge sind nach Lieferpfad sortiert. Die Objekt-ID entspricht der bom-ref im SBOM und der artifact.id in Grype.",
+			noIndexedComponents:     "Keine Komponenten-Vorkommen indexiert.",
+			objectID:                "Objekt-ID",
+			packageName:             "Paket",
+			version:                 "Version",
+			purl:                    "PURL",
+			evidencePath:            "Belegpfad",
+			foundBy:                 "Erkannt durch",
+			noEvidenceRecorded:      "kein komponentenspezifischer Beleg erfasst",
 			processingTime:          "Verarbeitungszeit",
 			scanError:               "Fehler:",
 			componentsFound:         "Komponenten gefunden",
@@ -529,6 +572,17 @@ func getTranslations(lang string) translations {
 			sandboxAvail:            "Available",
 			unsafeWarning:           "WARNING",
 			unsafeActive:            "Unsafe mode active — no sandbox isolation",
+			tableOfContentsSection:  "Table of Contents",
+			componentIndexSection:   "Component Occurrence Index",
+			componentIndexLead:      "Entries are sorted by delivery path. The object ID matches the SBOM bom-ref and Grype artifact.id.",
+			noIndexedComponents:     "No component occurrences indexed.",
+			objectID:                "Object ID",
+			packageName:             "Package",
+			version:                 "Version",
+			purl:                    "PURL",
+			evidencePath:            "Evidence path",
+			foundBy:                 "Found by",
+			noEvidenceRecorded:      "no component-specific evidence recorded",
 			processingTime:          "Processing time",
 			scanError:               "Error:",
 			componentsFound:         "components found",
@@ -579,6 +633,135 @@ func writeRootMetadata(w io.Writer, data ReportData, t translations) {
 		fmt.Fprintf(w, "| %s | %s | %s |\n", key, rm.Properties[key], t.suppliedBy)
 	}
 	fmt.Fprintln(w)
+}
+
+func writeTableOfContents(w io.Writer, t translations) {
+	for _, section := range []string{
+		t.inputSection,
+		t.configSection,
+		t.rootMetadataSection,
+		t.sandboxSection,
+		t.componentIndexSection,
+		t.scanSection,
+		t.extractionSection,
+		t.policySection,
+		t.summarySection,
+		t.processingIssuesSection,
+		t.residualRiskSection,
+	} {
+		fmt.Fprintf(w, "- %s\n", section)
+	}
+}
+
+func writeComponentOccurrenceIndex(w io.Writer, bom *cdx.BOM, t translations) {
+	fmt.Fprintf(w, "%s\n\n", t.componentIndexLead)
+
+	occurrences := collectComponentOccurrences(bom)
+	if len(occurrences) == 0 {
+		fmt.Fprintf(w, "- %s\n", t.noIndexedComponents)
+		return
+	}
+
+	for _, occ := range occurrences {
+		fmt.Fprintf(w, "### %s\n\n", occ.ObjectID)
+		fmt.Fprintf(w, "- %s: `%s`\n", t.packageName, occ.PackageName)
+		if occ.Version != "" {
+			fmt.Fprintf(w, "- %s: `%s`\n", t.version, occ.Version)
+		}
+		if occ.PURL != "" {
+			fmt.Fprintf(w, "- %s: `%s`\n", t.purl, occ.PURL)
+		}
+		fmt.Fprintf(w, "- %s: `%s`\n", t.deliveryPath, occ.DeliveryPath)
+		if len(occ.EvidencePaths) == 0 {
+			fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, t.noEvidenceRecorded)
+		} else {
+			for _, evidencePath := range occ.EvidencePaths {
+				fmt.Fprintf(w, "- %s: `%s`\n", t.evidencePath, evidencePath)
+			}
+		}
+		if occ.FoundBy != "" {
+			fmt.Fprintf(w, "- %s: `%s`\n", t.foundBy, occ.FoundBy)
+		}
+		fmt.Fprintf(w, "- %s: `%s`\n\n", t.objectID, occ.ObjectID)
+	}
+}
+
+func collectComponentOccurrences(bom *cdx.BOM) []componentOccurrence {
+	if bom == nil || bom.Components == nil {
+		return nil
+	}
+
+	occurrences := make([]componentOccurrence, 0, len(*bom.Components))
+	for i := range *bom.Components {
+		comp := (*bom.Components)[i]
+		deliveryPaths := componentPropertyValues(comp, "extract-sbom:delivery-path")
+		if len(deliveryPaths) == 0 {
+			continue
+		}
+		if len(componentPropertyValues(comp, "extract-sbom:extraction-status")) > 0 {
+			continue
+		}
+
+		occurrences = append(occurrences, componentOccurrence{
+			ObjectID:      comp.BOMRef,
+			PackageName:   comp.Name,
+			Version:       comp.Version,
+			PURL:          comp.PackageURL,
+			DeliveryPath:  deliveryPaths[0],
+			EvidencePaths: componentPropertyValues(comp, "extract-sbom:evidence-path"),
+			FoundBy:       firstComponentPropertyValue(comp, "syft:package:foundBy"),
+		})
+	}
+
+	sort.Slice(occurrences, func(i, j int) bool {
+		if occurrences[i].DeliveryPath != occurrences[j].DeliveryPath {
+			return occurrences[i].DeliveryPath < occurrences[j].DeliveryPath
+		}
+		iEvidence := firstString(occurrences[i].EvidencePaths)
+		jEvidence := firstString(occurrences[j].EvidencePaths)
+		if iEvidence != jEvidence {
+			return iEvidence < jEvidence
+		}
+		if occurrences[i].PackageName != occurrences[j].PackageName {
+			return occurrences[i].PackageName < occurrences[j].PackageName
+		}
+		if occurrences[i].Version != occurrences[j].Version {
+			return occurrences[i].Version < occurrences[j].Version
+		}
+		return occurrences[i].ObjectID < occurrences[j].ObjectID
+	})
+
+	return occurrences
+}
+
+func componentPropertyValues(comp cdx.Component, name string) []string {
+	if comp.Properties == nil {
+		return nil
+	}
+
+	values := make([]string, 0)
+	for _, prop := range *comp.Properties {
+		if prop.Name != name || prop.Value == "" {
+			continue
+		}
+		values = append(values, prop.Value)
+	}
+	return values
+}
+
+func firstComponentPropertyValue(comp cdx.Component, name string) string {
+	values := componentPropertyValues(comp, name)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func writeExtractionTree(w io.Writer, node *extract.ExtractionNode, depth int, t translations) {
