@@ -91,6 +91,46 @@ func findComponent(bom *cdx.BOM, pathSuffix string) *cdx.Component {
 	return nil
 }
 
+// findTrackedComponent returns the tracked container/archive component whose
+// delivery path matches the given suffix. It excludes package occurrences,
+// which share their scan target's delivery path but do not carry an
+// extraction-status property.
+func findTrackedComponent(bom *cdx.BOM, pathSuffix string) *cdx.Component {
+	if bom == nil {
+		return nil
+	}
+	if bom.Metadata != nil && bom.Metadata.Component != nil && bom.Metadata.Component.Properties != nil {
+		for _, p := range *bom.Metadata.Component.Properties {
+			if p.Name == "extract-sbom:delivery-path" && strings.HasSuffix(p.Value, pathSuffix) {
+				return bom.Metadata.Component
+			}
+		}
+	}
+	if bom.Components == nil {
+		return nil
+	}
+	for i := range *bom.Components {
+		c := &(*bom.Components)[i]
+		if c.Properties == nil {
+			continue
+		}
+		var hasPath bool
+		var hasStatus bool
+		for _, p := range *c.Properties {
+			if p.Name == "extract-sbom:delivery-path" && strings.HasSuffix(p.Value, pathSuffix) {
+				hasPath = true
+			}
+			if p.Name == "extract-sbom:extraction-status" && p.Value != "" {
+				hasStatus = true
+			}
+		}
+		if hasPath && hasStatus {
+			return c
+		}
+	}
+	return nil
+}
+
 // componentProperty returns the value of the named property on the component, or "".
 func componentProperty(c *cdx.Component, name string) string {
 	if c == nil || c.Properties == nil {
@@ -489,7 +529,7 @@ func TestVendorSuiteSBOMAssembly(t *testing.T) {
 			"vcredist.cab",
 			"webapp-patch-1.2.1.7z",
 		} {
-			c := findComponent(bom, suffix)
+			c := findTrackedComponent(bom, suffix)
 			if c == nil {
 				t.Errorf("no component for %s", suffix)
 			}
@@ -512,7 +552,7 @@ func TestVendorSuiteSBOMAssembly(t *testing.T) {
 
 	// §8: MSI component has standard CycloneDX fields from Property table.
 	t.Run("MSI component has product metadata in standard fields", func(t *testing.T) {
-		c := findComponent(bom, "client-setup.msi")
+		c := findTrackedComponent(bom, "client-setup.msi")
 		if c == nil {
 			t.Fatal("no component for client-setup.msi")
 		}
@@ -532,7 +572,7 @@ func TestVendorSuiteSBOMAssembly(t *testing.T) {
 
 	// §8: Components have extract-sbom:delivery-path and extract-sbom:extraction-status.
 	t.Run("components have delivery-path and extraction-status properties", func(t *testing.T) {
-		c := findComponent(bom, "apache-tomcat-9.0.98.tar.gz")
+		c := findTrackedComponent(bom, "apache-tomcat-9.0.98.tar.gz")
 		if c == nil {
 			t.Fatal("no component for tar.gz")
 		}
@@ -550,7 +590,7 @@ func TestVendorSuiteSBOMAssembly(t *testing.T) {
 	// §8: Packages discovered by Syft appear as separate components linked
 	// via dependencies (not as nested sub-components).
 	t.Run("packages are linked via dependencies not nested", func(t *testing.T) {
-		c := findComponent(bom, "webapp-patch-1.2.1.7z")
+		c := findTrackedComponent(bom, "webapp-patch-1.2.1.7z")
 		if c == nil {
 			t.Fatal("no component for 7z")
 		}
