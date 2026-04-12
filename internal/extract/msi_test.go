@@ -51,6 +51,7 @@ func TestDecodeMSIStreamNamePassthrough(t *testing.T) {
 		{"_StringPool", "_StringPool"},
 		{"!_StringData", "!_StringData"},
 		{"Property", "Property"},
+		{"SummaryInformation", "SummaryInformation"},
 	}
 
 	for _, tt := range tests {
@@ -59,6 +60,51 @@ func TestDecodeMSIStreamNamePassthrough(t *testing.T) {
 			got := decodeMSIStreamName(tt.input)
 			if got != tt.want {
 				t.Errorf("decodeMSIStreamName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDecodeMSIStreamNameEncoded verifies that MSI-encoded OLE stream names
+// are correctly decoded. These encoded names are produced by msitools/wixl
+// using the standard MSI database encoding (two-char packed in U+3800..U+47FF,
+// single-char in U+4800..U+483F, table prefix U+4840).
+func TestDecodeMSIStreamNameEncoded(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "StringPool",
+			input: "\u4840\u3F3F\u4577\u446C\u3E6A\u44B2\u482F",
+			want:  "!_StringPool",
+		},
+		{
+			name:  "StringData",
+			input: "\u4840\u3F3F\u4577\u446C\u3B6A\u45E4\u4824",
+			want:  "!_StringData",
+		},
+		{
+			name:  "Property",
+			input: "\u4840\u4559\u44F2\u4568\u4737",
+			want:  "!Property",
+		},
+		{
+			name:  "File",
+			input: "\u4840\u430F\u422F",
+			want:  "!File",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := decodeMSIStreamName(tt.input)
+			if got != tt.want {
+				t.Errorf("decodeMSIStreamName(encoded %s) = %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}
@@ -156,6 +202,9 @@ func TestIsStreamNameMatchesDirectAndEncoded(t *testing.T) {
 		{"!_StringPool", "_StringPool", true},
 		{"_StringData", "_StringData", true},
 		{"Other", "_StringPool", false},
+		// Encoded stream names from wixl/msitools (two-char packed encoding).
+		{"\u4840\u3F3F\u4577\u446C\u3E6A\u44B2\u482F", "_StringPool", true},
+		{"\u4840\u3F3F\u4577\u446C\u3B6A\u45E4\u4824", "_StringData", true},
 	}
 
 	for _, tt := range tests {

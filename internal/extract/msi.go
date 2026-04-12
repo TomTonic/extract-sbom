@@ -126,9 +126,30 @@ func isPropertyTableStream(name string) bool {
 		decoded == "_Property" || decoded == "!_Property"
 }
 
+// decodeMSIChar maps a 6-bit MSI-encoded value back to the original character.
+// The encoding uses: 0-9→'0'..'9', 10-35→'A'..'Z', 36-61→'a'..'z', 62→'.', 63→'_'.
+func decodeMSIChar(v rune) rune {
+	switch {
+	case v <= 9:
+		return '0' + v
+	case v <= 35:
+		return 'A' + v - 10
+	case v <= 61:
+		return 'a' + v - 36
+	case v == 62:
+		return '.'
+	default:
+		return '_'
+	}
+}
+
 // decodeMSIStreamName decodes an MSI-encoded OLE stream name.
-// MSI uses a custom encoding for table names in OLE streams where
-// characters are mapped through a specific encoding scheme.
+// MSI uses a custom encoding for table names in OLE streams:
+//   - U+4840 is the '!' prefix that marks table streams.
+//   - U+3800..U+47FF packs two characters into one code point:
+//     low 6 bits = first char, next 6 bits = second char.
+//   - U+4800..U+483F encodes a single character in the low 6 bits.
+//   - All other code points pass through unchanged.
 func decodeMSIStreamName(name string) string {
 	if name == "" {
 		return name
@@ -138,23 +159,16 @@ func decodeMSIStreamName(name string) string {
 	for _, r := range name {
 		switch {
 		case r >= 0x3800 && r < 0x4800:
-			// MSI base-64 encoded character.
-			decoded := r - 0x3800
-			if decoded < 0x3F {
-				switch {
-				case decoded <= 0x09:
-					result.WriteRune('0' + decoded)
-				case decoded <= 0x23:
-					result.WriteRune('A' + decoded - 0x0A)
-				case decoded <= 0x3D:
-					result.WriteRune('a' + decoded - 0x24)
-				case decoded == 0x3E:
-					result.WriteRune('_')
-				}
-			}
+			// Two-character packed encoding.
+			offset := r - 0x3800
+			result.WriteRune(decodeMSIChar(offset & 0x3F))
+			result.WriteRune(decodeMSIChar((offset >> 6) & 0x3F))
+		case r == 0x4840:
+			// Table name prefix '!'.
+			result.WriteByte('!')
 		case r >= 0x4800 && r < 0x4840:
-			// Two-character encoding — fallback: keep as-is.
-			result.WriteRune(r)
+			// Single-character encoding.
+			result.WriteRune(decodeMSIChar(r - 0x4800))
 		default:
 			result.WriteRune(r)
 		}
@@ -213,8 +227,9 @@ func parseMSIStringPool(poolReader, dataReader io.Reader, maxStreamSize int64) (
 }
 
 // parseMSIPropertyTable reads the Property table stream and returns a map
-// of property name to value. The Property table has two columns, both
-// string references (indices into the string pool).
+// of property name to value. The Property table has two string-reference
+// columns (Name, Value). MSI stores table data in column-major order:
+// all Name indices first, then all Value indices.
 func parseMSIPropertyTable(tableReader io.Reader, stringPool []string, maxStreamSize int64) (map[string]string, error) {
 	data, err := readAllLimited(tableReader, maxStreamSize, "Property")
 	if err != nil {
@@ -232,24 +247,27 @@ func parseMSIPropertyTable(tableReader io.Reader, stringPool []string, maxStream
 		colWidth = 4
 	}
 
-	rowSize := colWidth * 2
-
+	// Column-major layout: [name₀..nameₙ₋₁ | value₀..valueₙ₋₁]
+	// Total size = numRows * colWidth * 2 (two columns).
+	rowSize := colWidth * 2 // bytes per logical row across both columns
 	if len(data) < rowSize {
 		return result, nil
 	}
 
 	numRows := len(data) / rowSize
+	colBytes := numRows * colWidth // bytes occupied by one column
 
 	for i := 0; i < numRows; i++ {
-		rowOff := i * rowSize
+		nameOff := i * colWidth
+		valueOff := colBytes + i*colWidth
 
 		var nameIdx, valueIdx int
 		if colWidth == 2 {
-			nameIdx = int(binary.LittleEndian.Uint16(data[rowOff : rowOff+2]))
-			valueIdx = int(binary.LittleEndian.Uint16(data[rowOff+2 : rowOff+4]))
+			nameIdx = int(binary.LittleEndian.Uint16(data[nameOff : nameOff+2]))
+			valueIdx = int(binary.LittleEndian.Uint16(data[valueOff : valueOff+2]))
 		} else {
-			nameIdx = int(binary.LittleEndian.Uint32(data[rowOff : rowOff+4]))
-			valueIdx = int(binary.LittleEndian.Uint32(data[rowOff+4 : rowOff+8]))
+			nameIdx = int(binary.LittleEndian.Uint32(data[nameOff : nameOff+4]))
+			valueIdx = int(binary.LittleEndian.Uint32(data[valueOff : valueOff+4]))
 		}
 
 		// String indices are 1-based in MSI format.
