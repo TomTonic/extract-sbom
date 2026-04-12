@@ -214,7 +214,7 @@ set. Additionally, the `identify` module checks for the InstallShield magic byte
 
 ## 2. Module Overview
 
-```
+```text
 cmd/
   extract-sbom/          CLI entry point
 
@@ -241,13 +241,15 @@ internal/
 and delegates to the orchestrator.
 
 **Interface:**
-```
+
+```text
 main()
   → cobra root command
     → run(cfg config.Config) error
 ```
 
 **Key flags:**
+
 - `--input` / positional arg: path to delivery file
 - `--output-dir`: target directory for SBOM + report
 - `--work-dir`: base directory for temporary extraction work (default: system temp dir)
@@ -266,6 +268,7 @@ main()
   `--max-ratio`, `--timeout`: override default limits
 
 **Design decisions:**
+
 - No subcommands. Single verb: run the inspection.
 - `--unsafe` prints a hard warning to stderr before proceeding.
 - Root metadata flags apply only to the top-level delivered software component,
@@ -278,6 +281,7 @@ main()
 **Purpose:** Central configuration struct and defaults.
 
 **Interface:**
+
 ```go
 type Config struct {
     InputPath       string
@@ -315,6 +319,7 @@ func (c *Config) Validate() error
 ```
 
 **Design decisions:**
+
 - All limits have tested defaults matching DESIGN.md §6.1.
 - `Validate()` enforces invariants (e.g. input file must exist, output dir writable,
   work dir must exist and be writable).
@@ -331,6 +336,7 @@ func (c *Config) Validate() error
 it natively or whether extract-sbom needs to extract it.
 
 **Interface:**
+
 ```go
 type FormatInfo struct {
     Format     Format   // ZIP, TAR, GzipTAR, Bzip2TAR, XzTAR, ZstdTAR, CAB, MSI, SevenZip, RAR, InstallShieldCAB, Unknown
@@ -344,6 +350,7 @@ func Identify(ctx context.Context, path string) (FormatInfo, error)
 ```
 
 **Design decisions:**
+
 - Detection uses file-magic bytes (first 16 bytes) and file extension:
   - ZIP: `PK\x03\x04` — then further check for Syft-native ZIP-based
     formats (JAR/WAR/EAR via manifest, .whl/.egg via extension, .nupkg,
@@ -372,6 +379,7 @@ func Identify(ctx context.Context, path string) (FormatInfo, error)
 This is the hard security boundary (DESIGN.md §6.2 / §6.3).
 
 **Interface:**
+
 ```go
 // ValidatePath checks a single entry name/path for safety violations.
 // Returns a non-nil HardSecurityError on path traversal, symlink escape,
@@ -386,6 +394,7 @@ type HardSecurityError struct { /* … */ }
 ```
 
 **Design decisions:**
+
 - Hard security failures (path traversal, symlink escape, special files)
   are **never** overridable, not even in unsafe mode. They abort the
   current extraction subtree immediately.
@@ -400,6 +409,7 @@ type HardSecurityError struct { /* … */ }
 **Purpose:** Wrap external binary execution in an isolated namespace.
 
 **Interface:**
+
 ```go
 type Sandbox interface {
     // Run executes the command inside the sandbox.
@@ -419,7 +429,8 @@ func Resolve(cfg config.Config) (Sandbox, error)
 ```
 
 **Bubblewrap invocation pattern:**
-```
+
+```sh
 bwrap \
   --ro-bind <input-file-dir> /input \
   --bind <output-dir> /output \
@@ -433,6 +444,7 @@ bwrap \
 ```
 
 **Design decisions:**
+
 - `--unshare-all` creates new mount, PID, IPC, UTS, network, and user namespaces.
 - `--die-with-parent` ensures cleanup if the parent (extract-sbom) crashes.
 - `--new-session` mitigates `TIOCSTI` injection.
@@ -453,6 +465,7 @@ bwrap \
 extract-sbom only extracts when Syft cannot see through a container format.
 
 **Interface:**
+
 ```go
 // ExtractionNode is the central processing data structure.
 // Each node represents a container artifact encountered during traversal.
@@ -488,7 +501,8 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sandbox s
 ```
 
 **Syft-first dispatch logic:**
-```
+
+```text
 For each file encountered:
   1. Identify format (identify.Identify)
   2. If file is MSI:
@@ -511,12 +525,15 @@ For each file encountered:
 ```
 
 **Example:** A delivery ZIP contains a DLL, a JAR, and a nested MSI.
+
 - ZIP → extracted with `archive/zip`
 - DLL → plain leaf, cataloged when Syft scans the extracted directory
 - JAR → SyftNative (Syft's Java cataloger handles it directly)
-- MSI → Property table read directly from the original file → extracted with 7zz via sandbox when available → produces internal CABs → recurse
+- MSI → Property table read directly from the original file → extracted with 7zz via sandbox
+  when available → produces internal CABs → recurse
 
 **Design decisions:**
+
 - **Go stdlib extraction** (`archive/zip`, `archive/tar`) runs in-process.
   Each entry header is passed to `safeguard.ValidatePath` and
   `safeguard.ValidateEntry` before any bytes are written. On violation,
@@ -555,6 +572,7 @@ For a reader-oriented explanation of the same logic, see
 [SCAN_APPROACH.md](SCAN_APPROACH.md).
 
 **Interface:**
+
 ```go
 type ScanResult struct {
     NodePath      string
@@ -569,6 +587,7 @@ func FlattenEvidencePaths(result ScanResult) []string
 ```
 
 **Current scan flow:**
+
 ```go
 1. Walk the extraction tree and collect scannable nodes.
 2. Partition scan targets into:
@@ -588,6 +607,7 @@ func FlattenEvidencePaths(result ScanResult) []string
 ```
 
 **Design decisions:**
+
 - The distinction between SyftNative and extracted nodes is the core of the
   Syft-first principle: Syft's own catalogers take precedence for formats
   they understand (JAR, RPM, DEB, etc.). extract-sbom only extracts "dumb"
@@ -625,12 +645,14 @@ func FlattenEvidencePaths(result ScanResult) []string
 container-as-module components and the dependency graph.
 
 **Interface:**
+
 ```go
 // Assemble builds the final, unified CycloneDX BOM.
 func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cyclonedx.BOM, error)
 ```
 
 **Assembly rules:**
+
 1. Create a single top-level `Component` (type `Application`) for the input file itself.
    This component also represents the root `ExtractionNode`; the root is not
    emitted again as a second `File` component.
@@ -674,6 +696,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 7. Encode to CycloneDX JSON via `cyclonedx.NewBOMEncoder(writer, cyclonedx.BOMFileFormatJSON)`.
 
 **Design decisions:**
+
 - BOMRef namespacing by node path guarantees uniqueness across merged BOMs.
 - Root metadata is a first-class part of the consolidated SBOM and is sourced
   from CLI/config input, not inferred from nested package discovery.
@@ -696,6 +719,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 **Purpose:** Generate the audit report from the processing state.
 
 **Interface:**
+
 ```go
 type ReportData struct {
     Input            InputSummary
@@ -717,6 +741,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
 ```
 
 **Required content (per DESIGN.md §10.4):**
+
 - Input identification (filename, size, SHA-256, SHA-512)
 - Configuration snapshot (limits, policy, mode, language)
 - Root SBOM metadata, including which fields were supplied explicitly via CLI
@@ -734,6 +759,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
 - Explicit residual risk statement
 
 **Design decisions:**
+
 - Human-readable output is Markdown (renders well in terminals, browsers, and
   PDF pipelines).
 - Machine-readable output is JSON matching a documented schema.
@@ -752,6 +778,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
 **Purpose:** Evaluate limit violations and determine processing behavior.
 
 **Interface:**
+
 ```go
 type Decision struct {
     Trigger    string       // what limit was hit
@@ -768,6 +795,7 @@ func (e *Engine) Decisions() []Decision
 ```
 
 **Design decisions:**
+
 - In `strict` mode, any violation produces `Abort`.
 - In `partial` mode, the offending subtree is `Skip`-ped; processing
   continues elsewhere.
@@ -783,6 +811,7 @@ func (e *Engine) Decisions() []Decision
 **Purpose:** Coordinate the end-to-end processing pipeline.
 
 **Interface:**
+
 ```go
 type Result struct {
   ExitCode   ExitCode
@@ -795,7 +824,8 @@ func Run(ctx context.Context, cfg config.Config) Result
 ```
 
 **Pipeline:**
-```
+
+```text
 1. cfg.Validate()
 2. Compute input file hash (SHA-256, SHA-512)
 3. sandbox.Resolve(cfg) → (Sandbox, optional error)
@@ -809,6 +839,7 @@ func Run(ctx context.Context, cfg config.Config) Result
 ```
 
 **Design decisions:**
+
 - The orchestrator owns the lifecycle of temporary directories.
 - Exit codes are deterministic and machine-parseable.
 - Processing-stage errors (sandbox resolution, extraction, scan, assembly,
@@ -823,7 +854,7 @@ func Run(ctx context.Context, cfg config.Config) Result
 
 ## 4. Data Flow Diagram
 
-```
+```text
                         ┌────────────────┐
                         │  Input File    │
                         └──────┬─────────┘
@@ -923,6 +954,7 @@ RPM, DEB, wheel, egg, nupkg, apk, etc.) are passed directly to Syft
 without extraction by extract-sbom.
 
 This principle has three benefits:
+
 1. **Correctness:** Syft's format-specific catalogers produce richer
    metadata (versions, licenses, dependencies) than scanning raw
    extracted files would.
@@ -970,6 +1002,7 @@ The same applies to RPM, DEB, wheel, nupkg, and other ecosystem formats.
 
 When vendor deliveries contain standalone Windows binaries (not packaged
 in an ecosystem format), Syft relies on:
+
 - The **binary classifier** — a set of known signatures for common open-source
   libraries (OpenSSL, zlib, libcurl, etc.). If a binary matches, Syft
   produces a CPE with the correct vendor/product/version.
@@ -980,6 +1013,7 @@ in an ecosystem format), Syft relies on:
 
 If a vendor strips Version Info metadata or delivers a binary that does
 not match any known classifier, Syft cannot identify it. In this case:
+
 - The file still appears as a `Component` in the SBOM (of type `File`,
   with SHA-256 hash), but without CPE or PURL.
 - The audit report flags these files under "unidentified binaries"
@@ -1002,7 +1036,7 @@ the MSI itself represents a product with a vendor, name, and version.
 extract-sbom reads the MSI Property table (via `mscfb` + MSI table parser)
 and uses it to create a proper CPE for the MSI component:
 
-```
+```text
 Input:  Manufacturer = "Contoso Ltd", ProductName = "Widget Server", ProductVersion = "3.2.1"
 Output: cpe:2.3:a:contoso_ltd:widget_server:3.2.1:*:*:*:*:*:*:*
 ```
@@ -1028,11 +1062,12 @@ Every component in the consolidated SBOM carries a
 `extract-sbom:delivery-path` property recording the nearest defensible
 physical artifact path within the original delivery, e.g.:
 
-```
+```text
 sw_delivery.zip/server/webserver.tar.gz/java/component.jar
 ```
 
 This applies to:
+
 - **Container components** created by extract-sbom (path = `ExtractionNode.Path`)
 - **Package components** discovered by Syft (path = the physical delivery
   artifact from which the package was observed, typically the scanned node path)
@@ -1142,6 +1177,7 @@ fixtures will be committed to `testdata/`.
 
 Fixture naming convention: `testdata/<format>/<scenario>.<ext>`
 Examples:
+
 - `testdata/zip/flat-three-files.zip`
 - `testdata/zip/nested-zip-in-zip.zip`
 - `testdata/cab/simple.cab`

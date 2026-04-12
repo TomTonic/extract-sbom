@@ -31,10 +31,13 @@ independent of the functional design in DESIGN.md.
 ---
 
 ## 3. Documentation Requirements
+
 All project documentation shall be in English.
 
 ### 3.1 Solution Design Documentation
+
 An overall software module guide shall be maintained, describing:
+
 - The abstract interaction between the software modules
 - The abstract interface definition of every software module
 - The design decisions encapsulated within every software module
@@ -42,7 +45,9 @@ An overall software module guide shall be maintained, describing:
    helper binaries selected for the implementation
 
 ### 3.2 Code Documentation
+
 Every exported function or method must have a GoDoc comment describing:
+
 - What it does
 - Why it exists
 - How it is typically used
@@ -50,7 +55,9 @@ Every exported function or method must have a GoDoc comment describing:
 - Constraints or assumptions
 
 ### 3.3 Test Documentation
+
 Each test must be documented **outside-in**, from the user's perspective:
+
 - What end-user behavior is being validated
 - In which part of the system the behavior belongs
 - What concrete outcome is expected
@@ -63,6 +70,7 @@ that read as explicit assertions.
 ## 4. Testing Requirements
 
 ### 4.1 Mandatory Test Categories
+
 The project must include:
 
 1. **Unit tests**
@@ -81,6 +89,7 @@ The project must include:
    - Limit-trigger behavior
 
 ### 4.2 Coverage
+
 - Aim for high and meaningful coverage (>80%)
 - Critical security paths must be explicitly tested
 - Fuzz tests are encouraged for archive parsing
@@ -98,6 +107,7 @@ The project must include:
 ## 6. CI / CD Requirements
 
 All changes must be validated by automated checks, including:
+
 - `go build`
 - `go test`
 - `go test -race`
@@ -141,6 +151,7 @@ CI must fail on linting or test failures.
 ## 10. Definition of Done
 
 Work is complete when:
+
 - The tool builds and runs on Linux
 - One input file yields one SBOM and one audit report
 - Recursive extraction behaves as specified

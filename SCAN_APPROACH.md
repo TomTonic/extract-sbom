@@ -220,7 +220,7 @@ webapp/node_modules/minimist/index.js      (actual library file inside npm packa
 When Syft scans the extracted `webapp-patch-1.2.1.7z` directory, it finds
 `node_modules/minimist/package.json` and records:
 
-```
+```text
 pkg:npm/minimist@0.0.8
 ```
 

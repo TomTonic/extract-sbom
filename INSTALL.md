@@ -10,7 +10,7 @@ For building from source or for development, see [BUILD.md](BUILD.md).
 
 Prebuilt binaries for Linux and macOS (amd64 and arm64) are available at:
 
-```
+```text
 https://github.com/TomTonic/extract-sbom/extract-sbom/releases
 ```
 
@@ -37,7 +37,7 @@ sha256sum --check --ignore-missing checksums.txt
 
 Expected output:
 
-```
+```text
 extract-sbom.tar.gz: OK
 ```
 
@@ -141,7 +141,8 @@ sudo apt-get install -y p7zip-full unshield bubblewrap
 sudo dnf install -y p7zip p7zip-plugins unshield bubblewrap
 ```
 
-Package names can vary by distribution version. If a package is not found, search for the equivalent `7zip`, `unshield`, or `bubblewrap` package.
+Package names can vary by distribution version.
+If a package is not found, search for the equivalent `7zip`, `unshield`, or `bubblewrap` package.
 
 ## 8. Minimal Post-Install Smoke Test
 
