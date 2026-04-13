@@ -189,3 +189,38 @@ func TestSandboxInterfaceCompliance(t *testing.T) {
 	var _ Sandbox = (*PassthroughSandbox)(nil)
 	var _ Sandbox = (*DeniedSandbox)(nil)
 }
+
+// TestIsUnderMountedPrefixRecognizesStandardPaths verifies that the
+// safety check for bwrap bind-mount deduplication correctly identifies
+// directories under /usr and /lib as already mounted.
+func TestIsUnderMountedPrefixRecognizesStandardPaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		dir  string
+		want bool
+	}{
+		{"exact /usr", "/usr", true},
+		{"under /usr/bin", "/usr/bin", true},
+		{"under /usr/local/bin", "/usr/local/bin", true},
+		{"exact /lib", "/lib", true},
+		{"under /lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", true},
+		{"not mounted /opt", "/opt", false},
+		{"not mounted /opt/bin", "/opt/bin", false},
+		{"not mounted /home", "/home/user", false},
+		{"prefix false positive /usrlocal", "/usrlocal", false},
+		{"prefix false positive /library", "/library", false},
+		{"empty string", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := isUnderMountedPrefix(tt.dir)
+			if got != tt.want {
+				t.Errorf("isUnderMountedPrefix(%q) = %v, want %v", tt.dir, got, tt.want)
+			}
+		})
+	}
+}
