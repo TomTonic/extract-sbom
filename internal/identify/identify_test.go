@@ -308,6 +308,23 @@ func TestIdentifyReturnsUnknownForUnrecognizedFormat(t *testing.T) {
 	}
 }
 
+// TestIdentifyReturnsUnknownForEmptyFile verifies that empty plain files do
+// not surface as identification failures in the extraction report.
+func TestIdentifyReturnsUnknownForEmptyFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	path := createTestFile(t, dir, "empty.txt", nil)
+
+	info, err := Identify(context.Background(), path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.Format != Unknown {
+		t.Errorf("Format = %v, want Unknown", info.Format)
+	}
+}
+
 // TestIdentifySyftNativeByExtensionForNonZIPFormats verifies that files
 // with syft-native extensions (RPM, DEB, APK) are correctly identified
 // even though their magic bytes don't match any archive format check.
