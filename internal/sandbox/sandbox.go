@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
 )
@@ -93,7 +94,18 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		"--ro-bind", "/usr", "/usr",
 		"--ro-bind", "/lib", "/lib",
 		"--symlink", "/usr/lib64", "/lib64",
-		"--ro-bind", filepath.Dir(cmdPath), filepath.Dir(cmdPath),
+	}
+
+	// Only mount the tool's parent directory if it is NOT already visible
+	// under one of the always-mounted prefixes (/usr, /lib). This prevents
+	// accidentally exposing sensitive host directories when the tool binary
+	// lives in an unexpected location (e.g., /opt/custom/bin/).
+	cmdDir := filepath.Dir(cmdPath)
+	if !isUnderMountedPrefix(cmdDir) {
+		bwrapArgs = append(bwrapArgs, "--ro-bind", cmdPath, cmdPath)
+	}
+
+	bwrapArgs = append(bwrapArgs,
 		"--tmpfs", "/tmp",
 		"--proc", "/proc",
 		"--dev", "/dev",
@@ -102,7 +114,7 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		"--die-with-parent",
 		"--",
 		cmd,
-	}
+	)
 
 	// Replace input/output paths in args with sandbox-internal paths.
 	for _, arg := range args {
@@ -121,6 +133,18 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 	}
 
 	return nil
+}
+
+// isUnderMountedPrefix reports whether dir falls under one of the
+// always-mounted read-only prefixes (/usr, /lib). Used to avoid redundant
+// or security-problematic bind-mounts of tool parent directories.
+func isUnderMountedPrefix(dir string) bool {
+	for _, prefix := range []string{"/usr", "/lib"} {
+		if dir == prefix || strings.HasPrefix(dir, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // replacePrefix replaces a path prefix in a string.
