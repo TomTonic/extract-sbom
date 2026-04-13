@@ -25,6 +25,13 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
+// Testable hooks — override in tests to inject errors.
+var (
+	computeInputSummaryFunc = report.ComputeInputSummary
+	scanAllFunc             = scan.ScanAll
+	assembleFunc            = assembly.Assemble
+)
+
 // ExitCode represents the process exit status.
 type ExitCode int
 
@@ -83,7 +90,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	// Step 2: Compute input file hashes.
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 2/7: hashing input file")
 	hashStart := time.Now()
-	inputSummary, err := report.ComputeInputSummary(cfg.InputPath)
+	inputSummary, err := computeInputSummaryFunc(cfg.InputPath)
 	if err != nil {
 		return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("input hash: %w", err)}
 	}
@@ -147,7 +154,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	if tree != nil {
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 5/7: scanning with syft")
 		scanStart := time.Now()
-		scans, err = scan.ScanAll(ctx, tree, cfg)
+		scans, err = scanAllFunc(ctx, tree, cfg)
 		totalScannedComponents = scan.CountScannedComponents(scans)
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] scanning done in %s: %d tasks → %s found",
 			time.Since(scanStart).Round(time.Millisecond), len(scans), scan.FormatComponentCount(totalScannedComponents))
@@ -169,7 +176,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	if tree != nil {
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/7: assembling sbom")
 		assembleStart := time.Now()
-		bom, asmSuppressions, asmErr := assembly.Assemble(tree, scans, cfg)
+		bom, asmSuppressions, asmErr := assembleFunc(tree, scans, cfg)
 		suppressions = asmSuppressions
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] assembly done in %s", time.Since(assembleStart).Round(time.Millisecond))
 		if asmErr == nil {
