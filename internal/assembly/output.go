@@ -31,13 +31,17 @@ func WriteSBOM(bom *cdx.BOM, path string) error {
 	if err != nil {
 		return fmt.Errorf("assembly: create SBOM file %s: %w", path, err)
 	}
-	defer f.Close()
 
 	encoder := cdx.NewBOMEncoder(f, cdx.BOMFileFormatJSON)
 	encoder.SetPretty(true)
 
 	if err := encoder.Encode(bom); err != nil {
+		f.Close()
 		return fmt.Errorf("assembly: encode SBOM: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("assembly: close SBOM file %s: %w", path, err)
 	}
 
 	return nil
