@@ -2,6 +2,21 @@ package report
 
 // translations contains all localized report labels and prose snippets used
 // by human-report generation.
+//
+// Contract for string fields in this struct:
+//   - Values are inserted into Markdown output and therefore are plain text
+//     or inline Markdown fragments (for example links or inline code spans).
+//   - Values are never HTML and must not depend on runtime locale APIs.
+//   - Fields ending with "Template" are consumed via fmt.Sprintf and must keep
+//     placeholder count/order compatible with their call sites.
+//   - Fields ending with "Section", "Label", "Header", "Reason" or "Value"
+//     are short UI strings (single-line headings/cell labels).
+//   - The noneValue fallback should be a short, language-localized token used
+//     when no sample/path value exists.
+//
+// getTranslations must return a fully populated bundle (no zero-value gaps)
+// for every supported language. Unknown language codes intentionally fall back
+// to English.
 type translations struct {
 	title                             string
 	inputSection                      string
