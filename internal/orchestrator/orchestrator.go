@@ -143,11 +143,14 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	// Step 5: Scan with Syft.
 	var scans []scan.ScanResult
+	var totalScannedComponents int
 	if tree != nil {
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 5/7: scanning with syft")
 		scanStart := time.Now()
 		scans, err = scan.ScanAll(ctx, tree, cfg)
-		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] scanning done in %s (%d targets)", time.Since(scanStart).Round(time.Millisecond), len(scans))
+		totalScannedComponents = scan.CountScannedComponents(scans)
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] scanning done in %s: %d tasks → %s found",
+			time.Since(scanStart).Round(time.Millisecond), len(scans), scan.FormatComponentCount(totalScannedComponents))
 		if err != nil {
 			addIssue("scan", err)
 			// Non-fatal: proceed with whatever we have.
@@ -169,6 +172,26 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		bom, asmSuppressions, asmErr := assembly.Assemble(tree, scans, cfg)
 		suppressions = asmSuppressions
 		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] assembly done in %s", time.Since(assembleStart).Round(time.Millisecond))
+		if asmErr == nil {
+			finalBOMCount := 0
+			if bom != nil && bom.Components != nil {
+				finalBOMCount = len(*bom.Components)
+			}
+			fsCount, lvCount, dedupCount := 0, 0, 0
+			for _, s := range asmSuppressions {
+				switch s.Reason {
+				case assembly.SuppressionFSArtifact:
+					fsCount++
+				case assembly.SuppressionLowValueFile:
+					lvCount++
+				case assembly.SuppressionWeakDuplicate:
+					dedupCount++
+				}
+			}
+			cfg.EmitProgress(config.ProgressNormal,
+				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, dedup=%d) → \033[1m%d\033[0m in BOM",
+				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, dedupCount, finalBOMCount)
+		}
 		if asmErr != nil {
 			addIssue("assembly", asmErr)
 			policyEngine.Evaluate(policy.Violation{

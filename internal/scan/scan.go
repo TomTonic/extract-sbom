@@ -143,10 +143,11 @@ const (
 )
 
 type scanProgressTracker struct {
-	mu              sync.Mutex
-	completed        int
-	totalComponents  int
-	nextUpdate       time.Time
+	mu                     sync.Mutex
+	completed              int
+	totalComponents        int
+	lastReportedComponents int
+	nextUpdate             time.Time
 }
 
 func newScanProgressTracker(label string) *scanProgressTracker {
@@ -172,12 +173,39 @@ func (tracker *scanProgressTracker) markCompleted(cfg config.Config, total int, 
 		return
 	}
 
-	cfg.EmitProgress(config.ProgressNormal, "[scan-native] completed %d/%d tasks → \033[1m%d component(s)\033[0m", tracker.completed, total, tracker.totalComponents)
+	delta := tracker.totalComponents - tracker.lastReportedComponents
+	tracker.lastReportedComponents = tracker.totalComponents
+	cfg.EmitProgress(config.ProgressNormal, "[scan-native] completed %d/%d tasks → %s", tracker.completed, total, FormatComponentCount(delta))
 	tracker.nextUpdate = now.Add(scanNativeProgressInterval)
 }
 
 func shouldLogScanCompletion(label string, duration time.Duration) bool {
 	return label != "scan-native" || duration >= scanNativeVerboseCompletionMinimum
+}
+
+// FormatComponentCount formats a component count for terminal output:
+// 0 → plain "0 components", 1 → bold "1 component", N → bold "N components".
+func FormatComponentCount(n int) string {
+	switch n {
+	case 0:
+		return "0 components"
+	case 1:
+		return "\033[1m1 component\033[0m"
+	default:
+		return fmt.Sprintf("\033[1m%d components\033[0m", n)
+	}
+}
+
+// CountScannedComponents returns the total number of components found across
+// all scan results. Results with errors contribute zero.
+func CountScannedComponents(scans []ScanResult) int {
+	total := 0
+	for _, sr := range scans {
+		if sr.BOM != nil && sr.BOM.Components != nil {
+			total += len(*sr.BOM.Components)
+		}
+	}
+	return total
 }
 
 func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, results []ScanResult, indices []int, numWorkers int, cfg config.Config, label string) {
@@ -233,7 +261,7 @@ func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, resu
 						continue
 					}
 					if shouldLogScanCompletion(label, duration) {
-						cfg.EmitProgress(config.ProgressVerbose, "[%s] task %d/%d done in %s: %s → \033[1m%d component(s)\033[0m", label, task.ordinal, len(indices), duration, nodePath, componentCount)
+						cfg.EmitProgress(config.ProgressVerbose, "[%s] task %d/%d done in %s: %s → %s", label, task.ordinal, len(indices), duration, nodePath, FormatComponentCount(componentCount))
 					}
 				}
 			}
