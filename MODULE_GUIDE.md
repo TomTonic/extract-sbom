@@ -648,7 +648,7 @@ container-as-module components and the dependency graph.
 
 ```go
 // Assemble builds the final, unified CycloneDX BOM.
-func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cyclonedx.BOM, error)
+func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cyclonedx.BOM, []SuppressionRecord, error)
 ```
 
 **Assembly rules:**
@@ -694,6 +694,8 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
    - `Unknown` for nodes where Syft scan failed.
 6. Set `Metadata.Tools` to include extract-sbom + Syft version info.
 7. Encode to CycloneDX JSON via `cyclonedx.NewBOMEncoder(writer, cyclonedx.BOMFileFormatJSON)`.
+8. Return suppression records for every dropped component candidate so the
+  report module can render deterministic suppression traceability.
 
 **Design decisions:**
 
