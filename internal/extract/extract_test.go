@@ -833,6 +833,54 @@ func TestExtractPlainTARProducesExtractionTree(t *testing.T) {
 	CleanupNode(tree)
 }
 
+// TestExtractPlainTARExecutableFileDoesNotTripSpecialFile verifies that a
+// regular TAR file entry with execute bits is not misclassified as a special
+// file by the safeguard layer.
+func TestExtractPlainTARExecutableFileDoesNotTripSpecialFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	tarPath := filepath.Join(dir, "delivery.tar")
+	f, err := os.Create(tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tw := tar.NewWriter(f)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "0052_37.0-Patch2/01_start.sh",
+		Mode: 0o755,
+		Size: int64(len("#!/bin/sh\necho ok\n")),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("#!/bin/sh\necho ok\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = tarPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	sb := sandbox.NewPassthroughSandbox()
+
+	tree, err := Extract(context.Background(), tarPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree.Status != StatusExtracted {
+		t.Fatalf("status = %v, want Extracted (detail=%q)", tree.Status, tree.StatusDetail)
+	}
+	CleanupNode(tree)
+}
+
 // TestExtractBzip2TARInvalidDataFailsGracefully verifies that a file with
 // bzip2 magic bytes but invalid compressed content fails without panicking.
 // This exercises the bzip2 branch of extractCompressedTAR.
