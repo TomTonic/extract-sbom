@@ -25,6 +25,10 @@ type Info struct {
 	Modified bool
 }
 
+// readBuildInfo is the function used to obtain Go build metadata.
+// Tests may override this to simulate environments without VCS info.
+var readBuildInfo = debug.ReadBuildInfo
+
 // Read returns build metadata for the current binary.
 func Read() Info {
 	bi := Info{Version: "(devel)"}
@@ -33,7 +37,7 @@ func Read() Info {
 		bi.Version = rv
 	}
 
-	info, ok := debug.ReadBuildInfo()
+	info, ok := readBuildInfo()
 	if !ok {
 		if bi.Version == "(devel)" {
 			bi.Version = "(unknown)"
