@@ -495,6 +495,38 @@ After all components are built, assembly sorts packages, properties, and
 dependencies into a canonical order, then writes the single CycloneDX BOM and
 the parallel audit report.
 
+### 8.1 How Deduplication Works
+
+Assembly applies three deduplication steps, each with a different purpose and
+audit meaning.
+
+**1. Same locus, weak placeholder suppression.** If two entries describe the
+same `(delivery-path, evidence-path)` locus and one of them is clearly weaker
+(for example filename-derived, no PURL, no version, no cataloger), the weaker
+placeholder is removed. The report records this as a weak duplicate.
+
+**2. Same PURL at the same delivery path.** Syft can emit two entries for the
+same physical file: one from a filename heuristic and one from richer metadata
+such as `MANIFEST.MF`. If both entries carry the same PURL and delivery path,
+extract-sbom keeps one representative and preserves the richer evidence.
+
+**3. Same PURL across different scan nodes.** The same package can appear in
+multiple scans: for example once from an extracted directory scan and again
+from a direct `syft-native` scan, or in several physical copies of the same JAR
+under different delivery paths. extract-sbom collapses those entries into one
+component per PURL. The survivor inherits all unique delivery and evidence
+paths from the whole group.
+
+When delivery paths are merged, extract-sbom keeps only the **leaf-most**
+paths. If both `Client.zip` and `Client.zip/.../jrt-fs.jar` would otherwise be
+attached to the same component, only the nested JAR path survives. This avoids
+mixing a vague container path with the specific file path that actually backs
+the package identity.
+
+Every removed component is still traceable: the audit report lists the
+suppressed entry, its delivery path, the reason for suppression, and the kept
+replacement component.
+
 ## 9. Why The Result Is Deterministic
 
 For the same input file and the same effective configuration, extract-sbom
