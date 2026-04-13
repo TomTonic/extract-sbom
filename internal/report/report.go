@@ -72,14 +72,15 @@ type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 }
 
 type componentOccurrence struct {
-	ObjectID      string
-	ComponentType cdx.ComponentType
-	PackageName   string
-	Version       string
-	PURL          string
-	DeliveryPath  string
-	EvidencePaths []string
-	FoundBy       string
+	ObjectID       string
+	ComponentType  cdx.ComponentType
+	PackageName    string
+	Version        string
+	PURL           string
+	DeliveryPaths  []string
+	EvidencePaths  []string
+	EvidenceSource string
+	FoundBy        string
 }
 
 type componentIndexStats struct {
@@ -1084,13 +1085,17 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 		if occ.PURL != "" {
 			fmt.Fprintf(w, "- %s: `%s`\n", t.purl, occ.PURL)
 		}
-		fmt.Fprintf(w, "- %s: `%s`\n", t.deliveryPath, occ.DeliveryPath)
-		if len(occ.EvidencePaths) == 0 {
-			fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, t.noEvidenceRecorded)
-		} else {
+		for _, dp := range occ.DeliveryPaths {
+			fmt.Fprintf(w, "- %s: `%s`\n", t.deliveryPath, dp)
+		}
+		if len(occ.EvidencePaths) > 0 {
 			for _, evidencePath := range occ.EvidencePaths {
 				fmt.Fprintf(w, "- %s: `%s`\n", t.evidencePath, evidencePath)
 			}
+		} else if occ.EvidenceSource != "" {
+			fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, occ.EvidenceSource)
+		} else {
+			fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, t.noEvidenceRecorded)
 		}
 		if occ.FoundBy != "" {
 			fmt.Fprintf(w, "- %s: `%s`\n", t.foundBy, occ.FoundBy)
@@ -1130,14 +1135,15 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 		}
 
 		occurrences = append(occurrences, componentOccurrence{
-			ObjectID:      comp.BOMRef,
-			ComponentType: comp.Type,
-			PackageName:   comp.Name,
-			Version:       comp.Version,
-			PURL:          comp.PackageURL,
-			DeliveryPath:  deliveryPaths[0],
-			EvidencePaths: componentPropertyValues(comp, "extract-sbom:evidence-path"),
-			FoundBy:       foundBy,
+			ObjectID:       comp.BOMRef,
+			ComponentType:  comp.Type,
+			PackageName:    comp.Name,
+			Version:        comp.Version,
+			PURL:           comp.PackageURL,
+			DeliveryPaths:  deliveryPaths,
+			EvidencePaths:  componentPropertyValues(comp, "extract-sbom:evidence-path"),
+			EvidenceSource: firstComponentPropertyValue(comp, "extract-sbom:evidence-source"),
+			FoundBy:        foundBy,
 		})
 	}
 
@@ -1152,8 +1158,10 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 }
 
 func compareOccurrence(a, b componentOccurrence) int {
-	if a.DeliveryPath != b.DeliveryPath {
-		if a.DeliveryPath < b.DeliveryPath {
+	aPrimary := firstString(a.DeliveryPaths)
+	bPrimary := firstString(b.DeliveryPaths)
+	if aPrimary != bPrimary {
+		if aPrimary < bPrimary {
 			return -1
 		}
 		return 1
@@ -1238,9 +1246,11 @@ func mergeDuplicateOccurrences(occurrences []componentOccurrence, stats *compone
 }
 
 func occurrenceLocusKey(occ componentOccurrence) string {
+	dp := append([]string(nil), occ.DeliveryPaths...)
+	sort.Strings(dp)
 	evidence := append([]string(nil), occ.EvidencePaths...)
 	sort.Strings(evidence)
-	return occ.DeliveryPath + "\x00" + strings.Join(evidence, "\x1f")
+	return strings.Join(dp, "\x1e") + "\x00" + strings.Join(evidence, "\x1f")
 }
 
 func pickBestOccurrence(group []componentOccurrence) componentOccurrence {
@@ -1302,7 +1312,7 @@ func isWeakArtifactOccurrence(occ componentOccurrence) bool {
 		return true
 	}
 
-	base := path.Base(occ.DeliveryPath)
+	base := path.Base(firstString(occ.DeliveryPaths))
 	baseNoExt := strings.TrimSuffix(base, path.Ext(base))
 	return strings.EqualFold(occ.PackageName, base) || strings.EqualFold(occ.PackageName, baseNoExt)
 }

@@ -552,20 +552,15 @@ func firstComponentPropertyValue(comp cdx.Component, name string) string {
 }
 
 // deduplicateGlobalComponents performs cross-node deduplication on the final
-// assembled component list. Components from different scan nodes can describe
-// the same physical file when both an extracted-directory scan and a
-// SyftNative scan cover the same JAR. This function groups components by
-// (PURL, delivery-path) and keeps only the richest entry, rewriting
-// dependency graph references so no dangling BOMRefs remain.
+// assembled component list. Components with the same PURL are collapsed into
+// a single entry regardless of delivery path — the surviving component
+// inherits all unique delivery-path and evidence-path properties from the
+// suppressed entries. Dependency graph references are rewritten so no
+// dangling BOMRefs remain.
 func deduplicateGlobalComponents(components []cdx.Component, dependencies []cdx.Dependency) ([]cdx.Component, []SuppressionRecord) {
-	type globalKey struct {
-		purl         string
-		deliveryPath string
-	}
-
-	// Index: globalKey → list of component indices.
-	groups := make(map[globalKey][]int)
-	var keyOrder []globalKey
+	// Index: PURL → list of component indices.
+	groups := make(map[string][]int)
+	var keyOrder []string
 	for i := range components {
 		comp := components[i]
 		purl := comp.PackageURL
@@ -576,15 +571,10 @@ func deduplicateGlobalComponents(components []cdx.Component, dependencies []cdx.
 		if comp.Type == cdx.ComponentTypeFile {
 			continue
 		}
-		dp := componentPropertyValue(comp, "extract-sbom:delivery-path")
-		if dp == "" {
-			continue
+		if _, exists := groups[purl]; !exists {
+			keyOrder = append(keyOrder, purl)
 		}
-		k := globalKey{purl, dp}
-		if _, exists := groups[k]; !exists {
-			keyOrder = append(keyOrder, k)
-		}
-		groups[k] = append(groups[k], i)
+		groups[purl] = append(groups[purl], i)
 	}
 
 	// For each group with >1 entries, pick the best and suppress the rest.
@@ -593,8 +583,8 @@ func deduplicateGlobalComponents(components []cdx.Component, dependencies []cdx.
 	refRewrite := make(map[string]string)
 	var suppressions []SuppressionRecord
 
-	for _, k := range keyOrder {
-		idxs := groups[k]
+	for _, purl := range keyOrder {
+		idxs := groups[purl]
 		if len(idxs) < 2 {
 			continue
 		}
@@ -607,20 +597,27 @@ func deduplicateGlobalComponents(components []cdx.Component, dependencies []cdx.
 			}
 		}
 
-		best := components[bestIdx]
+		// Collect all delivery-path, evidence-path, evidence-source values
+		// from every entry in the group so nothing is lost.
+		mergedProps := collectMergedProperties(components, idxs)
+
+		best := &components[bestIdx]
+		replaceMultiValueProperties(best, mergedProps)
+
 		for _, idx := range idxs {
 			if idx == bestIdx {
 				continue
 			}
 			suppress[idx] = struct{}{}
 			refRewrite[components[idx].BOMRef] = best.BOMRef
+			dp := componentPropertyValue(components[idx], "extract-sbom:delivery-path")
 			suppressions = append(suppressions, SuppressionRecord{
 				Reason:       SuppressionWeakDuplicate,
 				Component:    components[idx],
 				FoundBy:      firstComponentPropertyValue(components[idx], "syft:package:foundBy"),
-				DeliveryPath: k.deliveryPath,
+				DeliveryPath: dp,
 				KeptName:     best.Name,
-				KeptFoundBy:  firstComponentPropertyValue(best, "syft:package:foundBy"),
+				KeptFoundBy:  firstComponentPropertyValue(*best, "syft:package:foundBy"),
 			})
 		}
 	}
@@ -661,9 +658,77 @@ func deduplicateGlobalComponents(components []cdx.Component, dependencies []cdx.
 	return filtered, suppressions
 }
 
+// mergedPropertyNames lists the property names that are collected across all
+// entries in a PURL group and merged into the surviving component.
+var mergedPropertyNames = []string{
+	"extract-sbom:delivery-path",
+	"extract-sbom:evidence-path",
+	"extract-sbom:evidence-source",
+}
+
+// collectMergedProperties gathers all unique values for the merged property
+// names across the given component indices.
+func collectMergedProperties(components []cdx.Component, idxs []int) map[string][]string {
+	sets := make(map[string]map[string]struct{}, len(mergedPropertyNames))
+	for _, name := range mergedPropertyNames {
+		sets[name] = make(map[string]struct{})
+	}
+
+	for _, idx := range idxs {
+		comp := components[idx]
+		if comp.Properties == nil {
+			continue
+		}
+		for _, prop := range *comp.Properties {
+			if s, ok := sets[prop.Name]; ok && prop.Value != "" {
+				s[prop.Value] = struct{}{}
+			}
+		}
+	}
+
+	result := make(map[string][]string, len(mergedPropertyNames))
+	for _, name := range mergedPropertyNames {
+		vals := make([]string, 0, len(sets[name]))
+		for v := range sets[name] {
+			vals = append(vals, v)
+		}
+		sort.Strings(vals)
+		if len(vals) > 0 {
+			result[name] = vals
+		}
+	}
+	return result
+}
+
+// replaceMultiValueProperties replaces the merged property names on comp with
+// the union of values from the whole PURL group, preserving all other props.
+func replaceMultiValueProperties(comp *cdx.Component, merged map[string][]string) {
+	isReplaced := make(map[string]struct{}, len(mergedPropertyNames))
+	for _, name := range mergedPropertyNames {
+		isReplaced[name] = struct{}{}
+	}
+
+	var kept []cdx.Property
+	if comp.Properties != nil {
+		kept = make([]cdx.Property, 0, len(*comp.Properties))
+		for _, prop := range *comp.Properties {
+			if _, ok := isReplaced[prop.Name]; !ok {
+				kept = append(kept, prop)
+			}
+		}
+	}
+	for _, name := range mergedPropertyNames {
+		for _, val := range merged[name] {
+			kept = append(kept, cdx.Property{Name: name, Value: val})
+		}
+	}
+	kept = uniqueSortedProperties(kept)
+	comp.Properties = &kept
+}
+
 // globalComponentBetter returns true if a is a better representative than b
-// for a global PURL+deliveryPath group. Prefers more evidence, then higher
-// quality score, then earlier BOMRef for determinism.
+// for a global PURL group. Prefers more evidence, then higher quality score,
+// then earlier BOMRef for determinism.
 func globalComponentBetter(a, b cdx.Component) bool {
 	aEvidence := countPropertyValues(a, "extract-sbom:evidence-path")
 	bEvidence := countPropertyValues(b, "extract-sbom:evidence-path")
@@ -719,6 +784,45 @@ func countPropertyValues(comp cdx.Component, name string) int {
 		}
 	}
 	return count
+}
+
+// evidenceSourceFromCataloger maps a Syft cataloger name (foundBy) to a
+// human-readable description of the evidence source for the identification.
+func evidenceSourceFromCataloger(foundBy string) string {
+	switch {
+	case strings.Contains(foundBy, "java-archive"):
+		return "Java archive metadata (MANIFEST.MF / pom.properties)"
+	case strings.Contains(foundBy, "java-pom"):
+		return "Maven POM metadata"
+	case strings.Contains(foundBy, "pe-binary"):
+		return "PE version resource"
+	case strings.Contains(foundBy, "dotnet-portable-executable"):
+		return ".NET PE assembly metadata"
+	case strings.Contains(foundBy, "dotnet-deps"):
+		return ".NET deps.json"
+	case strings.Contains(foundBy, "rpm"):
+		return "RPM package header"
+	case strings.Contains(foundBy, "dpkg"):
+		return "Debian dpkg metadata"
+	case strings.Contains(foundBy, "apk-db"):
+		return "Alpine APK metadata"
+	case strings.Contains(foundBy, "npm"):
+		return "npm package.json"
+	case strings.Contains(foundBy, "python"):
+		return "Python package metadata"
+	case strings.Contains(foundBy, "go-module"):
+		return "Go module metadata"
+	case strings.Contains(foundBy, "rust"):
+		return "Rust Cargo metadata"
+	case strings.Contains(foundBy, "conan"):
+		return "Conan package metadata"
+	case strings.Contains(foundBy, "linux-kernel"):
+		return "Linux kernel metadata"
+	case foundBy != "":
+		return foundBy
+	default:
+		return ""
+	}
 }
 
 // Assemble builds the final, unified CycloneDX BOM from the extraction tree
@@ -998,6 +1102,9 @@ func processNode(node *extract.ExtractionNode, components *[]cdx.Component, depe
 			}
 			for _, evidencePath := range candidates[i].evidence {
 				props = append(props, cdx.Property{Name: "extract-sbom:evidence-path", Value: evidencePath})
+			}
+			if src := evidenceSourceFromCataloger(candidates[i].foundBy); src != "" {
+				props = append(props, cdx.Property{Name: "extract-sbom:evidence-source", Value: src})
 			}
 			if comp.Properties != nil {
 				props = append(props, *comp.Properties...)

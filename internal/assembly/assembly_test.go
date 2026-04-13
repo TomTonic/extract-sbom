@@ -1211,6 +1211,137 @@ func TestAssembleKeepsDistinctStrongDuplicates(t *testing.T) {
 	}
 }
 
+// TestAssembleDeduplicatesSamePURLAtDifferentPaths verifies that when the
+// same PURL appears at two completely different delivery paths (like
+// wrapper.jar at x64/linux and x86/linux), only one component survives in
+// the final BOM, and the surviving entry carries both delivery paths.
+func TestAssembleDeduplicatesSamePURLAtDifferentPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+
+	const (
+		purl    = "pkg:maven/org.tanukisoftware.wrapper/wrapper@3.5.34"
+		pathX64 = "delivery.zip/x64/wrapper.jar"
+		pathX86 = "delivery.zip/x86/wrapper.jar"
+	)
+
+	tree := &extract.ExtractionNode{
+		Path:         "delivery.zip",
+		OriginalPath: inputPath,
+		Status:       extract.StatusExtracted,
+		Format:       identify.FormatInfo{Format: identify.ZIP},
+		Children: []*extract.ExtractionNode{
+			{
+				Path:         pathX64,
+				OriginalPath: filepath.Join(dir, "x64-wrapper.jar"),
+				Status:       extract.StatusSyftNative,
+				Format:       identify.FormatInfo{Format: identify.ZIP, SyftNative: true},
+			},
+			{
+				Path:         pathX86,
+				OriginalPath: filepath.Join(dir, "x86-wrapper.jar"),
+				Status:       extract.StatusSyftNative,
+				Format:       identify.FormatInfo{Format: identify.ZIP, SyftNative: true},
+			},
+		},
+	}
+	// Create dummy files for the JAR nodes.
+	for _, child := range tree.Children {
+		if err := os.WriteFile(child.OriginalPath, []byte("PK jar"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scans := []scan.ScanResult{
+		{NodePath: "delivery.zip", BOM: &cdx.BOM{Components: &[]cdx.Component{}}},
+		{
+			NodePath: pathX64,
+			BOM: &cdx.BOM{Components: &[]cdx.Component{{
+				BOMRef: "x64-wrapper", Type: cdx.ComponentTypeLibrary,
+				Name: "wrapper", Version: "3.5.34", PackageURL: purl,
+				Properties: &[]cdx.Property{
+					{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+				},
+			}}},
+			EvidencePaths: map[string][]string{
+				"x64-wrapper": {pathX64 + "/META-INF/MANIFEST.MF"},
+			},
+		},
+		{
+			NodePath: pathX86,
+			BOM: &cdx.BOM{Components: &[]cdx.Component{{
+				BOMRef: "x86-wrapper", Type: cdx.ComponentTypeLibrary,
+				Name: "wrapper", Version: "3.5.34", PackageURL: purl,
+				Properties: &[]cdx.Property{
+					{Name: "syft:package:foundBy", Value: "java-archive-cataloger"},
+				},
+			}}},
+			EvidencePaths: map[string][]string{
+				"x86-wrapper": {pathX86 + "/META-INF/MANIFEST.MF"},
+			},
+		},
+	}
+
+	bom, suppressions, err := Assemble(tree, scans, cfg)
+	if err != nil {
+		t.Fatalf("Assemble error: %v", err)
+	}
+	if bom.Components == nil {
+		t.Fatal("Components is nil")
+	}
+
+	// Count components with the wrapper PURL.
+	var purlMatches []cdx.Component
+	for _, comp := range *bom.Components {
+		if comp.PackageURL == purl {
+			purlMatches = append(purlMatches, comp)
+		}
+	}
+	if len(purlMatches) != 1 {
+		t.Fatalf("expected exactly 1 wrapper component, got %d", len(purlMatches))
+	}
+
+	// Surviving entry must carry BOTH delivery paths.
+	comp := purlMatches[0]
+	deliveryPaths := make(map[string]bool)
+	evidencePaths := make(map[string]bool)
+	for _, p := range *comp.Properties {
+		if p.Name == "extract-sbom:delivery-path" {
+			deliveryPaths[p.Value] = true
+		}
+		if p.Name == "extract-sbom:evidence-path" {
+			evidencePaths[p.Value] = true
+		}
+	}
+	if !deliveryPaths[pathX64] || !deliveryPaths[pathX86] {
+		t.Errorf("surviving component should carry both delivery paths; got %v", deliveryPaths)
+	}
+	// Both evidence paths should be present.
+	if !evidencePaths[pathX64+"/META-INF/MANIFEST.MF"] || !evidencePaths[pathX86+"/META-INF/MANIFEST.MF"] {
+		t.Errorf("surviving component should carry both evidence paths; got %v", evidencePaths)
+	}
+
+	// Exactly one suppression.
+	weakCount := 0
+	for _, s := range suppressions {
+		if s.Reason == SuppressionWeakDuplicate && s.Component.PackageURL == purl {
+			weakCount++
+		}
+	}
+	if weakCount != 1 {
+		t.Errorf("expected 1 cross-path suppression, got %d", weakCount)
+	}
+}
+
 // TestAssembleDeduplicatesCrossNodeComponents verifies that when the same PURL
 // appears in scan results from two different nodes (e.g. an extracted parent
 // directory and a SyftNative child JAR), only one component survives in the
