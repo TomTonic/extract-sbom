@@ -138,18 +138,21 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 	requiredSections := []string{
 		"# extract-sbom Audit Report",
 		"## Table of Contents",
+		"## Summary",
+		"## How To Use This Report",
+		"## Method At A Glance",
+		"## Processing Errors",
+		"## Residual Risk and Limitations",
+		"## Appendix",
+		"## Component Occurrence Index",
+		"## Component Normalization",
 		"## Input File",
 		"## Configuration",
 		"## Root SBOM Metadata",
 		"## Sandbox Configuration",
-		"## Summary",
-		"## Processing Errors",
-		"## Residual Risk and Limitations",
 		"## Policy Decisions",
-		"## Component Occurrence Index",
-		"## Component Normalization",
 		"## Extraction Log",
-		"## Scan Results",
+		"## Scan Task Log",
 		"End of report.",
 	}
 
@@ -301,15 +304,18 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 	output := buf.String()
 
 	for _, link := range []string{
-		"- [Input File](#input-file)",
-		"- [Configuration](#configuration)",
 		"- [Summary](#summary)",
+		"- [How To Use This Report](#how-to-use-this-report)",
+		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
-		"- [Policy Decisions](#policy-decisions)",
+		"- [Appendix](#appendix)",
 		"- [Component Occurrence Index](#component-occurrence-index)",
 		"- [Component Normalization](#component-normalization)",
-		"- [Scan Results](#scan-results)",
+		"- [Input File](#input-file)",
+		"- [Configuration](#configuration)",
+		"- [Policy Decisions](#policy-decisions)",
+		"- [Scan Task Log](#scan-results)",
 		"- [Extraction Log](#extraction-log)",
 	} {
 		if !strings.Contains(output, link) {
@@ -319,7 +325,7 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 }
 
 // TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst verifies that
-// Summary/Errors/Risk appear before the large Scan/Extraction bulk sections.
+// Summary/guide/method/errors/risk appear before the large appendix sections.
 func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	t.Parallel()
 
@@ -332,19 +338,51 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	output := buf.String()
 
 	summaryIdx := strings.Index(output, "## Summary")
+	howToUseIdx := strings.Index(output, "## How To Use This Report")
+	methodIdx := strings.Index(output, "## Method At A Glance")
 	errorsIdx := strings.Index(output, "## Processing Errors")
 	riskIdx := strings.Index(output, "## Residual Risk and Limitations")
-	scanIdx := strings.Index(output, "## Scan Results")
+	appendixIdx := strings.Index(output, "## Appendix")
+	indexIdx := strings.Index(output, "## Component Occurrence Index")
+	scanIdx := strings.Index(output, "## Scan Task Log")
 	extractionIdx := strings.Index(output, "## Extraction Log")
 
-	if summaryIdx == -1 || errorsIdx == -1 || riskIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
+	if summaryIdx == -1 || howToUseIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
 		t.Fatal("one or more expected sections are missing")
 	}
 
-	if summaryIdx >= scanIdx || summaryIdx >= extractionIdx ||
+	if summaryIdx >= appendixIdx || howToUseIdx >= appendixIdx || methodIdx >= appendixIdx ||
+		summaryIdx >= scanIdx || summaryIdx >= extractionIdx ||
+		howToUseIdx >= scanIdx || howToUseIdx >= extractionIdx ||
+		methodIdx >= scanIdx || methodIdx >= extractionIdx ||
 		errorsIdx >= scanIdx || errorsIdx >= extractionIdx ||
-		riskIdx >= scanIdx || riskIdx >= extractionIdx {
-		t.Fatal("summary/errors/risk sections are not placed before scan/extraction sections")
+		riskIdx >= scanIdx || riskIdx >= extractionIdx ||
+		appendixIdx >= indexIdx {
+		t.Fatal("executive guidance is not placed before the appendix bulk sections")
+	}
+}
+
+func TestGenerateHumanIncludesTriageGuidanceAndDeepLinks(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	for _, fragment := range []string{
+		"jq '.matches[] | select((.vulnerability.severity == \"High\") or (.vulnerability.severity == \"Critical\")) | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' grype.json",
+		"The heading `### <artifact_id>` corresponds to the SBOM `bom-ref` and to Grype `artifact.id`.",
+		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#3-two-phases",
+		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#81-how-deduplication-works",
+		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#6-package-detection-reliability",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("report output missing %q", fragment)
+		}
 	}
 }
 
@@ -374,6 +412,12 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 
 	if !strings.Contains(output, "2 components found") {
 		t.Error("report does not show component count")
+	}
+	if !strings.Contains(output, "## Scan Task Log") {
+		t.Error("report does not contain Scan Task Log section")
+	}
+	if !strings.Contains(output, "This is a per-scan-task execution log") {
+		t.Error("scan task log does not explain its task-level semantics")
 	}
 }
 

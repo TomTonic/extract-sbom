@@ -205,6 +205,16 @@ func syftLocationPath(comp cdx.Component) string {
 	return ""
 }
 
+func componentDeliveryPath(node *extract.ExtractionNode, comp cdx.Component) string {
+	deliveryPath := node.Path
+	if node != nil && node.Status == extract.StatusExtracted {
+		if loc := syftLocationPath(comp); loc != "" {
+			deliveryPath = node.Path + "/" + strings.TrimPrefix(loc, "/")
+		}
+	}
+	return deliveryPath
+}
+
 func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) ([]scanComponentCandidate, []SuppressionRecord) {
 	if node == nil || sr == nil || sr.BOM == nil || sr.BOM.Components == nil {
 		return nil, nil
@@ -214,33 +224,26 @@ func normalizeScanComponents(node *extract.ExtractionNode, sr *scan.ScanResult) 
 	candidates := make([]scanComponentCandidate, 0, len(*sr.BOM.Components))
 	for i := range *sr.BOM.Components {
 		comp := (*sr.BOM.Components)[i]
+		deliveryPath := componentDeliveryPath(node, comp)
+		foundBy := firstComponentPropertyValue(comp, "syft:package:foundBy")
 		if isFileCatalogerArtifact(comp) {
-			foundBy := firstComponentPropertyValue(comp, "syft:package:foundBy")
 			suppressions = append(suppressions, SuppressionRecord{
 				Reason:       SuppressionFSArtifact,
 				Component:    comp,
 				FoundBy:      foundBy,
-				DeliveryPath: node.Path,
+				DeliveryPath: deliveryPath,
 			})
 			continue
 		}
 
-		foundBy := firstComponentPropertyValue(comp, "syft:package:foundBy")
 		if isLowValueFileArtifact(comp, foundBy) {
 			suppressions = append(suppressions, SuppressionRecord{
 				Reason:       SuppressionLowValueFile,
 				Component:    comp,
 				FoundBy:      foundBy,
-				DeliveryPath: node.Path,
+				DeliveryPath: deliveryPath,
 			})
 			continue
-		}
-
-		deliveryPath := node.Path
-		if node.Status == extract.StatusExtracted {
-			if loc := syftLocationPath(comp); loc != "" {
-				deliveryPath = node.Path + "/" + strings.TrimPrefix(loc, "/")
-			}
 		}
 
 		rawEvidence := sr.EvidencePaths[comp.BOMRef]

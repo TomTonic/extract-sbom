@@ -91,6 +91,11 @@ type componentIndexStats struct {
 	FilteredLowValueFileArtifacts int
 	DuplicateMerged               int
 	IndexedComponents             int
+	IndexedWithPURL               int
+	IndexedWithoutPURL            int
+	IndexedWithEvidencePath       int
+	IndexedWithEvidenceSourceOnly int
+	IndexedWithoutEvidence        int
 }
 
 type extractionStats struct {
@@ -110,11 +115,20 @@ type extractionStats struct {
 }
 
 type scanStats struct {
-	Total           int
-	Successful      int
-	Errors          int
-	TotalComponents int
-	ErrorPaths      []string
+	Total            int
+	Successful       int
+	Errors           int
+	TotalComponents  int
+	NoComponentTasks int
+	ErrorPaths       []string
+	NoComponentPaths []string
+}
+
+type suppressionStats struct {
+	FSArtifacts   int
+	LowValueFiles int
+	WeakDuplicate int
+	PURLDuplicate int
 }
 
 type policyStats struct {
@@ -136,6 +150,11 @@ type reportSection struct {
 }
 
 const (
+	scanApproachGitHubURL = "https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md"
+
+	anchorHowToUse         = "how-to-use-this-report"
+	anchorMethodOverview   = "method-at-a-glance"
+	anchorAppendix         = "appendix"
 	anchorInputFile        = "input-file"
 	anchorConfig           = "configuration"
 	anchorRootMetadata     = "root-sbom-metadata"
@@ -208,6 +227,41 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	writeTableOfContents(w, sections)
 	fmt.Fprintln(w)
 
+	// Executive summary and reader guidance.
+	writeSectionHeading(w, t.summarySection, anchorSummary)
+	writeSummary(w, data, extStats, scnStats, polStats, indexStats, t)
+	fmt.Fprintln(w)
+
+	writeSectionHeading(w, t.howToUseSection, anchorHowToUse)
+	writeHowToUseReport(w, t)
+	fmt.Fprintln(w)
+
+	writeSectionHeading(w, t.methodOverviewSection, anchorMethodOverview)
+	writeMethodOverview(w, t)
+	fmt.Fprintln(w)
+
+	// Actionable limitations and known blind spots.
+	writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
+	writeProcessingIssues(w, data, extStats, scnStats, t)
+	fmt.Fprintln(w)
+
+	writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
+	writeResidualRisk(w, data, extStats, scnStats, indexStats, t)
+	fmt.Fprintln(w)
+
+	// Appendix: complete raw audit trail.
+	writeSectionHeading(w, t.appendixSection, anchorAppendix)
+	fmt.Fprintln(w, t.appendixLead)
+	fmt.Fprintln(w)
+
+	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
+	writeComponentOccurrenceIndex(w, occurrences, t)
+	fmt.Fprintln(w)
+
+	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
+	writeSuppressionReport(w, data.Suppressions, t)
+	fmt.Fprintln(w)
+
 	// Input identification.
 	writeSectionHeading(w, t.inputSection, anchorInputFile)
 	fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
@@ -250,38 +304,15 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	}
 	fmt.Fprintln(w)
 
-	// Summary.
-	writeSectionHeading(w, t.summarySection, anchorSummary)
-	writeSummary(w, data, extStats, scnStats, polStats, indexStats, t)
-	fmt.Fprintln(w)
-
-	// Processing issues.
-	writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
-	writeProcessingIssues(w, data, extStats, scnStats, t)
-	fmt.Fprintln(w)
-
-	// Residual risk.
-	writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
-	writeResidualRisk(w, data, extStats, scnStats, indexStats, t)
-	fmt.Fprintln(w)
-
 	// Policy decisions.
 	writeSectionHeading(w, t.policySection, anchorPolicy)
 	writePolicyDecisions(w, data.PolicyDecisions, t)
 	fmt.Fprintln(w)
 
-	// Component occurrence index.
-	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
-	writeComponentOccurrenceIndex(w, occurrences, t)
-	fmt.Fprintln(w)
-
-	// Component normalization (suppression traceability).
-	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
-	writeSuppressionReport(w, data.Suppressions, t)
-	fmt.Fprintln(w)
-
 	// Scan results.
 	writeSectionHeading(w, t.scanSection, anchorScan)
+	fmt.Fprintln(w, t.scanSectionLead)
+	fmt.Fprintln(w)
 	for _, sr := range data.Scans {
 		evidencePaths := scan.FlattenEvidencePaths(sr)
 		switch {
@@ -290,7 +321,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 		case sr.BOM != nil && sr.BOM.Components != nil:
 			fmt.Fprintf(w, "- **%s**: %d %s\n", sr.NodePath, len(*sr.BOM.Components), t.componentsFound)
 			for _, evidencePath := range evidencePaths {
-				fmt.Fprintf(w, "  - evidence-path: `%s`\n", evidencePath)
+				fmt.Fprintf(w, "  - %s: `%s`\n", t.scanTaskEvidenceLabel, evidencePath)
 			}
 		default:
 			fmt.Fprintf(w, "- **%s**: %s\n", sr.NodePath, t.noComponents)
@@ -506,68 +537,98 @@ func buildMachineDecisions(decisions []policy.Decision) []machineDecision {
 // --- Translation support ---
 
 type translations struct {
-	title                   string
-	inputSection            string
-	configSection           string
-	rootMetadataSection     string
-	sandboxSection          string
-	extractionSection       string
-	scanSection             string
-	policySection           string
-	summarySection          string
-	residualRiskSection     string
-	processingIssuesSection string
-	field                   string
-	value                   string
-	setting                 string
-	filename                string
-	filesize                string
-	policyMode              string
-	interpretMode           string
-	language                string
-	maxDepth                string
-	maxFiles                string
-	maxTotalSize            string
-	maxEntrySize            string
-	maxRatio                string
-	timeout                 string
-	progressLevel           string
-	generator               string
-	sandboxName             string
-	sandboxAvail            string
-	unsafeWarning           string
-	unsafeActive            string
-	tableOfContentsSection  string
-	componentIndexSection   string
-	componentIndexLead      string
-	noIndexedComponents     string
-	objectID                string
-	packageName             string
-	version                 string
-	purl                    string
-	evidencePath            string
-	foundBy                 string
-	noEvidenceRecorded      string
-	processingTime          string
-	scanError               string
-	componentsFound         string
-	noComponents            string
-	deliveryPath            string
-	status                  string
-	tool                    string
-	duration                string
-	suppliedBy              string
-	derived                 string
-	residualRiskText        string
-	noPolicyDecisions       string
-	noProcessingIssues      string
-	summaryExtraction       string
-	summaryScan             string
-	summaryComponents       string
-	summaryPolicies         string
-	summaryProcessingIssues string
-	summaryFindings         string
-	endOfReport             string
+	title                            string
+	inputSection                     string
+	configSection                    string
+	rootMetadataSection              string
+	sandboxSection                   string
+	extractionSection                string
+	scanSection                      string
+	scanSectionLead                  string
+	scanTaskEvidenceLabel            string
+	policySection                    string
+	summarySection                   string
+	residualRiskSection              string
+	processingIssuesSection          string
+	field                            string
+	value                            string
+	setting                          string
+	filename                         string
+	filesize                         string
+	policyMode                       string
+	interpretMode                    string
+	language                         string
+	maxDepth                         string
+	maxFiles                         string
+	maxTotalSize                     string
+	maxEntrySize                     string
+	maxRatio                         string
+	timeout                          string
+	progressLevel                    string
+	generator                        string
+	sandboxName                      string
+	sandboxAvail                     string
+	unsafeWarning                    string
+	unsafeActive                     string
+	tableOfContentsSection           string
+	howToUseSection                  string
+	methodOverviewSection            string
+	appendixSection                  string
+	componentIndexSection            string
+	componentIndexLead               string
+	noIndexedComponents              string
+	objectID                         string
+	packageName                      string
+	version                          string
+	purl                             string
+	evidencePath                     string
+	foundBy                          string
+	noEvidenceRecorded               string
+	processingTime                   string
+	scanError                        string
+	componentsFound                  string
+	noComponents                     string
+	deliveryPath                     string
+	status                           string
+	tool                             string
+	duration                         string
+	suppliedBy                       string
+	derived                          string
+	residualRiskText                 string
+	residualRiskProfileLead          string
+	residualRiskAbsenceHint          string
+	residualRiskPURLCoverage         string
+	residualRiskEvidenceCoverage     string
+	residualRiskNoComponentTasks     string
+	residualRiskFileArtifactCoverage string
+	residualRiskExtractionGap        string
+	residualRiskToolGap              string
+	residualRiskScanGap              string
+	residualRiskMoreDetails          string
+	noPolicyDecisions                string
+	noProcessingIssues               string
+	summaryLead                      string
+	summaryAssemblyMath              string
+	summaryNextStepTemplate          string
+	howToUseLead                     string
+	howToUseStep1                    string
+	howToUseStep2Template            string
+	howToUseStep3                    string
+	howToUseStep4Template            string
+	methodLead                       string
+	methodBulletTwoPhases            string
+	methodBulletEvidence             string
+	methodBulletDedup                string
+	methodBulletTrust                string
+	methodMoreDetails                string
+	appendixLead                     string
+	summaryExtraction                string
+	summaryScan                      string
+	summaryComponents                string
+	summaryPolicies                  string
+	summaryProcessingIssues          string
+	summaryFindings                  string
+	endOfReport                      string
 
 	componentNormalizationSection  string
 	componentNormalizationLead     string
@@ -583,68 +644,98 @@ func getTranslations(lang string) translations {
 	switch lang {
 	case "de":
 		return translations{
-			title:                   "extract-sbom Prüfbericht",
-			inputSection:            "Eingabedatei",
-			configSection:           "Konfiguration",
-			rootMetadataSection:     "SBOM Stammdaten",
-			sandboxSection:          "Sandbox-Konfiguration",
-			extractionSection:       "Extraktionsprotokoll",
-			scanSection:             "Scan-Ergebnisse",
-			policySection:           "Richtlinienentscheidungen",
-			summarySection:          "Zusammenfassung",
-			residualRiskSection:     "Restrisiko und Einschränkungen",
-			processingIssuesSection: "Verarbeitungsfehler",
-			field:                   "Feld",
-			value:                   "Wert",
-			setting:                 "Einstellung",
-			filename:                "Dateiname",
-			filesize:                "Dateigröße",
-			policyMode:              "Richtlinienmodus",
-			interpretMode:           "Interpretationsmodus",
-			language:                "Sprache",
-			maxDepth:                "Maximale Tiefe",
-			maxFiles:                "Maximale Dateien",
-			maxTotalSize:            "Maximale Gesamtgröße",
-			maxEntrySize:            "Maximale Eintragsgröße",
-			maxRatio:                "Maximales Verhältnis",
-			timeout:                 "Zeitlimit",
-			progressLevel:           "Fortschritt",
-			generator:               "extract-sbom Build",
-			sandboxName:             "Sandbox",
-			sandboxAvail:            "Verfügbar",
-			unsafeWarning:           "WARNUNG",
-			unsafeActive:            "Unsicherer Modus aktiv — keine Sandbox-Isolation",
-			tableOfContentsSection:  "Inhaltsverzeichnis",
-			componentIndexSection:   "Komponentenindex",
-			componentIndexLead:      "Die Einträge sind nach Lieferpfad sortiert. Die Objekt-ID entspricht der bom-ref im SBOM und der artifact.id in Grype.",
-			noIndexedComponents:     "Keine Komponenten-Vorkommen indexiert.",
-			objectID:                "Objekt-ID",
-			packageName:             "Paket",
-			version:                 "Version",
-			purl:                    "PURL",
-			evidencePath:            "Belegpfad",
-			foundBy:                 "Erkannt durch",
-			noEvidenceRecorded:      "kein komponentenspezifischer Beleg erfasst",
-			processingTime:          "Verarbeitungszeit",
-			scanError:               "Fehler:",
-			componentsFound:         "Komponenten gefunden",
-			noComponents:            "keine Komponenten gefunden",
-			deliveryPath:            "Lieferpfad",
-			status:                  "Status",
-			tool:                    "Werkzeug",
-			duration:                "Dauer",
-			suppliedBy:              "Durch Benutzer angegeben",
-			derived:                 "Automatisch abgeleitet",
-			residualRiskText:        "Die folgenden Einschränkungen können die Vollständigkeit der Ergebnisse beeinflussen:",
-			noPolicyDecisions:       "Keine Richtlinienentscheidungen protokolliert.",
-			noProcessingIssues:      "Keine Verarbeitungsfehler protokolliert.",
-			summaryExtraction:       "Extraktion",
-			summaryScan:             "Scans",
-			summaryComponents:       "Komponentenindex",
-			summaryPolicies:         "Richtlinienentscheidungen",
-			summaryProcessingIssues: "Verarbeitungsfehler",
-			summaryFindings:         "Wesentliche Befunde",
-			endOfReport:             "Ende des Berichts.",
+			title:                            "extract-sbom Prüfbericht",
+			inputSection:                     "Eingabedatei",
+			configSection:                    "Konfiguration",
+			rootMetadataSection:              "SBOM Stammdaten",
+			sandboxSection:                   "Sandbox-Konfiguration",
+			extractionSection:                "Extraktionsprotokoll",
+			scanSection:                      "Scan-Task-Protokoll",
+			policySection:                    "Richtlinienentscheidungen",
+			summarySection:                   "Zusammenfassung",
+			residualRiskSection:              "Restrisiko und Einschränkungen",
+			processingIssuesSection:          "Verarbeitungsfehler",
+			field:                            "Feld",
+			value:                            "Wert",
+			setting:                          "Einstellung",
+			filename:                         "Dateiname",
+			filesize:                         "Dateigröße",
+			policyMode:                       "Richtlinienmodus",
+			interpretMode:                    "Interpretationsmodus",
+			language:                         "Sprache",
+			maxDepth:                         "Maximale Tiefe",
+			maxFiles:                         "Maximale Dateien",
+			maxTotalSize:                     "Maximale Gesamtgröße",
+			maxEntrySize:                     "Maximale Eintragsgröße",
+			maxRatio:                         "Maximales Verhältnis",
+			timeout:                          "Zeitlimit",
+			progressLevel:                    "Fortschritt",
+			generator:                        "extract-sbom Build",
+			sandboxName:                      "Sandbox",
+			sandboxAvail:                     "Verfügbar",
+			unsafeWarning:                    "WARNUNG",
+			unsafeActive:                     "Unsicherer Modus aktiv — keine Sandbox-Isolation",
+			tableOfContentsSection:           "Inhaltsverzeichnis",
+			howToUseSection:                  "So benutzt man diesen Bericht",
+			methodOverviewSection:            "Verfahren im Kurzüberblick",
+			appendixSection:                  "Anhang",
+			componentIndexSection:            "Komponentenindex",
+			componentIndexLead:               "Die Einträge sind nach Lieferpfad sortiert. Die Objekt-ID entspricht der bom-ref im SBOM und der artifact.id in Grype. `Delivery path` zeigt, wo die Komponente in der Lieferdatei vorkommt. `Evidence path` zeigt die konkrete Datei oder Metadatenquelle, auf der die Identifikation beruht. Wenn mehrere Delivery Paths unter einer Objekt-ID stehen, wurden identische PURLs bewusst zusammengeführt und alle konkreten Blattpfade beibehalten.",
+			noIndexedComponents:              "Keine Komponenten-Vorkommen indexiert.",
+			objectID:                         "Objekt-ID",
+			packageName:                      "Paket",
+			version:                          "Version",
+			purl:                             "PURL",
+			evidencePath:                     "Belegpfad",
+			foundBy:                          "Erkannt durch",
+			noEvidenceRecorded:               "kein komponentenspezifischer Beleg erfasst",
+			processingTime:                   "Verarbeitungszeit",
+			scanError:                        "Fehler:",
+			componentsFound:                  "Komponenten gefunden",
+			noComponents:                     "keine Komponenten gefunden",
+			scanSectionLead:                  "Dies ist das Protokoll der einzelnen Scan-Aufgaben. Die hier aufgeführten Evidenzpfade sind task-bezogene Beobachtungen und können mehrere finale Komponenten abdecken. Die maßgebliche komponentenspezifische Evidenz steht im Komponentenindex.",
+			scanTaskEvidenceLabel:            "Im Scan beobachtete Evidenz",
+			deliveryPath:                     "Lieferpfad",
+			status:                           "Status",
+			tool:                             "Werkzeug",
+			duration:                         "Dauer",
+			suppliedBy:                       "Durch Benutzer angegeben",
+			derived:                          "Automatisch abgeleitet",
+			residualRiskText:                 "Die folgenden Punkte beschreiben Abdeckungsgrenzen und Auslegungsrisiken für die Verwendung des SBOM in der Schwachstellenbewertung:",
+			residualRiskProfileLead:          "Das Verfahren ist manifest- und metadatenbasiert. Besonders belastbar sind Formate mit expliziten Paketmetadaten, etwa RPM, DEB oder Java-Archive mit Maven- bzw. Manifest-Metadaten. Schwächer ist die Abdeckung bei bloßen Dateien, gebündelten Kopien ohne Manifest und Windows-Binärdateien mit knappen oder fehlenden Versionsressourcen.",
+			residualRiskAbsenceHint:          "Das Fehlen einer Komponente im SBOM ist kein Beleg dafür, dass der zugrunde liegende Code nicht vorhanden ist; es bedeutet nur, dass dafür keine verwertbare Paketmetadaten-Evidenz beobachtet wurde.",
+			residualRiskPURLCoverage:         "%d von %d indexierten Komponenten-Vorkommen tragen eine PURL. %d indexierte Vorkommen haben keine PURL und lassen sich deshalb typischerweise nur eingeschränkt oder gar nicht automatisch gegen CVE-Datenbanken korrelieren.",
+			residualRiskEvidenceCoverage:     "%d indexierte Vorkommen haben einen konkreten Evidenzpfad. %d stützen sich nur auf einen allgemeinen Evidenzhinweis, und %d haben keine zusätzliche Evidenzangabe über den Komponenten-Datensatz hinaus.",
+			residualRiskNoComponentTasks:     "%d von %d erfolgreichen Scan-Aufgaben lieferten keine Paketidentität. Das bedeutet: Der Inhalt wurde gesehen, aber es war keine verwertbare Paketmetadaten-Evidenz vorhanden. Beispielaufgaben: %s.",
+			residualRiskFileArtifactCoverage: "Syft erzeugte außerdem %d dateibezogene Rohfunde ohne belastbare Paketkoordinaten. Diese Einträge dokumentieren beobachtete Dateien, eignen sich aber nicht als eigenständige Grundlage für CVE-Abgleiche und werden deshalb nicht als Paketbefund geführt.",
+			residualRiskExtractionGap:        "%d Extraktionsknoten konnten nicht vollständig verarbeitet werden. Beispiele: %s.",
+			residualRiskToolGap:              "%d Extraktionsknoten erfordern nicht verfügbare Hilfswerkzeuge. Beispiele: %s.",
+			residualRiskScanGap:              "%d Scan-Aufgaben schlugen fehl. Beispiele: %s.",
+			residualRiskMoreDetails:          "Hintergrund zur Zuverlässigkeit der Paketerkennung: %s.",
+			noPolicyDecisions:                "Keine Richtlinienentscheidungen protokolliert.",
+			noProcessingIssues:               "Keine Verarbeitungsfehler protokolliert.",
+			summaryLead:                      "Dieser Bericht dokumentiert die beobachteten Paketbefunde, ihre Nachverfolgbarkeit und die Verarbeitungsgrenzen eines einzelnen Prüfungsdurchlaufs über die gelieferte Datei. Er soll die technische Prüfung von SBOM-basierten Schwachstellenbefunden und die Reproduzierbarkeit der zugrunde liegenden Evidenz unterstützen.",
+			summaryAssemblyMath:              "Die Assembly behielt nach Normalisierung und Deduplikation %d Paketkomponenten und fügte %d strukturelle Container-Komponenten hinzu. Dadurch entstehen insgesamt %d CycloneDX-Komponenten.",
+			summaryNextStepTemplate:          "Ein sinnvoller Einstieg ist %s, anschließend die zugehörige Objekt-ID im %s.",
+			howToUseLead:                     "Der folgende Ablauf zeigt exemplarisch, wie Ergebnisse eines externen Vulnerability-Scans mit dem SBOM und diesem Bericht korreliert werden können. Das JSON-Beispiel verwendet Grype, weil dort die SBOM-Objekt-ID erhalten bleibt; bei anderen Werkzeugen sind die sinngemäß entsprechenden Felder zu verwenden.",
+			howToUseStep1:                    "Wenn eine Grype-JSON-Ausgabe vorliegt, extrahieren Sie die für die Triage relevanten Felder und filtern Sie zunächst auf hohe und kritische Befunde. Beispiel:",
+			howToUseStep2Template:            "Öffnen Sie den %s und suchen Sie nach dem Wert aus `artifact_id`. Die Überschrift `### <artifact_id>` entspricht der `bom-ref` im SBOM und der `artifact.id` in Grype.",
+			howToUseStep3:                    "Verwenden Sie `Delivery path`, um die Fundstelle in der Lieferdatei nachzuvollziehen. Verwenden Sie `Evidence path` oder den Evidenzhinweistext, um die konkrete Grundlage der Paketidentifikation zu benennen.",
+			howToUseStep4Template:            "Wenn unter einer Objekt-ID mehrere Delivery Paths aufgeführt sind, beschreibt der Bericht mehrere physische Vorkommen derselben Paketidentität, die bewusst zu einer Komponente zusammengeführt wurden. Die Zusammenführungslogik ist in %s erläutert. Fragen zu Abdeckungsgrenzen lassen sich über %s und %s einordnen.",
+			methodLead:                       "Hier steht nur die Kurzfassung. Die vollständige operator-orientierte Erläuterung steht in SCAN_APPROACH.md auf GitHub.",
+			methodBulletTwoPhases:            "Die Lieferung wird zunächst entpackt und in konkrete Artefakte gegliedert. Anschließend werden Paketmetadaten aus extrahierten Verzeichnisbäumen und aus direkt lesbaren Paketdateien gesammelt.",
+			methodBulletEvidence:             "Paketidentitäten werden nur dann behauptet, wenn dafür beobachtbare Evidenz vorliegt, etwa Paketmanifeste, JAR-Metadaten, MSI-Property-Tabellen oder Binär-Metadaten.",
+			methodBulletDedup:                "Deduplikation ist nachvollziehbar: schwache Platzhalter und wiederholte PURLs werden entfernt, aber die überlebende Komponente behält die konkreten Blatt-Delivery- und Evidence-Pfade.",
+			methodBulletTrust:                "Der Lauf ist deterministisch: Die Eingabedatei ist gehasht, die Lieferpfade sind stabil und Fehler oder Abdeckungsgrenzen werden explizit protokolliert statt verborgen.",
+			methodMoreDetails:                "Vertiefung in SCAN_APPROACH.md:",
+			appendixLead:                     "Die folgenden Abschnitte enthalten die vollständige Rohspur für Stichproben, vertiefte technische Prüfung und Belegexport. Sie sind bewusst ausführlich und werden typischerweise erst benötigt, wenn die relevante Objekt-ID oder der relevante Lieferpfad bereits feststeht.",
+			summaryExtraction:                "Extraktion",
+			summaryScan:                      "Scans",
+			summaryComponents:                "Komponentenindex",
+			summaryPolicies:                  "Richtlinienentscheidungen",
+			summaryProcessingIssues:          "Verarbeitungsfehler",
+			summaryFindings:                  "Wesentliche Befunde",
+			endOfReport:                      "Ende des Berichts.",
 
 			componentNormalizationSection:  "Komponentennormalisierung",
 			componentNormalizationLead:     "Alle Komponenten, die aus dem SBOM entfernt wurden, sind hier mit Begründung aufgeführt. Dies gewährleistet die vollständige Nachverfolgbarkeit zwischen SBOM und Prüfbericht.",
@@ -657,68 +748,98 @@ func getTranslations(lang string) translations {
 		}
 	default:
 		return translations{
-			title:                   "extract-sbom Audit Report",
-			inputSection:            "Input File",
-			configSection:           "Configuration",
-			rootMetadataSection:     "Root SBOM Metadata",
-			sandboxSection:          "Sandbox Configuration",
-			extractionSection:       "Extraction Log",
-			scanSection:             "Scan Results",
-			policySection:           "Policy Decisions",
-			summarySection:          "Summary",
-			residualRiskSection:     "Residual Risk and Limitations",
-			processingIssuesSection: "Processing Errors",
-			field:                   "Field",
-			value:                   "Value",
-			setting:                 "Setting",
-			filename:                "Filename",
-			filesize:                "File size",
-			policyMode:              "Policy mode",
-			interpretMode:           "Interpretation mode",
-			language:                "Language",
-			maxDepth:                "Max depth",
-			maxFiles:                "Max files",
-			maxTotalSize:            "Max total size",
-			maxEntrySize:            "Max entry size",
-			maxRatio:                "Max ratio",
-			timeout:                 "Timeout",
-			progressLevel:           "Progress",
-			generator:               "extract-sbom build",
-			sandboxName:             "Sandbox",
-			sandboxAvail:            "Available",
-			unsafeWarning:           "WARNING",
-			unsafeActive:            "Unsafe mode active — no sandbox isolation",
-			tableOfContentsSection:  "Table of Contents",
-			componentIndexSection:   "Component Occurrence Index",
-			componentIndexLead:      "Entries are sorted by delivery path. The object ID matches the SBOM bom-ref and Grype artifact.id.",
-			noIndexedComponents:     "No component occurrences indexed.",
-			objectID:                "Object ID",
-			packageName:             "Package",
-			version:                 "Version",
-			purl:                    "PURL",
-			evidencePath:            "Evidence path",
-			foundBy:                 "Found by",
-			noEvidenceRecorded:      "no component-specific evidence recorded",
-			processingTime:          "Processing time",
-			scanError:               "Error:",
-			componentsFound:         "components found",
-			noComponents:            "no components found",
-			deliveryPath:            "Delivery path",
-			status:                  "Status",
-			tool:                    "Tool",
-			duration:                "Duration",
-			suppliedBy:              "User-supplied",
-			derived:                 "Auto-derived",
-			residualRiskText:        "The following limitations may affect the completeness of the results:",
-			noPolicyDecisions:       "No policy decisions recorded.",
-			noProcessingIssues:      "No processing issues recorded.",
-			summaryExtraction:       "Extraction",
-			summaryScan:             "Scans",
-			summaryComponents:       "Component index",
-			summaryPolicies:         "Policy decisions",
-			summaryProcessingIssues: "Processing issues",
-			summaryFindings:         "Key findings",
-			endOfReport:             "End of report.",
+			title:                            "extract-sbom Audit Report",
+			inputSection:                     "Input File",
+			configSection:                    "Configuration",
+			rootMetadataSection:              "Root SBOM Metadata",
+			sandboxSection:                   "Sandbox Configuration",
+			extractionSection:                "Extraction Log",
+			scanSection:                      "Scan Task Log",
+			policySection:                    "Policy Decisions",
+			summarySection:                   "Summary",
+			residualRiskSection:              "Residual Risk and Limitations",
+			processingIssuesSection:          "Processing Errors",
+			field:                            "Field",
+			value:                            "Value",
+			setting:                          "Setting",
+			filename:                         "Filename",
+			filesize:                         "File size",
+			policyMode:                       "Policy mode",
+			interpretMode:                    "Interpretation mode",
+			language:                         "Language",
+			maxDepth:                         "Max depth",
+			maxFiles:                         "Max files",
+			maxTotalSize:                     "Max total size",
+			maxEntrySize:                     "Max entry size",
+			maxRatio:                         "Max ratio",
+			timeout:                          "Timeout",
+			progressLevel:                    "Progress",
+			generator:                        "extract-sbom build",
+			sandboxName:                      "Sandbox",
+			sandboxAvail:                     "Available",
+			unsafeWarning:                    "WARNING",
+			unsafeActive:                     "Unsafe mode active — no sandbox isolation",
+			tableOfContentsSection:           "Table of Contents",
+			howToUseSection:                  "How To Use This Report",
+			methodOverviewSection:            "Method At A Glance",
+			appendixSection:                  "Appendix",
+			componentIndexSection:            "Component Occurrence Index",
+			componentIndexLead:               "Entries are sorted by delivery path. The object ID matches the SBOM bom-ref and Grype artifact.id. `Delivery path` shows where the component occurs in the supplier delivery. `Evidence path` shows the concrete file or metadata source that supported the identification. If several delivery paths appear under one object ID, identical PURLs were intentionally merged and every concrete leaf-most occurrence path was retained.",
+			noIndexedComponents:              "No component occurrences indexed.",
+			objectID:                         "Object ID",
+			packageName:                      "Package",
+			version:                          "Version",
+			purl:                             "PURL",
+			evidencePath:                     "Evidence path",
+			foundBy:                          "Found by",
+			noEvidenceRecorded:               "no component-specific evidence recorded",
+			processingTime:                   "Processing time",
+			scanError:                        "Error:",
+			componentsFound:                  "components found",
+			noComponents:                     "no components found",
+			scanSectionLead:                  "This is a per-scan-task execution log. Evidence lines in this section are task-level observations and may cover several final components. The authoritative per-component evidence statements are in the Component Occurrence Index.",
+			scanTaskEvidenceLabel:            "Observed evidence",
+			deliveryPath:                     "Delivery path",
+			status:                           "Status",
+			tool:                             "Tool",
+			duration:                         "Duration",
+			suppliedBy:                       "User-supplied",
+			derived:                          "Auto-derived",
+			residualRiskText:                 "The following points describe coverage boundaries and interpretation risks that matter when the SBOM is used for vulnerability assessment:",
+			residualRiskProfileLead:          "The method is manifest- and metadata-based. Reliability is highest for formats with explicit package metadata, such as RPM, DEB, or Java archives with Maven or manifest metadata. Coverage is weaker for plain files, bundled copies without manifests, and Windows binaries with sparse or missing VERSIONINFO.",
+			residualRiskAbsenceHint:          "The absence of a component from the SBOM is not proof that the underlying code is absent; it means only that no usable package-metadata evidence was observed for it.",
+			residualRiskPURLCoverage:         "%d of %d indexed component occurrences carry a PURL. %d indexed occurrences do not carry a PURL and therefore usually correlate poorly or not at all with vulnerability databases.",
+			residualRiskEvidenceCoverage:     "%d indexed occurrences carry a concrete evidence path. %d rely only on a generic evidence-source statement, and %d have no additional evidence detail beyond the component record.",
+			residualRiskNoComponentTasks:     "%d of %d successful scan tasks produced no package identities. This means the content was seen, but no usable package metadata was present. Example tasks: %s.",
+			residualRiskFileArtifactCoverage: "Syft also emitted %d file-level records without actionable package coordinates. These records show that files were observed, but they do not by themselves support CVE matching and are therefore not listed as package findings.",
+			residualRiskExtractionGap:        "%d extraction nodes could not be processed completely. Examples: %s.",
+			residualRiskToolGap:              "%d extraction nodes require unavailable helper tools. Examples: %s.",
+			residualRiskScanGap:              "%d scan tasks failed. Examples: %s.",
+			residualRiskMoreDetails:          "Background on package-detection reliability: %s.",
+			noPolicyDecisions:                "No policy decisions recorded.",
+			noProcessingIssues:               "No processing issues recorded.",
+			summaryLead:                      "This report documents the observed package findings, their traceability, and the processing limits of a single inspection run over the supplied delivery. Its purpose is to support technical review of SBOM-based vulnerability findings and reproducibility of the underlying evidence.",
+			summaryAssemblyMath:              "Assembly retained %d package components after normalization and deduplication and added %d structural container components, resulting in %d CycloneDX components overall.",
+			summaryNextStepTemplate:          "A practical starting point is %s, followed by the corresponding object in the %s.",
+			howToUseLead:                     "The workflow below illustrates how results from an external vulnerability scan can be correlated with the SBOM and this report. The JSON example uses Grype because it preserves the SBOM object identifier; analogous fields can be taken from other tools.",
+			howToUseStep1:                    "If Grype JSON output is available, extract the fields needed for triage and restrict the view to high and critical findings. Example:",
+			howToUseStep2Template:            "Open the %s and search for the value from `artifact_id`. The heading `### <artifact_id>` corresponds to the SBOM `bom-ref` and to Grype `artifact.id`.",
+			howToUseStep3:                    "Use `Delivery path` to locate the finding in the supplier delivery. Use `Evidence path` or the evidence-source text to identify the concrete manifest, metadata file, or cataloger basis behind the package identification.",
+			howToUseStep4Template:            "If one object lists several delivery paths, the report is describing several physical occurrences that were consolidated into one package component because they share the same package identity. The consolidation logic is summarized in %s. Questions about coverage boundaries can be assessed with %s and %s.",
+			methodLead:                       "This section is the compressed version. The full operator-oriented explanation lives in SCAN_APPROACH.md on GitHub.",
+			methodBulletTwoPhases:            "The delivery is first unpacked and classified into concrete artifacts. Package metadata is then collected from extracted directory trees and from directly readable package files.",
+			methodBulletEvidence:             "A package identity is asserted only when observable evidence exists, such as package manifests, JAR metadata, MSI property tables, or binary metadata.",
+			methodBulletDedup:                "Deduplication is traceable: weak placeholders and repeated PURLs are removed, but the surviving component keeps the concrete leaf-most delivery and evidence paths.",
+			methodBulletTrust:                "The run is deterministic: the input file is hash-pinned, logical delivery paths are stable, and errors or coverage limits are recorded instead of hidden.",
+			methodMoreDetails:                "Deep links into SCAN_APPROACH.md:",
+			appendixLead:                     "The sections below preserve the detailed audit trail for spot checks, deeper technical review, and evidence export. They are intentionally exhaustive and are usually only needed once the relevant object id or delivery path is already known.",
+			summaryExtraction:                "Extraction",
+			summaryScan:                      "Scans",
+			summaryComponents:                "Component index",
+			summaryPolicies:                  "Policy decisions",
+			summaryProcessingIssues:          "Processing issues",
+			summaryFindings:                  "Key findings",
+			endOfReport:                      "End of report.",
 
 			componentNormalizationSection:  "Component Normalization",
 			componentNormalizationLead:     "Every component removed from the SBOM during normalization or deduplication is listed here with its reason. This ensures full traceability between the SBOM and the audit report.",
@@ -771,16 +892,19 @@ func writeRootMetadata(w io.Writer, data ReportData, t translations) {
 
 func reportSections(t translations) []reportSection {
 	return []reportSection{
+		{title: t.summarySection, anchor: anchorSummary},
+		{title: t.howToUseSection, anchor: anchorHowToUse},
+		{title: t.methodOverviewSection, anchor: anchorMethodOverview},
+		{title: t.processingIssuesSection, anchor: anchorProcessingErrors},
+		{title: t.residualRiskSection, anchor: anchorResidualRisk},
+		{title: t.appendixSection, anchor: anchorAppendix},
+		{title: t.componentIndexSection, anchor: anchorComponentIndex},
+		{title: t.componentNormalizationSection, anchor: anchorSuppression},
 		{title: t.inputSection, anchor: anchorInputFile},
 		{title: t.configSection, anchor: anchorConfig},
 		{title: t.rootMetadataSection, anchor: anchorRootMetadata},
 		{title: t.sandboxSection, anchor: anchorSandbox},
-		{title: t.summarySection, anchor: anchorSummary},
-		{title: t.processingIssuesSection, anchor: anchorProcessingErrors},
-		{title: t.residualRiskSection, anchor: anchorResidualRisk},
 		{title: t.policySection, anchor: anchorPolicy},
-		{title: t.componentIndexSection, anchor: anchorComponentIndex},
-		{title: t.componentNormalizationSection, anchor: anchorSuppression},
 		{title: t.scanSection, anchor: anchorScan},
 		{title: t.extractionSection, anchor: anchorExtraction},
 	}
@@ -796,6 +920,68 @@ func writeTableOfContents(w io.Writer, sections []reportSection) {
 	}
 }
 
+func sectionLink(title, anchor string) string {
+	return fmt.Sprintf("[%s](#%s)", title, anchor)
+}
+
+func scanApproachLink(label, anchor string) string {
+	return fmt.Sprintf("[%s](%s#%s)", label, scanApproachGitHubURL, anchor)
+}
+
+func collectSuppressionStats(suppressions []assembly.SuppressionRecord) suppressionStats {
+	stats := suppressionStats{}
+	for _, s := range suppressions {
+		switch s.Reason {
+		case assembly.SuppressionFSArtifact:
+			stats.FSArtifacts++
+		case assembly.SuppressionLowValueFile:
+			stats.LowValueFiles++
+		case assembly.SuppressionWeakDuplicate:
+			stats.WeakDuplicate++
+		case assembly.SuppressionPURLDuplicate:
+			stats.PURLDuplicate++
+		}
+	}
+	return stats
+}
+
+func writeHowToUseReport(w io.Writer, t translations) {
+	componentIndexLink := sectionLink(t.componentIndexSection, anchorComponentIndex)
+	normalizationLink := sectionLink(t.componentNormalizationSection, anchorSuppression)
+	processingLink := sectionLink(t.processingIssuesSection, anchorProcessingErrors)
+	riskLink := sectionLink(t.residualRiskSection, anchorResidualRisk)
+
+	fmt.Fprintln(w, t.howToUseLead)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "1. %s\n\n", t.howToUseStep1)
+	fmt.Fprintln(w, "```sh")
+	fmt.Fprintln(w, "jq '.matches[] | select((.vulnerability.severity == \"High\") or (.vulnerability.severity == \"Critical\")) | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' grype.json")
+	fmt.Fprintln(w, "```")
+	fmt.Fprintf(w, "2. %s\n", fmt.Sprintf(t.howToUseStep2Template, componentIndexLink))
+	fmt.Fprintf(w, "3. %s\n", t.howToUseStep3)
+	fmt.Fprintf(w, "4. %s\n", fmt.Sprintf(t.howToUseStep4Template, normalizationLink, processingLink, riskLink))
+}
+
+func writeMethodOverview(w io.Writer, t translations) {
+	fmt.Fprintln(w, t.methodLead)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "- %s\n", t.methodBulletTwoPhases)
+	fmt.Fprintf(w, "- %s\n", t.methodBulletEvidence)
+	fmt.Fprintf(w, "- %s\n", t.methodBulletDedup)
+	fmt.Fprintf(w, "- %s\n", t.methodBulletTrust)
+	fmt.Fprintln(w)
+	fmt.Fprintf(
+		w,
+		"%s %s, %s, %s, %s, %s\n",
+		t.methodMoreDetails,
+		scanApproachLink("Two phases", "3-two-phases"),
+		scanApproachLink("Scan detail", "7-how-the-scan-phase-works-in-detail"),
+		scanApproachLink("Final SBOM build", "8-how-the-final-sbom-is-built"),
+		scanApproachLink("Deduplication", "81-how-deduplication-works"),
+		scanApproachLink("Package detection reliability", "6-package-detection-reliability"),
+	)
+}
+
 func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translations) {
 	if len(decisions) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noPolicyDecisions)
@@ -809,6 +995,18 @@ func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translatio
 
 func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanStats, pol policyStats, idx componentIndexStats, t translations) {
 	duration := data.EndTime.Sub(data.StartTime).Round(time.Millisecond)
+	retainedPackages := scn.TotalComponents - len(data.Suppressions)
+	if retainedPackages < 0 {
+		retainedPackages = 0
+	}
+	structuralComponents := idx.TotalComponents - retainedPackages
+	if structuralComponents < 0 {
+		structuralComponents = 0
+	}
+	suppression := collectSuppressionStats(data.Suppressions)
+
+	fmt.Fprintln(w, t.summaryLead)
+	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "- %s: %s\n", t.processingTime, duration)
 	fmt.Fprintf(
@@ -825,26 +1023,16 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 		ext.Pending,
 	)
 	fmt.Fprintf(w, "- %s: total=%d successful=%d errors=%d components-found=%d\n", t.summaryScan, scn.Total, scn.Successful, scn.Errors, scn.TotalComponents)
-	fsCount, lvCount, weakCount, purlCount := 0, 0, 0, 0
-	for _, s := range data.Suppressions {
-		switch s.Reason {
-		case assembly.SuppressionFSArtifact:
-			fsCount++
-		case assembly.SuppressionLowValueFile:
-			lvCount++
-		case assembly.SuppressionWeakDuplicate:
-			weakCount++
-		case assembly.SuppressionPURLDuplicate:
-			purlCount++
-		}
-	}
 	fmt.Fprintf(
 		w,
-		"- %s: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → %d in BOM → filtered %d (abs-path=%d, low-value=%d, merged=%d) → indexed %d\n",
+		"- %s: %d raw -> removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) -> %d in BOM -> filtered %d (abs-path=%d, low-value=%d, merged=%d) -> indexed %d\n",
 		t.summaryComponents,
 		scn.TotalComponents,
 		len(data.Suppressions),
-		fsCount, lvCount, weakCount, purlCount,
+		suppression.FSArtifacts,
+		suppression.LowValueFiles,
+		suppression.WeakDuplicate,
+		suppression.PURLDuplicate,
 		idx.TotalComponents,
 		idx.FilteredAbsolutePathNames+idx.FilteredLowValueFileArtifacts+idx.DuplicateMerged,
 		idx.FilteredAbsolutePathNames,
@@ -852,29 +1040,36 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 		idx.DuplicateMerged,
 		idx.IndexedComponents,
 	)
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.summaryAssemblyMath, retainedPackages, structuralComponents, idx.TotalComponents))
 	fmt.Fprintf(w, "- %s: total=%d continue=%d skip=%d abort=%d\n", t.summaryPolicies, pol.Total, pol.Continue, pol.Skip, pol.Abort)
 	fmt.Fprintf(w, "- %s: pipeline=%d\n", t.summaryProcessingIssues, len(data.ProcessingIssues))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.summaryNextStepTemplate, sectionLink(t.howToUseSection, anchorHowToUse), sectionLink(t.componentIndexSection, anchorComponentIndex)))
 
 	fmt.Fprintf(w, "\n%s:\n", t.summaryFindings)
-	findings := summarizeFindings(data, ext, scn, idx)
+	findings := summarizeFindings(ext, scn, idx)
 	for _, finding := range findings {
 		fmt.Fprintf(w, "- %s\n", finding)
 	}
 }
 
-func summarizeFindings(data ReportData, ext extractionStats, scn scanStats, idx componentIndexStats) []string {
-	findings := make([]string, 0, 6)
+func summarizeFindings(ext extractionStats, scn scanStats, idx componentIndexStats) []string {
+	findings := make([]string, 0, 8)
 	if ext.ToolMissing > 0 {
-		findings = append(findings, fmt.Sprintf("%d extraction nodes require unavailable external tools.", ext.ToolMissing))
+		findings = append(findings, fmt.Sprintf("%d extraction nodes require unavailable external tools. Examples: %s.", ext.ToolMissing, samplePaths(ext.ToolMissingPaths, 3)))
 	}
 	if ext.Failed > 0 || ext.SecurityBlocked > 0 {
-		findings = append(findings, fmt.Sprintf("%d extraction nodes failed or were blocked.", ext.Failed+ext.SecurityBlocked))
+		findings = append(findings, fmt.Sprintf("%d extraction nodes failed or were blocked. Examples: %s.", ext.Failed+ext.SecurityBlocked, samplePaths(append(append([]string{}, ext.FailedPaths...), ext.SecurityBlockedPaths...), 3)))
 	}
 	if scn.Errors > 0 {
-		findings = append(findings, fmt.Sprintf("%d Syft scan targets failed.", scn.Errors))
+		findings = append(findings, fmt.Sprintf("%d Syft scan tasks failed. Examples: %s.", scn.Errors, samplePaths(scn.ErrorPaths, 3)))
+	} else if scn.Total > 0 {
+		findings = append(findings, fmt.Sprintf("All %d Syft scan tasks completed successfully.", scn.Total))
 	}
-	if data.SandboxInfo.UnsafeOvr {
-		findings = append(findings, "Run executed with --unsafe; process isolation was not enforced.")
+	if idx.IndexedComponents > 0 {
+		findings = append(findings, fmt.Sprintf("%d of %d indexed component occurrences carry a PURL; %d do not.", idx.IndexedWithPURL, idx.IndexedComponents, idx.IndexedWithoutPURL))
+	}
+	if scn.NoComponentTasks > 0 {
+		findings = append(findings, fmt.Sprintf("%d successful scan tasks produced no package identities. Examples: %s.", scn.NoComponentTasks, samplePaths(scn.NoComponentPaths, 3)))
 	}
 	if idx.FilteredAbsolutePathNames > 0 || idx.FilteredLowValueFileArtifacts > 0 || idx.DuplicateMerged > 0 {
 		findings = append(
@@ -1026,7 +1221,9 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	// FS-cataloger artifacts.
 	if len(fsArtifacts) > 0 {
 		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonFSArtifact, len(fsArtifacts))
-		fmt.Fprintln(w, "Syft file-cataloger emits a `type=file` entry whose Name is the absolute temp-directory path. These entries are suppressed to prevent filesystem-path leakage. A dedicated package cataloger identifies the same file as a library entry with a PURL and version.")
+		fmt.Fprintln(w, "Operational meaning: these are file-level Syft records, not retained package findings. They normally require no action during vulnerability triage. They are listed here only so the normalization step remains auditable.")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "When a package identity exists for the same file, the actionable record is the surviving component in the Component Occurrence Index.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "| Name (suppressed) | Delivery path |")
 		fmt.Fprintln(w, "|---|---|")
@@ -1047,7 +1244,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	// Low-value file artifacts.
 	if len(lowValue) > 0 {
 		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonLowValueFile, len(lowValue))
-		fmt.Fprintln(w, "These `type=file` entries have no PURL, no version, and no `foundBy` cataloger. They cannot be matched to a vulnerability database and provide no identification value.")
+		fmt.Fprintln(w, "Operational meaning: these raw file records had no PURL, no version, and no identifying cataloger metadata. They do not support package-level CVE correlation and are therefore excluded from the SBOM package view.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "| Name (suppressed) | Delivery path |")
 		fmt.Fprintln(w, "|---|---|")
@@ -1068,7 +1265,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	// Weak duplicates.
 	if len(weakDups) > 0 {
 		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonWeakDuplicate, len(weakDups))
-		fmt.Fprintln(w, "At the same (delivery-path, evidence-path) locus a stronger entry existed. The weaker entry (no PURL, no version, no cataloger) was suppressed. Only entries where the kept component has a PURL are collapsed.")
+		fmt.Fprintln(w, "Operational meaning: at the same delivery/evidence locus a stronger package record existed. The weaker placeholder was removed so that the final SBOM keeps the more attributable identity.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "| Name (suppressed) | Delivery path | "+t.suppressionReplacedBy+" |")
 		fmt.Fprintln(w, "|---|---|---|")
@@ -1094,7 +1291,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	// PURL duplicates across scan nodes or evidence variants.
 	if len(purlDups) > 0 {
 		fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonPURLDuplicate, len(purlDups))
-		fmt.Fprintln(w, "These entries carried the same PURL as another retained component. extract-sbom keeps one representative, merges all unique leaf-most delivery and evidence paths into it, and drops redundant ancestor container paths such as an enclosing ZIP when a nested JAR path is also present.")
+		fmt.Fprintln(w, "Operational meaning: several raw observations described the same package identity. One representative was kept, and the surviving component in the Component Occurrence Index carries the retained leaf-most delivery and evidence paths. Use this table only when you need to audit why duplicate raw observations collapsed into one package component.")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "| Name (suppressed) | Delivery path | "+t.suppressionReplacedBy+" |")
 		fmt.Fprintln(w, "|---|---|---|")
@@ -1204,6 +1401,22 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 		return compareOccurrence(occurrences[i], occurrences[j]) < 0
 	})
 	stats.IndexedComponents = len(occurrences)
+	for i := range occurrences {
+		occ := occurrences[i]
+		if occ.PURL != "" {
+			stats.IndexedWithPURL++
+		} else {
+			stats.IndexedWithoutPURL++
+		}
+		switch {
+		case len(occ.EvidencePaths) > 0:
+			stats.IndexedWithEvidencePath++
+		case occ.EvidenceSource != "":
+			stats.IndexedWithEvidenceSourceOnly++
+		default:
+			stats.IndexedWithoutEvidence++
+		}
+	}
 
 	return occurrences, stats
 }
@@ -1485,61 +1698,30 @@ func writeExtractionTree(w io.Writer, node *extract.ExtractionNode, depth int, t
 func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn scanStats, idx componentIndexStats, t translations) {
 	fmt.Fprintln(w, t.residualRiskText)
 	fmt.Fprintln(w)
-
-	risks := []string{}
-
-	if ext.ToolMissing > 0 {
-		risks = append(
-			risks,
-			fmt.Sprintf(
-				"%d extraction nodes require unavailable tools (e.g. 7zz or unshield). Examples: %s.",
-				ext.ToolMissing,
-				samplePaths(ext.ToolMissingPaths, 3),
-			),
-		)
+	fmt.Fprintf(w, "- %s\n", t.residualRiskProfileLead)
+	fmt.Fprintf(w, "- %s\n", t.residualRiskAbsenceHint)
+	if idx.IndexedComponents > 0 {
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskPURLCoverage, idx.IndexedWithPURL, idx.IndexedComponents, idx.IndexedWithoutPURL))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage, idx.IndexedWithEvidencePath, idx.IndexedWithEvidenceSourceOnly, idx.IndexedWithoutEvidence))
+	}
+	if scn.Successful > 0 {
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks, scn.NoComponentTasks, scn.Successful, samplePaths(scn.NoComponentPaths, 3)))
+	}
+	suppression := collectSuppressionStats(data.Suppressions)
+	fileArtifactCount := suppression.FSArtifacts + suppression.LowValueFiles
+	if fileArtifactCount > 0 {
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage, fileArtifactCount))
 	}
 	if ext.Failed > 0 || ext.SecurityBlocked > 0 {
-		risks = append(
-			risks,
-			fmt.Sprintf(
-				"%d extraction nodes failed or were security-blocked. Examples: %s.",
-				ext.Failed+ext.SecurityBlocked,
-				samplePaths(append(append([]string{}, ext.FailedPaths...), ext.SecurityBlockedPaths...), 3),
-			),
-		)
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap, ext.Failed+ext.SecurityBlocked, samplePaths(append(append([]string{}, ext.FailedPaths...), ext.SecurityBlockedPaths...), 3)))
+	}
+	if ext.ToolMissing > 0 {
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap, ext.ToolMissing, samplePaths(ext.ToolMissingPaths, 3)))
 	}
 	if scn.Errors > 0 {
-		risks = append(
-			risks,
-			fmt.Sprintf(
-				"%d Syft scan targets failed. Example nodes: %s.",
-				scn.Errors,
-				samplePaths(scn.ErrorPaths, 3),
-			),
-		)
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap, scn.Errors, samplePaths(scn.ErrorPaths, 3)))
 	}
-	if data.SandboxInfo.UnsafeOvr {
-		risks = append(risks, "Extraction ran without sandbox isolation (--unsafe). Process-level containment was not enforced.")
-	}
-	if idx.FilteredAbsolutePathNames > 0 || idx.FilteredLowValueFileArtifacts > 0 || idx.DuplicateMerged > 0 {
-		risks = append(
-			risks,
-			fmt.Sprintf(
-				"Component index quality filters removed %d absolute-path artifacts, %d low-value file artifacts, and merged %d duplicate placeholders.",
-				idx.FilteredAbsolutePathNames,
-				idx.FilteredLowValueFileArtifacts,
-				idx.DuplicateMerged,
-			),
-		)
-	}
-
-	if len(risks) == 0 {
-		risks = append(risks, "No significant residual risks identified for this inspection run.")
-	}
-
-	for _, r := range risks {
-		fmt.Fprintf(w, "- %s\n", r)
-	}
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink("Package Detection Reliability", "6-package-detection-reliability")))
 }
 
 func samplePaths(paths []string, maxCount int) string {
@@ -1617,8 +1799,14 @@ func collectScanStats(scans []scan.ScanResult) scanStats {
 			continue
 		}
 		stats.Successful++
+		componentCount := 0
 		if sr.BOM != nil && sr.BOM.Components != nil {
-			stats.TotalComponents += len(*sr.BOM.Components)
+			componentCount = len(*sr.BOM.Components)
+			stats.TotalComponents += componentCount
+		}
+		if componentCount == 0 {
+			stats.NoComponentTasks++
+			stats.NoComponentPaths = append(stats.NoComponentPaths, sr.NodePath)
 		}
 	}
 	return stats

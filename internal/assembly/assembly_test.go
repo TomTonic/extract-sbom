@@ -1447,6 +1447,37 @@ func TestDeduplicateGlobalComponentsPrunesAncestorDeliveryPaths(t *testing.T) {
 	}
 }
 
+func TestNormalizeScanComponentsUsesLogicalDeliveryPathForSuppressedFileArtifacts(t *testing.T) {
+	t.Parallel()
+
+	node := &extract.ExtractionNode{
+		Path:   "delivery.zip/lib.tar",
+		Status: extract.StatusExtracted,
+	}
+	sr := &scan.ScanResult{
+		NodePath: node.Path,
+		BOM: &cdx.BOM{Components: &[]cdx.Component{{
+			Type: cdx.ComponentTypeFile,
+			Name: "/tmp/extract-sbom/lib/example.jar",
+			Properties: &[]cdx.Property{{
+				Name:  "syft:location:0:path",
+				Value: "nested/example.jar",
+			}},
+		}}},
+	}
+
+	_, suppressions := normalizeScanComponents(node, sr)
+	if len(suppressions) != 1 {
+		t.Fatalf("expected 1 suppression, got %d", len(suppressions))
+	}
+	if suppressions[0].Reason != SuppressionFSArtifact {
+		t.Fatalf("suppression reason = %q, want %q", suppressions[0].Reason, SuppressionFSArtifact)
+	}
+	if suppressions[0].DeliveryPath != "delivery.zip/lib.tar/nested/example.jar" {
+		t.Fatalf("delivery path = %q, want %q", suppressions[0].DeliveryPath, "delivery.zip/lib.tar/nested/example.jar")
+	}
+}
+
 // TestAssembleDeduplicatesCrossNodeComponents verifies that when the same PURL
 // appears in scan results from two different nodes (e.g. an extracted parent
 // directory and a SyftNative child JAR), only one component survives in the
