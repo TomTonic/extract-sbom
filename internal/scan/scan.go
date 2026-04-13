@@ -174,10 +174,6 @@ func (tracker *scanProgressTracker) markCompleted(cfg config.Config, total int) 
 	tracker.nextUpdate = now.Add(scanNativeProgressInterval)
 }
 
-func shouldLogScanStart(label string) bool {
-	return false // Suppress start logs for all scan types
-}
-
 func shouldLogScanCompletion(label string, duration time.Duration) bool {
 	return label != "scan-native" || duration >= scanNativeVerboseCompletionMinimum
 }
@@ -191,45 +187,53 @@ func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, resu
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for task := range workQueue {
-				nodePath := results[task.resultIndex].NodePath
-				if shouldLogScanStart(label) {
-					cfg.EmitProgress(config.ProgressVerbose, "[%s %d/%d] start: %s", label, task.ordinal, len(indices), nodePath)
-				}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case task, ok := <-workQueue:
+					if !ok {
+						return
+					}
 
-				start := time.Now()
-				done := make(chan struct{})
-				if cfg.ProgressLevel >= config.ProgressNormal {
-					go func(ordinal int, total int, currentNodePath string) {
-						ticker := time.NewTicker(15 * time.Second)
-						defer ticker.Stop()
-						for {
-							select {
-							case <-done:
-								return
-							case <-ticker.C:
-								cfg.EmitProgress(config.ProgressNormal, "[%s %d/%d] still running: %s", label, ordinal, total, currentNodePath)
+					nodePath := results[task.resultIndex].NodePath
+
+					start := time.Now()
+					done := make(chan struct{})
+					if cfg.ProgressLevel >= config.ProgressNormal {
+						go func(ordinal int, total int, currentNodePath string) {
+							ticker := time.NewTicker(15 * time.Second)
+							defer ticker.Stop()
+							for {
+								select {
+								case <-done:
+									return
+								case <-ctx.Done():
+									return
+								case <-ticker.C:
+									cfg.EmitProgress(config.ProgressNormal, "[%s] task %d/%d still running: %s", label, ordinal, total, currentNodePath)
+								}
 							}
-						}
-					}(task.ordinal, len(indices), nodePath)
-				}
+						}(task.ordinal, len(indices), nodePath)
+					}
 
-				scanNode(ctx, &results[task.resultIndex], root)
-				close(done)
+					scanNode(ctx, &results[task.resultIndex], root)
+					close(done)
 
-				duration := time.Since(start).Round(time.Millisecond)
-				progressTracker.markCompleted(cfg, len(indices))
-				if results[task.resultIndex].Error != nil {
-					cfg.EmitProgress(config.ProgressNormal, "[%s %d/%d] failed after %s: %s (%v)", label, task.ordinal, len(indices), duration, nodePath, results[task.resultIndex].Error)
-					continue
-				}
+					duration := time.Since(start).Round(time.Millisecond)
+					progressTracker.markCompleted(cfg, len(indices))
+					if results[task.resultIndex].Error != nil {
+						cfg.EmitProgress(config.ProgressNormal, "[%s] task %d/%d failed after %s: %s (%v)", label, task.ordinal, len(indices), duration, nodePath, results[task.resultIndex].Error)
+						continue
+					}
 
-				componentCount := 0
-				if results[task.resultIndex].BOM != nil && results[task.resultIndex].BOM.Components != nil {
-					componentCount = len(*results[task.resultIndex].BOM.Components)
-				}
-				if shouldLogScanCompletion(label, duration) {
-					cfg.EmitProgress(config.ProgressVerbose, "[%s %d/%d] done in %s: %s (%d components)", label, task.ordinal, len(indices), duration, nodePath, componentCount)
+					componentCount := 0
+					if results[task.resultIndex].BOM != nil && results[task.resultIndex].BOM.Components != nil {
+						componentCount = len(*results[task.resultIndex].BOM.Components)
+					}
+					if shouldLogScanCompletion(label, duration) {
+						cfg.EmitProgress(config.ProgressVerbose, "[%s] task %d/%d done in %s: %s (%d components)", label, task.ordinal, len(indices), duration, nodePath, componentCount)
+					}
 				}
 			}
 		}()

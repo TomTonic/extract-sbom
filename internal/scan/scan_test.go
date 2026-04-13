@@ -516,12 +516,6 @@ func TestPathMatchesScanTargetMatchesNestedAccessPath(t *testing.T) {
 func TestNativeScanLoggingKeepsOnlySlowVerboseDetails(t *testing.T) {
 	t.Parallel()
 
-	if shouldLogScanStart("scan-native") {
-		t.Fatal("scan-native start logs should be suppressed")
-	}
-	if shouldLogScanStart("scan-extracted") {
-		t.Fatal("scan-extracted start logs should be suppressed")
-	}
 	if shouldLogScanCompletion("scan-native", 1500*time.Millisecond) {
 		t.Fatal("fast scan-native completion logs should be suppressed")
 	}
