@@ -110,10 +110,11 @@ type extractionStats struct {
 }
 
 type scanStats struct {
-	Total      int
-	Successful int
-	Errors     int
-	ErrorPaths []string
+	Total           int
+	Successful      int
+	Errors          int
+	TotalComponents int
+	ErrorPaths      []string
 }
 
 type policyStats struct {
@@ -820,16 +821,31 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 		ext.SecurityBlocked,
 		ext.Pending,
 	)
-	fmt.Fprintf(w, "- %s: total=%d successful=%d errors=%d\n", t.summaryScan, scn.Total, scn.Successful, scn.Errors)
+	fmt.Fprintf(w, "- %s: total=%d successful=%d errors=%d components-found=%d\n", t.summaryScan, scn.Total, scn.Successful, scn.Errors, scn.TotalComponents)
+	fsCount, lvCount, dedupCount := 0, 0, 0
+	for _, s := range data.Suppressions {
+		switch s.Reason {
+		case assembly.SuppressionFSArtifact:
+			fsCount++
+		case assembly.SuppressionLowValueFile:
+			lvCount++
+		case assembly.SuppressionWeakDuplicate:
+			dedupCount++
+		}
+	}
 	fmt.Fprintf(
 		w,
-		"- %s: indexed=%d total-bom-components=%d filtered-abs-path=%d filtered-low-value-files=%d merged-duplicates=%d\n",
+		"- %s: %d raw → removed %d (fs-artifacts=%d, low-value=%d, dedup=%d) → %d in BOM → filtered %d (abs-path=%d, low-value=%d, merged=%d) → indexed %d\n",
 		t.summaryComponents,
-		idx.IndexedComponents,
+		scn.TotalComponents,
+		len(data.Suppressions),
+		fsCount, lvCount, dedupCount,
 		idx.TotalComponents,
+		idx.FilteredAbsolutePathNames+idx.FilteredLowValueFileArtifacts+idx.DuplicateMerged,
 		idx.FilteredAbsolutePathNames,
 		idx.FilteredLowValueFileArtifacts,
 		idx.DuplicateMerged,
+		idx.IndexedComponents,
 	)
 	fmt.Fprintf(w, "- %s: total=%d continue=%d skip=%d abort=%d\n", t.summaryPolicies, pol.Total, pol.Continue, pol.Skip, pol.Abort)
 	fmt.Fprintf(w, "- %s: pipeline=%d\n", t.summaryProcessingIssues, len(data.ProcessingIssues))
@@ -1517,6 +1533,9 @@ func collectScanStats(scans []scan.ScanResult) scanStats {
 			continue
 		}
 		stats.Successful++
+		if sr.BOM != nil && sr.BOM.Components != nil {
+			stats.TotalComponents += len(*sr.BOM.Components)
+		}
 	}
 	return stats
 }
