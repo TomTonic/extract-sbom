@@ -847,21 +847,21 @@ func TestExtractPlainTARExecutableFileDoesNotTripSpecialFile(t *testing.T) {
 	}
 
 	tw := tar.NewWriter(f)
-	if err := tw.WriteHeader(&tar.Header{
+	if writeHeaderErr := tw.WriteHeader(&tar.Header{
 		Name: "0052_37.0-Patch2/01_start.sh",
 		Mode: 0o755,
 		Size: int64(len("#!/bin/sh\necho ok\n")),
-	}); err != nil {
-		t.Fatal(err)
+	}); writeHeaderErr != nil {
+		t.Fatal(writeHeaderErr)
 	}
-	if _, err := tw.Write([]byte("#!/bin/sh\necho ok\n")); err != nil {
-		t.Fatal(err)
+	if _, writeErr := tw.Write([]byte("#!/bin/sh\necho ok\n")); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := tw.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := f.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	cfg := config.DefaultConfig()
@@ -1126,6 +1126,18 @@ func TestIsSkippedExtension(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("isSkippedExtension(%q, %v) = %v, want %v", tt.path, tt.skipList, got, tt.want)
 		}
+	}
+}
+
+func TestTarHeaderFileModeBounds(t *testing.T) {
+	t.Parallel()
+
+	if got := tarHeaderFileMode(-1); got != 0 {
+		t.Fatalf("tarHeaderFileMode(-1) = %v, want 0", got)
+	}
+
+	if got := tarHeaderFileMode(0o755); got != os.FileMode(0o755) {
+		t.Fatalf("tarHeaderFileMode(0755) = %v, want %v", got, os.FileMode(0o755))
 	}
 }
 

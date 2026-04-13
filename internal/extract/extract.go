@@ -542,12 +542,11 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 		header := safeguard.EntryHeader{
 			Name:             hdr.Name,
 			UncompressedSize: hdr.Size,
-			Mode:             os.FileMode(hdr.Mode),
+			Mode:             tarHeaderFileMode(hdr.Mode),
 			IsDir:            hdr.Typeflag == tar.TypeDir || strings.HasSuffix(hdr.Name, "/"),
 			IsSymlink:        hdr.Typeflag == tar.TypeSymlink,
 			LinkTarget:       hdr.Linkname,
 		}
-
 		if err := safeguard.ValidateEntry(header, limits, stats); err != nil {
 			return err
 		}
@@ -585,6 +584,20 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 	tarOK = true
 
 	return nil
+}
+
+func tarHeaderFileMode(mode int64) os.FileMode {
+	if mode <= 0 {
+		return 0
+	}
+
+	maxMode := uint64(^os.FileMode(0))
+	unsignedMode := uint64(mode)
+	if unsignedMode > maxMode {
+		unsignedMode = maxMode
+	}
+
+	return os.FileMode(unsignedMode)
 }
 
 // extractTAREntry writes a single TAR entry to disk.
@@ -822,7 +835,7 @@ func isSkippedExtension(filePath string, skipList []string) bool {
 		return false
 	}
 	for _, s := range skipList {
-		if strings.ToLower(s) == ext {
+		if strings.EqualFold(s, ext) {
 			return true
 		}
 	}
