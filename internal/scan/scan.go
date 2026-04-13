@@ -71,7 +71,7 @@ func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Confi
 	var results []ScanResult
 	collectScanTargets(root, &results)
 	if len(results) == 0 {
-		cfg.EmitProgress(config.ProgressNormal, "[scan] no scan targets discovered")
+		cfg.EmitProgress(config.ProgressNormal, "[scan] no scan tasks discovered")
 		return results, nil
 	}
 
@@ -83,7 +83,7 @@ func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Confi
 	extractedIndices, nativeIndices := partitionScanTargets(root, results)
 	cfg.EmitProgress(
 		config.ProgressNormal,
-		"[scan] starting %d scan workers for %d targets (%d extracted, %d syft-native)",
+		"[scan] starting %d scan workers for %d tasks (%d extracted, %d syft-native)",
 		numWorkers,
 		len(results),
 		len(extractedIndices),
@@ -102,7 +102,7 @@ func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Confi
 		} else {
 			directNativeIndices = unresolvedNativeIndices
 			if reusedCount > 0 {
-				cfg.EmitProgress(config.ProgressNormal, "[scan] reused %d syft-native targets from extracted directory scans", reusedCount)
+				cfg.EmitProgress(config.ProgressNormal, "[scan] reused %d syft-native tasks from extracted directory scans", reusedCount)
 			}
 		}
 	}
@@ -143,9 +143,10 @@ const (
 )
 
 type scanProgressTracker struct {
-	mu         sync.Mutex
-	completed  int
-	nextUpdate time.Time
+	mu              sync.Mutex
+	completed        int
+	totalComponents  int
+	nextUpdate       time.Time
 }
 
 func newScanProgressTracker(label string) *scanProgressTracker {
@@ -156,7 +157,7 @@ func newScanProgressTracker(label string) *scanProgressTracker {
 	return &scanProgressTracker{nextUpdate: time.Now().Add(scanNativeProgressInterval)}
 }
 
-func (tracker *scanProgressTracker) markCompleted(cfg config.Config, total int) {
+func (tracker *scanProgressTracker) markCompleted(cfg config.Config, total int, components int) {
 	if tracker == nil || total < 1 {
 		return
 	}
@@ -165,12 +166,13 @@ func (tracker *scanProgressTracker) markCompleted(cfg config.Config, total int) 
 	defer tracker.mu.Unlock()
 
 	tracker.completed++
+	tracker.totalComponents += components
 	now := time.Now()
 	if tracker.completed < total && now.Before(tracker.nextUpdate) {
 		return
 	}
 
-	cfg.EmitProgress(config.ProgressNormal, "[scan-native] completed %d/%d targets", tracker.completed, total)
+	cfg.EmitProgress(config.ProgressNormal, "[scan-native] completed %d/%d tasks → \033[1m%d component(s)\033[0m", tracker.completed, total, tracker.totalComponents)
 	tracker.nextUpdate = now.Add(scanNativeProgressInterval)
 }
 
@@ -221,18 +223,17 @@ func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, resu
 					close(done)
 
 					duration := time.Since(start).Round(time.Millisecond)
-					progressTracker.markCompleted(cfg, len(indices))
+					componentCount := 0
+					if results[task.resultIndex].Error == nil && results[task.resultIndex].BOM != nil && results[task.resultIndex].BOM.Components != nil {
+						componentCount = len(*results[task.resultIndex].BOM.Components)
+					}
+					progressTracker.markCompleted(cfg, len(indices), componentCount)
 					if results[task.resultIndex].Error != nil {
 						cfg.EmitProgress(config.ProgressNormal, "[%s] task %d/%d failed after %s: %s (%v)", label, task.ordinal, len(indices), duration, nodePath, results[task.resultIndex].Error)
 						continue
 					}
-
-					componentCount := 0
-					if results[task.resultIndex].BOM != nil && results[task.resultIndex].BOM.Components != nil {
-						componentCount = len(*results[task.resultIndex].BOM.Components)
-					}
 					if shouldLogScanCompletion(label, duration) {
-						cfg.EmitProgress(config.ProgressVerbose, "[%s] task %d/%d done in %s: %s (%d components)", label, task.ordinal, len(indices), duration, nodePath, componentCount)
+						cfg.EmitProgress(config.ProgressVerbose, "[%s] task %d/%d done in %s: %s → \033[1m%d component(s)\033[0m", label, task.ordinal, len(indices), duration, nodePath, componentCount)
 					}
 				}
 			}
