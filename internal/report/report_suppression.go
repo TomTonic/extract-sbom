@@ -113,15 +113,21 @@ func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionReco
 // suppressionLinkCandidate is one surviving indexed component considered as a
 // replacement link target for suppressed records.
 type suppressionLinkCandidate struct {
-	BOMRef  string
-	Name    string
+	// BOMRef is the surviving component bom-ref used as report anchor target.
+	BOMRef string
+	// Name is the surviving component name in plain text.
+	Name string
+	// FoundBy is the cataloger/source identifier; empty means unknown.
 	FoundBy string
-	Score   int
+	// Score ranks replacement quality. Valid range: >= 0; larger is better.
+	Score int
 }
 
 // suppressionLinkResolver provides delivery-path-based lookup from suppressed
 // records to surviving indexed components.
 type suppressionLinkResolver struct {
+	// byDeliveryPath maps one logical delivery path to ranked replacement
+	// candidates. Map keys and contained path-like values use "/" separators.
 	byDeliveryPath map[string][]suppressionLinkCandidate
 }
 
