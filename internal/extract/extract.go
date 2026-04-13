@@ -520,8 +520,8 @@ func extractTAR(ctx context.Context, node *ExtractionNode, filePath string, read
 		header := safeguard.EntryHeader{
 			Name:             hdr.Name,
 			UncompressedSize: hdr.Size,
-			Mode:             hdr.FileInfo().Mode(),
-			IsDir:            hdr.Typeflag == tar.TypeDir,
+			Mode:             os.FileMode(hdr.Mode),
+			IsDir:            hdr.Typeflag == tar.TypeDir || strings.HasSuffix(hdr.Name, "/"),
 			IsSymlink:        hdr.Typeflag == tar.TypeSymlink,
 			LinkTarget:       hdr.Linkname,
 		}
