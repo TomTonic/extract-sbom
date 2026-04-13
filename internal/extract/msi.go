@@ -292,6 +292,9 @@ func parseMSIPropertyTable(tableReader io.Reader, stringPool []string, maxStream
 	return result, nil
 }
 
+// readAllLimited reads an entire stream but enforces a strict byte limit.
+// It returns an explicit error when the stream exceeds maxBytes so MSI parsing
+// cannot accidentally materialize unbounded metadata streams.
 func readAllLimited(reader io.Reader, maxBytes int64, streamName string) ([]byte, error) {
 	if maxBytes < 1 {
 		return nil, fmt.Errorf("invalid read limit %d for stream %s", maxBytes, streamName)
