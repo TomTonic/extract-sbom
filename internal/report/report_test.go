@@ -906,6 +906,34 @@ func TestWriteSuppressionReportUsesUniformTablesSortedAndLinked(t *testing.T) {
 	}
 }
 
+func TestWriteSuppressionReportExplainsMissingSuppressedByLink(t *testing.T) {
+	t.Parallel()
+
+	bom := &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:KNOWN_COMP",
+			Type:       cdx.ComponentTypeLibrary,
+			Name:       "known",
+			PackageURL: "pkg:generic/known@1.0.0",
+			Version:    "1.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "known/path"}},
+		},
+	}}
+
+	suppressions := []assembly.SuppressionRecord{
+		{Reason: assembly.SuppressionFSArtifact, DeliveryPath: "missing/path", Component: cdx.Component{Name: "supp-missing"}},
+	}
+
+	var buf bytes.Buffer
+	writeSuppressionReport(&buf, suppressions, bom, getTranslations("en"))
+	output := buf.String()
+
+	want := "| `missing/path` | `supp-missing` | *removed by normalization rule; no surviving package component exists for this delivery path (see [Component Occurrence Index](#component-occurrence-index))* |"
+	if !strings.Contains(output, want) {
+		t.Fatalf("missing italic suppressed-by explanation for unresolved link. want row %q", want)
+	}
+}
+
 // TestGenerateMachineProducesValidJSON verifies that the machine-readable
 // report is valid JSON with the expected schema.
 func TestGenerateMachineProducesValidJSON(t *testing.T) {

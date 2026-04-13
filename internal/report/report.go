@@ -666,6 +666,9 @@ type translations struct {
 	noExtensionFilteredFiles            string
 	componentIndexWithPURLSubsection    string
 	componentIndexWithoutPURLSubsection string
+	suppressedByNoIndexedMatch          string
+	suppressedByAmbiguousIndexedMatch   string
+	suppressedByReplacementNotIndexed   string
 }
 
 func getTranslations(lang string) translations {
@@ -785,6 +788,9 @@ func getTranslations(lang string) translations {
 			noExtensionFilteredFiles:            "In diesem Durchlauf wurden keine Dateien durch den Dateiendungsfilter ausgeschlossen.",
 			componentIndexWithPURLSubsection:    "Komponenten mit PURL",
 			componentIndexWithoutPURLSubsection: "Komponenten ohne PURL",
+			suppressedByNoIndexedMatch:          "durch Normalisierungsregel entfernt; für diesen Lieferpfad existiert keine überlebende Paketkomponente (siehe [Komponentenindex](#component-occurrence-index))",
+			suppressedByAmbiguousIndexedMatch:   "durch Normalisierungsregel entfernt; mehrere überlebende Paketkomponenten passen zu diesem Lieferpfad, daher erfolgt keine unsichere 1:1-Zuordnung (siehe [Komponentenindex](#component-occurrence-index))",
+			suppressedByReplacementNotIndexed:   "durch Normalisierungsregel ersetzt; Ziel ist ein nicht indizierter Struktur-/Container-Eintrag (siehe [Extraktionsprotokoll](#extraction-log))",
 		}
 	default:
 		return translations{
@@ -901,6 +907,9 @@ func getTranslations(lang string) translations {
 			noExtensionFilteredFiles:            "No files were excluded by the extension filter in this run.",
 			componentIndexWithPURLSubsection:    "Components with PURL",
 			componentIndexWithoutPURLSubsection: "Components without PURL",
+			suppressedByNoIndexedMatch:          "removed by normalization rule; no surviving package component exists for this delivery path (see [Component Occurrence Index](#component-occurrence-index))",
+			suppressedByAmbiguousIndexedMatch:   "removed by normalization rule; multiple surviving package components match this delivery path, so no unsafe 1:1 assignment is made (see [Component Occurrence Index](#component-occurrence-index))",
+			suppressedByReplacementNotIndexed:   "replaced by normalization rule; target is a non-indexed structural/container entry (see [Extraction Log](#extraction-log))",
 		}
 	}
 }
@@ -1296,29 +1305,29 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "When a package identity exists for the same file, the actionable record is the surviving component in the Component Occurrence Index.")
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, fsArtifacts, resolver)
+	writeSuppressionReasonTable(w, fsArtifacts, resolver, t)
 
 	// Low-value file artifacts.
 	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchorSuppressionLowValue)
 	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonLowValueFile, len(lowValue))
 	fmt.Fprintln(w, "Operational meaning: these raw file records had no PURL, no version, and no identifying cataloger metadata. They do not support package-level CVE correlation and are therefore excluded from the SBOM package view.")
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, lowValue, resolver)
+	writeSuppressionReasonTable(w, lowValue, resolver, t)
 
 	// Weak duplicates.
 	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonWeakDuplicate, len(weakDups))
 	fmt.Fprintln(w, "Operational meaning: at the same delivery/evidence locus a stronger package record existed. The weaker placeholder was removed so that the final SBOM keeps the more attributable identity.")
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, weakDups, resolver)
+	writeSuppressionReasonTable(w, weakDups, resolver, t)
 
 	// PURL duplicates across scan nodes or evidence variants.
 	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonPURLDuplicate, len(purlDups))
 	fmt.Fprintln(w, "Operational meaning: several raw observations described the same package identity. One representative was kept, and the surviving component in the Component Occurrence Index carries the retained leaf-most delivery and evidence paths. Use this table only when you need to audit why duplicate raw observations collapsed into one package component.")
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, purlDups, resolver)
+	writeSuppressionReasonTable(w, purlDups, resolver, t)
 }
 
-func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionRecord, resolver suppressionLinkResolver) {
+func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionRecord, resolver suppressionLinkResolver, t translations) {
 	fmt.Fprintln(w, "| Delivery path | Suppressed component name | Suppressed by |")
 	fmt.Fprintln(w, "|---|---|---|")
 	if len(records) == 0 {
@@ -1341,7 +1350,7 @@ func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionReco
 		fmt.Fprintf(w, "| `%s` | `%s` | %s |\n",
 			escapeMarkdownCell(r.DeliveryPath),
 			escapeMarkdownCell(suppressedName),
-			suppressedByCell(r, resolver),
+			suppressedByCell(r, resolver, t),
 		)
 	}
 	fmt.Fprintln(w)
@@ -1417,10 +1426,10 @@ func suppressionLinkCandidateScore(comp cdx.Component) int {
 	return score
 }
 
-func (r suppressionLinkResolver) resolve(record assembly.SuppressionRecord) string {
+func (r suppressionLinkResolver) resolve(record assembly.SuppressionRecord, t translations) (string, string) {
 	candidates := r.byDeliveryPath[record.DeliveryPath]
 	if len(candidates) == 0 {
-		return ""
+		return "", t.suppressedByNoIndexedMatch
 	}
 
 	if record.KeptName != "" {
@@ -1432,17 +1441,25 @@ func (r suppressionLinkResolver) resolve(record assembly.SuppressionRecord) stri
 			if record.KeptFoundBy != "" && candidate.FoundBy != record.KeptFoundBy {
 				continue
 			}
-			return candidate.BOMRef
+			return candidate.BOMRef, ""
 		}
+		return "", t.suppressedByReplacementNotIndexed
 	}
 
-	return candidates[0].BOMRef
+	if len(candidates) == 1 {
+		return candidates[0].BOMRef, ""
+	}
+
+	return "", t.suppressedByAmbiguousIndexedMatch
 }
 
-func suppressedByCell(record assembly.SuppressionRecord, resolver suppressionLinkResolver) string {
-	bomRef := resolver.resolve(record)
+func suppressedByCell(record assembly.SuppressionRecord, resolver suppressionLinkResolver, t translations) string {
+	bomRef, reason := resolver.resolve(record, t)
 	if bomRef == "" {
-		return "-"
+		if reason == "" {
+			reason = t.suppressedByNoIndexedMatch
+		}
+		return fmt.Sprintf("*%s*", escapeMarkdownCell(reason))
 	}
 	return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(bomRef), occurrenceAnchorID(bomRef))
 }
