@@ -21,10 +21,23 @@ mkdir -p out
 grype sbom:out/vendor-delivery.cdx.json --output json > out/delivery.grype.json
 
 # 3) Extract only High/Critical findings
-jq '.matches[] | select(.vulnerability.severity == "High" or .vulnerability.severity == "Critical") | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' out/delivery.grype.json
+jq '
+  .matches[]
+  | select(
+      .vulnerability.severity == "High"
+      or .vulnerability.severity == "Critical"
+    )
+  | {
+      artifact_id: .artifact.id,
+      package: .artifact.name,
+      version: .artifact.version,
+      vulnerability: .vulnerability.id,
+      severity: .vulnerability.severity
+    }
+' out/delivery.grype.json
 ```
 
-Example output (one match):
+Example output of jq command (one match):
 
 ```json
 {
@@ -212,6 +225,17 @@ temp (`/tmp` on Linux/macOS). Useful for:
 - Performance: use fast local SSD instead of network mount
 - Debugging: inspect unprocessed extractions (preserved if scan fails)
 - Disk isolation: keep temporary files separate from output
+
+**Configuration sources & precedence**
+
+Configuration is resolved in the following order (highest → lowest):
+
+1. Command-line flags
+2. Environment variables (prefix `EXTRACT_SBOM_`, e.g. `EXTRACT_SBOM_OUTPUT_DIR`)
+3. Configuration file (explicit `--config` or auto-discovered `.extract-sbom.yaml` / `.extract-sbom.yml` in the current directory or the user's home directory)
+4. Built-in defaults
+
+Command-line flags override environment variables and configuration file values.
 
 **`--config`**
 
