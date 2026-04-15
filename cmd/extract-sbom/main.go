@@ -142,7 +142,7 @@ Configuration can be set via:
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", ".", "Target directory for SBOM and report output")
 	cmd.Flags().StringVar(&workDir, "work-dir", defaults.WorkDir, "Base directory for temporary extraction work")
 	cmd.Flags().StringVar(&sbomFormat, "format", "cyclonedx-json", "SBOM output format")
-	cmd.Flags().StringVar(&policyStr, "policy", "strict", "Policy mode: strict (abort on limit) or partial (skip and continue)")
+	cmd.Flags().StringVar(&policyStr, "policy", "partial", "Policy mode: partial (skip issue and continue) or strict (abort)")
 	cmd.Flags().StringVar(&modeStr, "mode", "installer-semantic", "Interpretation mode: physical or installer-semantic")
 	cmd.Flags().StringVar(&reportStr, "report", "human", "Report output mode: human, machine, or both")
 	cmd.Flags().StringVar(&progress, "progress", "normal", "Progress output verbosity: quiet, normal, or verbose")
