@@ -352,11 +352,11 @@ func TestRunWithReadOnlyOutputDir(t *testing.T) {
 	cfg.ReportMode = config.ReportBoth
 
 	// Make output dir read-only to force write failures.
-	if err := os.Chmod(outDir, 0o555); err != nil {
+	if err := os.Chmod(outDir, 0o555); err != nil { //nolint:gosec // test: intentionally restrictive
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		os.Chmod(outDir, 0o750) //nolint:errcheck // best-effort cleanup
+		_ = os.Chmod(outDir, 0o750) //nolint:gosec // test: cleanup
 	})
 
 	result := Run(context.Background(), cfg)
@@ -431,7 +431,7 @@ func TestRunReportBothBlockedMachineTriggersRewrite(t *testing.T) {
 // the input file unreadable (os.Stat succeeds but open-for-read fails).
 func TestRunHashError(t *testing.T) {
 	origFunc := computeInputSummaryFunc
-	computeInputSummaryFunc = func(path string) (report.InputSummary, error) {
+	computeInputSummaryFunc = func(_ string) (report.InputSummary, error) {
 		return report.InputSummary{}, errors.New("injected hash error")
 	}
 	t.Cleanup(func() { computeInputSummaryFunc = origFunc })
@@ -457,7 +457,7 @@ func TestRunHashError(t *testing.T) {
 // TestRunScanError exercises the scan error path by injecting a failing ScanAll.
 func TestRunScanError(t *testing.T) {
 	origFunc := scanAllFunc
-	scanAllFunc = func(ctx context.Context, root *extract.ExtractionNode, cfg config.Config) ([]scan.ScanResult, error) {
+	scanAllFunc = func(_ context.Context, _ *extract.ExtractionNode, _ config.Config) ([]scan.ScanResult, error) {
 		return nil, errors.New("injected scan error")
 	}
 	t.Cleanup(func() { scanAllFunc = origFunc })
@@ -487,7 +487,7 @@ func TestRunScanError(t *testing.T) {
 // TestRunAssemblyError exercises the assembly error path by injecting a failing Assemble.
 func TestRunAssemblyError(t *testing.T) {
 	origFunc := assembleFunc
-	assembleFunc = func(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.Config) (*cdx.BOM, []assembly.SuppressionRecord, error) {
+	assembleFunc = func(_ *extract.ExtractionNode, _ []scan.ScanResult, _ config.Config) (*cdx.BOM, []assembly.SuppressionRecord, error) {
 		return nil, nil, errors.New("injected assembly error")
 	}
 	t.Cleanup(func() { assembleFunc = origFunc })

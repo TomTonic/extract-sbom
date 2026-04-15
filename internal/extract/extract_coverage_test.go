@@ -259,8 +259,8 @@ func TestExtractZIPWithDirectoryEntries(t *testing.T) {
 	// Add a directory entry.
 	hdr := &zip.FileHeader{Name: "subdir/"}
 	hdr.SetMode(os.ModeDir | 0o750)
-	if _, err := w.CreateHeader(hdr); err != nil {
-		t.Fatal(err)
+	if _, errCreateHdr := w.CreateHeader(hdr); errCreateHdr != nil {
+		t.Fatal(errCreateHdr)
 	}
 
 	// Add a file in that directory.
@@ -268,8 +268,8 @@ func TestExtractZIPWithDirectoryEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fw.Write([]byte("content")); err != nil {
-		t.Fatal(err)
+	if _, errWrite := fw.Write([]byte("content")); errWrite != nil {
+		t.Fatal(errWrite)
 	}
 
 	w.Close()
@@ -306,24 +306,24 @@ func TestExtractTARWithDirectoryEntries(t *testing.T) {
 
 	tw := tar.NewWriter(f)
 	// Explicit TypeDir entry.
-	if err := tw.WriteHeader(&tar.Header{
+	if errDirHdr := tw.WriteHeader(&tar.Header{
 		Name:     "subdir/",
 		Typeflag: tar.TypeDir,
 		Mode:     0o750,
-	}); err != nil {
-		t.Fatal(err)
+	}); errDirHdr != nil {
+		t.Fatal(errDirHdr)
 	}
 	// Regular file.
 	content := []byte("hello")
-	if err := tw.WriteHeader(&tar.Header{
+	if errFileHdr := tw.WriteHeader(&tar.Header{
 		Name: "subdir/file.txt",
 		Mode: 0o644,
 		Size: int64(len(content)),
-	}); err != nil {
-		t.Fatal(err)
+	}); errFileHdr != nil {
+		t.Fatal(errFileHdr)
 	}
-	if _, err := tw.Write(content); err != nil {
-		t.Fatal(err)
+	if _, errTarWrite := tw.Write(content); errTarWrite != nil {
+		t.Fatal(errTarWrite)
 	}
 	tw.Close()
 	f.Close()

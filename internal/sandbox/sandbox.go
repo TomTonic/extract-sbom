@@ -245,10 +245,11 @@ func (d *DeniedSandbox) Run(_ context.Context, cmd string, _ []string, _ string,
 // newBwrapSandboxFunc is the factory used by Resolve to create a
 // BwrapSandbox. Tests can override this to simulate bwrap absence on
 // platforms where bwrap is actually installed.
-var newBwrapSandboxFunc = func() *BwrapSandbox {
-	return NewBwrapSandbox()
-}
+var newBwrapSandboxFunc = NewBwrapSandbox
 
+// Resolve returns the appropriate Sandbox implementation for the given configuration.
+// It attempts to use bwrap (bubblewrap) for sandboxed extraction if available,
+// otherwise returns a passthrough sandbox if --unsafe mode is enabled.
 func Resolve(cfg config.Config) (Sandbox, error) {
 	bwrap := newBwrapSandboxFunc()
 	if bwrap.Available() {
