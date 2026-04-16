@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/CycloneDX/cyclonedx-go v0.10.0
 	github.com/anchore/syft v1.42.4
-	github.com/glebarez/go-sqlite v1.20.3
+	github.com/glebarez/go-sqlite v1.22.0
 	github.com/richardlehane/mscfb v1.0.6
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
