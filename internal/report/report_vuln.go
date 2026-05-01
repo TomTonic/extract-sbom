@@ -9,6 +9,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
+// vulnerabilitySummaryRow holds one resolved-vulnerability row for the summary table.
 type vulnerabilitySummaryRow struct {
 	Severity        string
 	VulnerabilityID string
@@ -16,6 +17,8 @@ type vulnerabilitySummaryRow struct {
 	Package         string
 }
 
+// writeVulnerabilitySummary renders the vulnerability enrichment section to w,
+// including state, grype version, and a per-severity summary table.
 func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []componentOccurrence) {
 	if data.Vulnerabilities == nil {
 		fmt.Fprintln(w, "- Vulnerability enrichment: not requested")
@@ -56,6 +59,8 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 	}
 }
 
+// buildVulnerabilitySummaryRows builds the sorted vulnerability rows from the
+// grype result, correlating matches to component occurrences by bom-ref.
 func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOccurrence) []vulnerabilitySummaryRow {
 	if v == nil || len(v.MatchesByBOMRef) == 0 {
 		return nil
@@ -89,6 +94,8 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 	return rows
 }
 
+// writeOccurrenceVulnerabilityBlock renders the per-component vulnerability
+// detail block within the component occurrence index section.
 func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *vulnscan.Result) {
 	if v == nil || v.State == vulnscan.StateNotRequested {
 		return
@@ -133,6 +140,7 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 	fmt.Fprintln(w, "- Vulnerability status: `none`")
 }
 
+// normalizeSeverity lowercases and trims raw, returning "unknown" for empty input.
 func normalizeSeverity(raw string) string {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	switch s {
@@ -146,6 +154,7 @@ func normalizeSeverity(raw string) string {
 	}
 }
 
+// severityRank returns a numeric sort key for raw severity (0=critical … 5=unknown).
 func severityRank(raw string) int {
 	s := normalizeSeverity(raw)
 	switch s {
@@ -164,6 +173,7 @@ func severityRank(raw string) int {
 	}
 }
 
+// emptyDash returns v unchanged, or "-" when v is empty.
 func emptyDash(v string) string {
 	if strings.TrimSpace(v) == "" {
 		return "-"
