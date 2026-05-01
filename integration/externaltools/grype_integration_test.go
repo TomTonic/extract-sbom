@@ -129,3 +129,119 @@ JSON
 		}
 	}
 }
+
+// TestGrypeIntegrationBinaryMissing verifies that the orchestrator continues
+// and records state=unavailable when grype is absent from PATH.
+func TestGrypeIntegrationBinaryMissing(t *testing.T) {
+	dir := t.TempDir()
+	emptyBinDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(emptyBinDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Replace PATH entirely so no grype binary can be found.
+	// A plain-zip with a single text file only needs syft (Go library) and no
+	// external archiving tools, so replacing PATH is safe for this input.
+	t.Setenv("PATH", emptyBinDir)
+
+	input := createZIPInput(t, dir, "delivery.zip", map[string]string{
+		"README.txt": "hello",
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = input
+	cfg.OutputDir = dir
+	cfg.ReportMode = config.ReportBoth
+	cfg.Unsafe = true
+	cfg.GrypeEnabled = true
+
+	result := orchestrator.Run(context.Background(), cfg)
+	if result.Error != nil {
+		t.Fatalf("orchestrator run failed: %v", result.Error)
+	}
+	if result.ExitCode == orchestrator.ExitHardSecurity {
+		t.Fatalf("unexpected hard-security exit: %d", result.ExitCode)
+	}
+
+	humanReport := filepath.Join(dir, "delivery.report.md")
+	rawHuman, err := os.ReadFile(humanReport)
+	if err != nil {
+		t.Fatalf("read human report: %v", err)
+	}
+	if !strings.Contains(string(rawHuman), "Vulnerability enrichment state: `unavailable`") {
+		t.Fatalf("human report should record unavailable state; got:\n%s", string(rawHuman))
+	}
+
+	machineReport := filepath.Join(dir, "delivery.report.json")
+	rawMachine, err := os.ReadFile(machineReport)
+	if err != nil {
+		t.Fatalf("read machine report: %v", err)
+	}
+	for _, want := range []string{
+		`"state": "unavailable"`,
+		`"requested": true`,
+		`"grype-not-found"`,
+	} {
+		if !strings.Contains(string(rawMachine), want) {
+			t.Fatalf("machine report missing %q\nfull output:\n%s", want, string(rawMachine))
+		}
+	}
+}
+
+// TestGrypeIntegrationInvalidJSON verifies that invalid JSON output from grype
+// results in state=unavailable with the grype-parse error code recorded and
+// that report generation still completes successfully.
+func TestGrypeIntegrationInvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	writeExecutable(t, binDir, "grype", `
+echo "this is not valid json"
+`)
+	prependPath(t, binDir)
+
+	input := createZIPInput(t, dir, "delivery.zip", map[string]string{
+		"README.txt": "hello",
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = input
+	cfg.OutputDir = dir
+	cfg.ReportMode = config.ReportBoth
+	cfg.Unsafe = true
+	cfg.GrypeEnabled = true
+
+	result := orchestrator.Run(context.Background(), cfg)
+	if result.Error != nil {
+		t.Fatalf("orchestrator run failed: %v", result.Error)
+	}
+	if result.ExitCode == orchestrator.ExitHardSecurity {
+		t.Fatalf("unexpected hard-security exit: %d", result.ExitCode)
+	}
+
+	humanReport := filepath.Join(dir, "delivery.report.md")
+	rawHuman, err := os.ReadFile(humanReport)
+	if err != nil {
+		t.Fatalf("read human report: %v", err)
+	}
+	if !strings.Contains(string(rawHuman), "Vulnerability enrichment state: `unavailable`") {
+		t.Fatalf("human report should record unavailable state; got:\n%s", string(rawHuman))
+	}
+
+	machineReport := filepath.Join(dir, "delivery.report.json")
+	rawMachine, err := os.ReadFile(machineReport)
+	if err != nil {
+		t.Fatalf("read machine report: %v", err)
+	}
+	for _, want := range []string{
+		`"state": "unavailable"`,
+		`"requested": true`,
+		`"grype-parse"`,
+	} {
+		if !strings.Contains(string(rawMachine), want) {
+			t.Fatalf("machine report missing %q\nfull output:\n%s", want, string(rawMachine))
+		}
+	}
+}

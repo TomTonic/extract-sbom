@@ -101,4 +101,45 @@ if jq -e '[.components[]? | .properties[]? | select(.name == "extract-sbom:deliv
 fi
 echo "  ok: plain PDF absent"
 
+echo "--- grype vulnerability roundtrip ---"
+if command -v grype >/dev/null 2>&1; then
+  grype_out_dir="$out_dir/grype-roundtrip"
+  mkdir -p "$grype_out_dir"
+
+  set +e
+  "$candidate" --grype --report both --unsafe --output-dir "$grype_out_dir" --root-name "vendor-suite" "$input_zip"
+  grype_exit=$?
+  set -e
+
+  if [[ "$grype_exit" -ne 0 && "$grype_exit" -ne 1 ]]; then
+    echo "FAIL: unexpected exit code with --grype: $grype_exit"
+    exit 1
+  fi
+
+  grype_sbom_path="$grype_out_dir/vendor-suite-3.2.cdx.json"
+  grype_report_md="$grype_out_dir/vendor-suite-3.2.report.md"
+  grype_report_json="$grype_out_dir/vendor-suite-3.2.report.json"
+
+  [[ -f "$grype_sbom_path" ]]   || { echo "FAIL: missing SBOM with --grype";           exit 1; }
+  [[ -f "$grype_report_md" ]]   || { echo "FAIL: missing human report with --grype";   exit 1; }
+  [[ -f "$grype_report_json" ]] || { echo "FAIL: missing machine report with --grype"; exit 1; }
+
+  jq -e '.vulnerabilities.state == "completed"' "$grype_report_json" >/dev/null
+  echo "  ok: vulnerabilities.state == completed"
+
+  jq -e '(.vulnerabilities.grypeVersion | type == "string") and (.vulnerabilities.grypeVersion | length > 0)' \
+    "$grype_report_json" >/dev/null
+  echo "  ok: grypeVersion present in machine report"
+
+  jq -e '.vulnerabilities.requested == true' "$grype_report_json" >/dev/null
+  echo "  ok: vulnerabilities.requested == true"
+
+  grep -q "Vulnerability" "$grype_report_md"
+  echo "  ok: human report contains Vulnerability section"
+
+  echo "  grype roundtrip passed"
+else
+  echo "  skipped: grype not installed"
+fi
+
 echo "release candidate passed release test"
