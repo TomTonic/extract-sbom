@@ -6,6 +6,8 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
+// TestNormalizeSeverity verifies that normalizeSeverity trims, lowercases, and
+// maps empty input to "unknown" without altering unrecognised severity strings.
 func TestNormalizeSeverity(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -24,6 +26,8 @@ func TestNormalizeSeverity(t *testing.T) {
 	}
 }
 
+// TestApplyCoverage verifies that applyCoverage classifies bom-refs as found,
+// none, or not-assessable based on match presence and PURL/CPE availability.
 func TestApplyCoverage(t *testing.T) {
 	t.Parallel()
 	bom := &cdx.BOM{Components: &[]cdx.Component{
@@ -50,6 +54,8 @@ func TestApplyCoverage(t *testing.T) {
 	}
 }
 
+// TestRunNotRequested verifies that Run returns a non-nil result with
+// StateNotRequested and Requested=false when enabled is false.
 func TestRunNotRequested(t *testing.T) {
 	t.Parallel()
 	res := Run(t.Context(), "", false, nil)
