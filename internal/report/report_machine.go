@@ -1,6 +1,8 @@
-// This file implements the machine-readable JSON report. GenerateMachine and
-// all supporting types and builder functions for JSON serialization live here
-// so that report.go stays focused on human-readable output.
+// Package report implements extract-sbom audit report generation.
+//
+// This file contains machine-readable JSON report rendering. GenerateMachine
+// and its supporting types/builders live here so report.go can stay focused on
+// human-readable output.
 package report
 
 import (

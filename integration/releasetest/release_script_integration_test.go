@@ -119,11 +119,21 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 		if out, err := build.CombinedOutput(); err != nil {
 			t.Fatalf("build failed: %v\n%s", err, string(out))
 		}
+	} else {
+		if strings.Contains(candidate, string(os.PathSeparator)) {
+			t.Fatalf("RELEASE_TEST_CANDIDATE must be a command name without path separators: %q", candidate)
+		}
+		resolved, err := exec.LookPath(candidate)
+		if err != nil {
+			t.Fatalf("RELEASE_TEST_CANDIDATE not found in PATH: %v", err)
+		}
+		candidate = resolved
 	}
 
 	inputZip := filepath.Join(repoRoot, "integration", "vendorsuite", "testdata", "vendor-suite-3.2.zip")
 	outDir := t.TempDir()
 
+	// #nosec G702 -- candidate is either locally built or resolved via LookPath after validation.
 	cmd := exec.Command(candidate,
 		"--grype",
 		"--report", "both",
@@ -137,9 +147,8 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 	cmd.Stderr = &combined
 
 	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			// exit 1 means policy findings — acceptable
-		} else {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() != 1 {
 			t.Fatalf("extract-sbom --grype failed: %v\n%s", err, combined.String())
 		}
 	}
@@ -166,8 +175,8 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 			GrypeVersion string `json:"grypeVersion"`
 		} `json:"vulnerabilities"`
 	}
-	if err := json.Unmarshal(raw, &report); err != nil {
-		t.Fatalf("parsing machine report JSON: %v", err)
+	if unmarshalErr := json.Unmarshal(raw, &report); unmarshalErr != nil {
+		t.Fatalf("parsing machine report JSON: %v", unmarshalErr)
 	}
 
 	if report.Vulnerabilities.State != "completed" {

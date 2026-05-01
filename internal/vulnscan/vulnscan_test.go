@@ -12,8 +12,12 @@ func writeExecutable(t *testing.T, dir, name, body string) {
 	t.Helper()
 	path := filepath.Join(dir, name)
 	content := "#!/bin/sh\nset -eu\n" + body + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write executable %s: %v", path, err)
+	}
+	// #nosec G302 -- test helper script must be executable for command-based integration tests.
+	if err := os.Chmod(path, 0o700); err != nil {
+		t.Fatalf("chmod executable %s: %v", path, err)
 	}
 }
 

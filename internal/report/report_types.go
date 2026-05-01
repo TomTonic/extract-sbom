@@ -1,6 +1,7 @@
-// This file defines all shared data types and rendering-helper types used
-// throughout the report package, together with the canonical Markdown anchor
-// constants referenced by the human report renderer.
+// Package report implements extract-sbom audit report generation.
+//
+// This file defines shared report data types and rendering helpers, including
+// canonical Markdown anchor constants used by the human report renderer.
 package report
 
 import (
