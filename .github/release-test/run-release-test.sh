@@ -74,12 +74,17 @@ echo "  ok: MSI name, version, and product-code present"
 
 echo "--- checking npm package from 7z ---"
 jq -e '
-  .components[]? |
-  select(.name == "minimist" and .version == "0.0.8") |
-  (.properties // []) | any(
-    .name == "extract-sbom:delivery-path" and (.value | endswith(".7z"))
+  [.components[]? | select(.name == "minimist" and .version == "0.0.8") | ."bom-ref"] as $minimist_refs |
+  [.components[]? |
+    select((.properties // []) | any(.name == "extract-sbom:delivery-path" and (.value | endswith("webapp-patch-1.2.1.7z")))) |
+    ."bom-ref"] as $sevenz_refs |
+  ($minimist_refs | length > 0) and
+  ($sevenz_refs | length > 0) and
+  any(.dependencies[]?;
+    (.ref as $r | ($sevenz_refs | index($r)) != null) and
+    ((.dependsOn // []) | any(. as $d | ($minimist_refs | index($d)) != null))
   )' "$sbom_path" >/dev/null
-echo "  ok: minimist@0.0.8 attributed to .7z"
+echo "  ok: minimist@0.0.8 linked from webapp-patch-1.2.1.7z"
 
 echo "--- checking excluded files are absent ---"
 # data1.hdr must not appear (companion file, not an archive — D1 fix)
