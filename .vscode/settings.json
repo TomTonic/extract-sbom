@@ -3,6 +3,7 @@
         "go": true,
         "golangci-lint": true,
         "uniq": true,
-        "gofmt": true
+        "gofmt": true,
+        "markdownlint-cli2": true
     }
 }
