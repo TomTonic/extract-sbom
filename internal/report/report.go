@@ -23,6 +23,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
 	"github.com/TomTonic/extract-sbom/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // InputSummary describes the inspected input artifact.
@@ -83,6 +84,8 @@ type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 	Tree *extract.ExtractionNode
 	// Scans contains one entry per submitted scan task. It may be empty.
 	Scans []scan.ScanResult
+	// Vulnerabilities contains optional Grype-based enrichment data.
+	Vulnerabilities *vulnscan.Result
 	// PolicyDecisions contains all policy outcomes in chronological processing
 	// order. It may be empty.
 	PolicyDecisions []policy.Decision
@@ -121,6 +124,9 @@ type componentOccurrence struct {
 	// PURL is the package URL. Empty means this occurrence cannot be matched by
 	// package URL-based tooling.
 	PURL string
+	// CPE is the normalized CPE string when present on the SBOM component.
+	// It is used for vulnerability-assessability decisions.
+	CPE string
 	// DeliveryPaths are logical supplier-delivery paths ("/"-separated,
 	// leaf-most, deduplicated). Empty is invalid for indexed occurrences.
 	DeliveryPaths []string
@@ -355,7 +361,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 
 	// Executive summary and reader guidance.
 	writeSectionHeading(w, t.summarySection, anchorSummary)
-	writeSummary(w, data, extStats, scnStats, polStats, indexStats, t)
+	writeSummary(w, data, extStats, scnStats, polStats, indexStats, occurrences, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.howToUseSection, anchorHowToUse)
@@ -381,7 +387,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
-	writeComponentOccurrenceIndex(w, occurrences, indexStats, t)
+	writeComponentOccurrenceIndex(w, occurrences, indexStats, data.Vulnerabilities, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
@@ -405,6 +411,7 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, data.Config.PolicyMode)
 	fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, data.Config.InterpretMode)
 	fmt.Fprintf(w, "| %s | %s |\n", t.language, data.Config.Language)
+	fmt.Fprintf(w, "| grype | %v |\n", data.Config.GrypeEnabled)
 	fmt.Fprintf(w, "| %s | %d |\n", t.maxDepth, data.Config.Limits.MaxDepth)
 	fmt.Fprintf(w, "| %s | %d |\n", t.maxFiles, data.Config.Limits.MaxFiles)
 	fmt.Fprintf(w, "| %s | %d %s |\n", t.maxTotalSize, data.Config.Limits.MaxTotalSize, t.unitBytes)
@@ -518,13 +525,14 @@ func GenerateMachine(data ReportData, w io.Writer) error {
 			Available: data.SandboxInfo.Available,
 			Unsafe:    data.SandboxInfo.UnsafeOvr,
 		},
-		Extraction: buildMachineTree(data.Tree),
-		Scans:      buildMachineScans(data.Scans),
-		Decisions:  buildMachineDecisions(data.PolicyDecisions),
-		Issues:     data.ProcessingIssues,
-		StartTime:  data.StartTime.UTC().Format(time.RFC3339),
-		EndTime:    data.EndTime.UTC().Format(time.RFC3339),
-		Duration:   data.EndTime.Sub(data.StartTime).String(),
+		Extraction:      buildMachineTree(data.Tree),
+		Scans:           buildMachineScans(data.Scans),
+		Vulnerabilities: buildMachineVulnerabilities(data.Vulnerabilities),
+		Decisions:       buildMachineDecisions(data.PolicyDecisions),
+		Issues:          data.ProcessingIssues,
+		StartTime:       data.StartTime.UTC().Format(time.RFC3339),
+		EndTime:         data.EndTime.UTC().Format(time.RFC3339),
+		Duration:        data.EndTime.Sub(data.StartTime).String(),
 	}
 
 	encoder := json.NewEncoder(w)
@@ -552,6 +560,8 @@ type machineReport struct {
 	Extraction *machineNode `json:"extraction"`
 	// Scans contains one flattened entry per scan task.
 	Scans []machineScan `json:"scans"`
+	// Vulnerabilities contains optional Grype enrichment details.
+	Vulnerabilities *machineVulnerabilities `json:"vulnerabilities,omitempty"`
 	// Decisions contains policy decisions in processing order.
 	Decisions []machineDecision `json:"decisions"`
 	// Issues contains additional processing issues. It is omitted when empty.
@@ -680,6 +690,18 @@ type machineDecision struct {
 	Detail string `json:"detail"`
 }
 
+type machineVulnerabilities struct {
+	State            string                            `json:"state"`
+	Requested        bool                              `json:"requested"`
+	GrypeVersion     string                            `json:"grypeVersion,omitempty"`
+	DBSchemaVersion  string                            `json:"dbSchemaVersion,omitempty"`
+	DBBuilt          string                            `json:"dbBuilt,omitempty"`
+	DBUpdated        string                            `json:"dbUpdated,omitempty"`
+	MatchesByBOMRef  map[string][]vulnscan.VMatch      `json:"matchesByBomRef,omitempty"`
+	CoverageByBOMRef map[string]vulnscan.CoverageState `json:"coverageByBomRef,omitempty"`
+	Errors           []vulnscan.Issue                  `json:"errors,omitempty"`
+}
+
 // buildMachineTree converts the extraction tree to the JSON report node model.
 func buildMachineTree(node *extract.ExtractionNode) *machineNode {
 	if node == nil {
@@ -734,4 +756,21 @@ func buildMachineDecisions(decisions []policy.Decision) []machineDecision {
 		}
 	}
 	return result
+}
+
+func buildMachineVulnerabilities(v *vulnscan.Result) *machineVulnerabilities {
+	if v == nil {
+		return nil
+	}
+	return &machineVulnerabilities{
+		State:            string(v.State),
+		Requested:        v.Requested,
+		GrypeVersion:     v.GrypeVersion,
+		DBSchemaVersion:  v.DBSchemaVersion,
+		DBBuilt:          v.DBBuilt,
+		DBUpdated:        v.DBUpdated,
+		MatchesByBOMRef:  v.MatchesByBOMRef,
+		CoverageByBOMRef: v.CoverageByBOMRef,
+		Errors:           v.Errors,
+	}
 }

@@ -11,7 +11,78 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/identify"
 	"github.com/TomTonic/extract-sbom/internal/policy"
 	"github.com/TomTonic/extract-sbom/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
+
+func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Vulnerability enrichment: not requested") {
+		t.Fatal("summary does not contain default vulnerability enrichment state")
+	}
+}
+
+func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:AAA",
+			Name:       "pkg-a",
+			Version:    "1.0.0",
+			PackageURL: "pkg:maven/a/a@1.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery.zip/pkg-a.jar"}},
+		},
+		{
+			BOMRef:     "extract-sbom:BBB",
+			Name:       "pkg-b",
+			Version:    "2.0.0",
+			PackageURL: "pkg:maven/b/b@2.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery.zip/pkg-b.jar"}},
+		},
+	}}
+	data.Vulnerabilities = &vulnscan.Result{
+		State:        vulnscan.StateCompleted,
+		Requested:    true,
+		GrypeVersion: "0.111.0",
+		MatchesByBOMRef: map[string][]vulnscan.VMatch{
+			"extract-sbom:AAA": {{
+				VulnerabilityID: "CVE-2026-0001",
+				Severity:        "high",
+				DataSource:      "https://example.test/cve-2026-0001",
+				URLs:            []string{"https://nvd.nist.gov/vuln/detail/CVE-2026-0001"},
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	out := buf.String()
+
+	checks := []string{
+		"Vulnerability summary (highest severity first):",
+		"[extract-sbom:AAA](#component-extract-sbom-aaa)",
+		"Vulnerability status: `found` (1)",
+		"`CVE-2026-0001` (HIGH)",
+		"Reference: https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+		"Vulnerability status: `none`",
+	}
+	for _, c := range checks {
+		if !strings.Contains(out, c) {
+			t.Fatalf("report output missing %q", c)
+		}
+	}
+}
 
 // TestGenerateHumanIncludesGeneratorBuildInfo verifies that build metadata
 // for the generator is visible in the human-readable report.

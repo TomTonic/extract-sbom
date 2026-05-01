@@ -173,7 +173,7 @@ func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translatio
 }
 
 // writeSummary renders the headline execution metrics and synthesized findings.
-func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanStats, pol policyStats, idx componentIndexStats, t translations) {
+func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanStats, pol policyStats, idx componentIndexStats, occurrences []componentOccurrence, t translations) {
 	duration := data.EndTime.Sub(data.StartTime).Round(time.Millisecond)
 	retainedPackages := scn.TotalComponents - len(data.Suppressions)
 	if retainedPackages < 0 {
@@ -234,6 +234,8 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 	for _, finding := range findings {
 		fmt.Fprintf(w, "- %s\n", finding)
 	}
+	fmt.Fprintln(w)
+	writeVulnerabilitySummary(w, data, occurrences)
 }
 
 // summarizeFindings derives short, operator-friendly findings from collected
