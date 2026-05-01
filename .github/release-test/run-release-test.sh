@@ -57,7 +57,7 @@ jq -e '
   any($rows[]; (.path | endswith(".tar.gz")) and .status == "extracted")   and
   any($rows[]; (.path | endswith(".tgz"))    and .status == "extracted")   and
   any($rows[]; (.path | endswith(".msi"))    and .status == "extracted")   and
-  any($rows[]; (.path | endswith(".cab") and (.path | contains("prereqs"))) and .status == "extracted") and
+  any($rows[]; (.path | (endswith(".cab") and contains("prereqs"))) and .status == "extracted") and
   any($rows[]; (.path | endswith(".7z"))     and .status == "extracted")' "$sbom_path" >/dev/null
 echo "  ok: all format extraction statuses correct"
 
