@@ -2,6 +2,7 @@ package releasetest
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,4 +93,109 @@ func findRepoRoot(t *testing.T) string {
 		t.Fatalf("could not find repository root from %s: %v", wd, err)
 	}
 	return root
+}
+
+// TestReleaseGrypeRoundtrip runs extract-sbom --grype against the vendor-suite
+// zip and validates that the machine report reports a completed vulnerability
+// enrichment with a non-empty grypeVersion.  The test is skipped when Grype or
+// any other required external tool is absent so it degrades gracefully in
+// environments without the full toolchain.
+func TestReleaseGrypeRoundtrip(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("grype roundtrip test requires linux or darwin")
+	}
+
+	requireExternalToolsOrSkip(t)
+	if _, err := exec.LookPath("grype"); err != nil {
+		t.Skip("skipping grype roundtrip: grype not installed")
+	}
+
+	repoRoot := findRepoRoot(t)
+	candidate := strings.TrimSpace(os.Getenv("RELEASE_TEST_CANDIDATE"))
+	if candidate == "" {
+		candidate = filepath.Join(t.TempDir(), "extract-sbom")
+		build := exec.Command("go", "build", "-trimpath", "-o", candidate, "./cmd/extract-sbom")
+		build.Dir = repoRoot
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build failed: %v\n%s", err, string(out))
+		}
+	} else {
+		if strings.Contains(candidate, string(os.PathSeparator)) {
+			t.Fatalf("RELEASE_TEST_CANDIDATE must be a command name without path separators: %q", candidate)
+		}
+		resolved, err := exec.LookPath(candidate)
+		if err != nil {
+			t.Fatalf("RELEASE_TEST_CANDIDATE not found in PATH: %v", err)
+		}
+		candidate = resolved
+	}
+
+	inputZip := filepath.Join(repoRoot, "integration", "vendorsuite", "testdata", "vendor-suite-3.2.zip")
+	outDir := t.TempDir()
+
+	// #nosec G702 -- candidate is either locally built or resolved via LookPath after validation.
+	cmd := exec.Command(candidate,
+		"--grype",
+		"--report", "both",
+		"--unsafe",
+		"--output-dir", outDir,
+		"--root-name", "vendor-suite",
+		inputZip,
+	)
+	var combined bytes.Buffer
+	cmd.Stdout = &combined
+	cmd.Stderr = &combined
+
+	if err := cmd.Run(); err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok || exitErr.ExitCode() != 1 {
+			t.Fatalf("extract-sbom --grype failed: %v\n%s", err, combined.String())
+		}
+	}
+
+	machineReportPath := filepath.Join(outDir, "vendor-suite-3.2.report.json")
+	humanReportPath := filepath.Join(outDir, "vendor-suite-3.2.report.md")
+
+	if _, err := os.Stat(machineReportPath); err != nil {
+		t.Fatalf("machine report not written: %v", err)
+	}
+	if _, err := os.Stat(humanReportPath); err != nil {
+		t.Fatalf("human report not written: %v", err)
+	}
+
+	raw, err := os.ReadFile(machineReportPath)
+	if err != nil {
+		t.Fatalf("reading machine report: %v", err)
+	}
+
+	var report struct {
+		Vulnerabilities struct {
+			State        string `json:"state"`
+			Requested    bool   `json:"requested"`
+			GrypeVersion string `json:"grypeVersion"`
+		} `json:"vulnerabilities"`
+	}
+	if unmarshalErr := json.Unmarshal(raw, &report); unmarshalErr != nil {
+		t.Fatalf("parsing machine report JSON: %v", unmarshalErr)
+	}
+
+	if report.Vulnerabilities.State != "completed" {
+		t.Errorf("vulnerabilities.state = %q, want completed", report.Vulnerabilities.State)
+	}
+	if !report.Vulnerabilities.Requested {
+		t.Error("vulnerabilities.requested = false, want true")
+	}
+	if report.Vulnerabilities.GrypeVersion == "" {
+		t.Error("vulnerabilities.grypeVersion is empty")
+	}
+
+	humanRaw, err := os.ReadFile(humanReportPath)
+	if err != nil {
+		t.Fatalf("reading human report: %v", err)
+	}
+	if !bytes.Contains(humanRaw, []byte("Vulnerability")) {
+		t.Error("human report does not contain 'Vulnerability' section")
+	}
+
+	t.Logf("grype roundtrip passed (grypeVersion=%s)", report.Vulnerabilities.GrypeVersion)
 }

@@ -41,6 +41,7 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 |---|---|---|
 | **7-Zip** (`7zz`) | Extract Microsoft CAB and MSI files; also 7z and RAR if encountered | No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. 7-Zip handles both natively, is widely packaged on Linux, and is the preferred extractor per DESIGN.md §9.2. |
 | **unshield** | Extract InstallShield CAB files (`data1.cab` + `data1.hdr`) | InstallShield uses a proprietary cabinet format incompatible with Microsoft CABs. `unshield` (MIT, actively maintained, v1.6.2) is the only tool capable of extracting these. Available via Linux package managers and Homebrew. |
+| **Grype** (`grype`) | Optional vulnerability scan of the generated SBOM (`--grype`) | Grype provides stable JSON output with per-match package identity and vulnerability source metadata. Using the generated SBOM as input preserves deterministic component identities and avoids rescanning the extracted filesystem. |
 | **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
 
 ### 1.3 Tool Availability Strategy
@@ -50,6 +51,7 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 | `bwrap` | All external binary invocations (`7zz`, `unshield`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
 | `7zz` | Microsoft CAB/MSI extraction proceeds normally. Also handles 7z/RAR inputs. | Microsoft CAB/7z/RAR archives are recorded as non-extractable components in the SBOM. MSI payload extraction is skipped, but MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
 | `unshield` | InstallShield CAB extraction proceeds normally. | InstallShield CABs are recorded as non-extractable components in the SBOM. Audit report notes missing tool. |
+| `grype` (only if `--grype`) | SBOM is scanned and vulnerability matches are correlated to component BOM refs in the report. | SBOM and report are still produced; report marks vulnerability enrichment as unavailable and includes root-cause metadata (tool missing, execution error, or DB issue). |
 | Syft (library) | Required | Fatal error. |
 
 ### 1.4 Why Go Standard Library over mholt/archives
@@ -225,6 +227,7 @@ internal/
   safeguard/            Security validation (paths, symlinks, ratios)
   sandbox/              Isolation wrapper (bwrap / passthrough)
   scan/                 Syft integration
+  vulnscan/             Optional Grype vulnerability correlation
   assembly/             CycloneDX SBOM merge and construction
   report/               Audit report generation
   policy/               Policy enforcement (strict / partial)
@@ -263,6 +266,7 @@ main()
 - `--root-version`: override version for the SBOM root component
 - `--root-delivery-date`: delivery date for the inspected software delivery (`YYYY-MM-DD`)
 - `--root-property`: repeated `key=value` property added to the SBOM root component
+- `--grype`: enable optional Grype-based vulnerability enrichment of the report
 - `--unsafe`: enable unsandboxed extraction (must never be silent)
 - `--max-depth`, `--max-files`, `--max-size`, `--max-entry-size`,
   `--max-ratio`, `--timeout`: override default limits
@@ -292,6 +296,7 @@ type Config struct {
     InterpretMode   InterpretMode // Physical | InstallerSemantic
     ReportMode      ReportMode    // Human | Machine | Both
     Language        string        // "en" | "de"
+    GrypeEnabled    bool
   RootMetadata    RootMetadata
     Unsafe          bool
     Limits          Limits
@@ -750,6 +755,7 @@ type ReportData struct {
     Config           config.Config
     Tree             *extract.ExtractionNode
     Scans            []scan.ScanResult
+  Vulnerabilities  *vulnscan.Result
     PolicyDecisions  []policy.Decision
     SandboxInfo      SandboxSummary
     ProcessingIssues []ProcessingIssue
@@ -787,6 +793,15 @@ func GenerateMachine(data ReportData, w io.Writer) error
 - Optional evidence paths where component identification relied on internal
   files rather than a single physical artifact
 - Whether unsafe override was active
+- Vulnerability summary table in the report summary with columns for name,
+  installed/fixed versions, vulnerability ID, severity (incl. CVSS score),
+  EPSS, risk, and KEV; rows link to corresponding component sections and are
+  deterministically ordered with risk context before severity tie-breakers
+- Per-component vulnerability status in the component occurrence index:
+  - vulnerabilities found (with full Grype metadata and source references)
+  - no vulnerabilities found
+  - not assessable (identifier missing or enrichment unavailable)
+- Grype runtime metadata (binary version and DB metadata)
 - Unidentified binaries and other coverage gaps
 - Summary of completeness and limitations
 - Explicit residual risk statement
@@ -803,6 +818,10 @@ func GenerateMachine(data ReportData, w io.Writer) error
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.
+- Vulnerability enrichment is report-only: it does not mutate the SBOM and does
+  not alter component deduplication or dependency relationships.
+- If `--grype` is set, the report renders an explicit enrichment state:
+  `completed`, `completed-with-errors`, `unavailable`, or `not-requested`.
 - A full migration to a template engine is intentionally deferred: the current
   report has high logic density (ordering, conditional sections, and
   provenance-driven tables), where direct writer functions are simpler and
@@ -870,9 +889,10 @@ func Run(ctx context.Context, cfg config.Config) Result
 5. scan.ScanAll(ctx, tree, cfg) → []ScanResult
 6. assembly.Assemble(tree, scans, cfg) → *cyclonedx.BOM
 7. Write SBOM to output file
-8. report.Generate*(reportData, cfg, outputWriter)
-9. Clean up temporary directories
-10. Return exit code (0 = success, 1 = partial/incomplete, 2 = hard security incident or fatal runtime failure)
+8. vulnscan.Run(ctx, sbomPath, cfg.GrypeEnabled) → VulnerabilityResult
+9. report.Generate*(reportData, cfg, outputWriter)
+10. Clean up temporary directories
+11. Return exit code (0 = success, 1 = partial/incomplete, 2 = hard security incident or fatal runtime failure)
 ```
 
 **Design decisions:**
@@ -882,10 +902,54 @@ func Run(ctx context.Context, cfg config.Config) Result
 - Processing-stage errors (sandbox resolution, extraction, scan, assembly,
   output writing) are captured in `ReportData` before report generation,
   so failures are documented when report output succeeds.
+- Grype execution failures are captured as enrichment issues in `ReportData`.
+  They must not suppress SBOM/report generation when the base pipeline
+  succeeded.
 - Once input validation has succeeded and the root extraction node exists,
   later hard security events no longer suppress final output generation.
 - The orchestrator still writes a final SBOM and audit report, marks the
   affected subtree incomplete or security-blocked, and returns exit code `2`.
+
+---
+
+### 3.12 `internal/vulnscan`
+
+**Purpose:** Execute optional Grype scanning on the generated SBOM and map
+vulnerability matches to component BOM refs for report enrichment.
+
+**Interface:**
+
+```go
+type Result struct {
+    State            State // NotRequested | Completed | CompletedWithErrors | Unavailable
+    Requested        bool
+    GrypeVersion     string
+    DBSchemaVersion  string
+    DBBuilt          string
+    DBUpdated        string
+    MatchesByBOMRef  map[string][]VulnerabilityMatch
+    CoverageByBOMRef map[string]CoverageState // Found | None | NotAssessable
+    Errors           []Issue
+}
+
+func Run(ctx context.Context, sbomPath string, enabled bool) (*Result, error)
+```
+
+**Design decisions:**
+
+- Invocation model: `grype sbom:<path> -o json` against the already written
+  CycloneDX file.
+- Correlation anchor: `artifact.id` from Grype JSON is matched against SBOM
+  `bom-ref` and report component object IDs.
+- If Grype returns matches for unknown IDs, these are retained as report-level
+  processing issues and never silently dropped.
+- Coverage status is explicit per indexed component:
+  - `Found`: at least one vulnerability match
+  - `None`: Grype evaluated the component and found no matches
+  - `NotAssessable`: no usable identifier (for example no PURL/CPE) or Grype
+    enrichment unavailable
+- Severity ordering for report summaries is fixed and deterministic.
+- The module is pure enrichment and never changes exit-code semantics by itself.
 
 ---
 
@@ -919,6 +983,11 @@ func Run(ctx context.Context, cfg config.Config) Result
                     │  assembly.Assemble  │
                     └──────────┬──────────┘
                                │ *cyclonedx.BOM (unified)
+                    ┌──────────▼──────────┐
+                    │  vulnscan.Run       │  Optional (`--grype`):
+                    │  (Grype on SBOM)    │  correlate vulnerabilities
+                    └──────────┬──────────┘
+                               │ VulnerabilityResult
               ┌────────────────┼────────────────┐
               ▼                                  ▼
      SBOM output file                  report.Generate*
@@ -1004,10 +1073,9 @@ that Syft cannot see through, in order to present their contents to Syft.
 
 ### 5.6 Downstream Vulnerability Matching (CPE / PURL)
 
-extract-sbom does not perform CVE scanning itself (see DESIGN.md §1.3),
-but the SBOM it produces must be immediately usable by tools like
-**Grype** for vulnerability matching. Grype matches packages against
-vulnerability databases using two identifiers:
+extract-sbom always produces an SBOM suitable for downstream vulnerability
+scanners and can optionally run **Grype** itself when `--grype` is set.
+Grype matches packages against vulnerability databases using two identifiers:
 
 1. **Package URL (PURL)** — the primary match path for ecosystem packages.
 2. **CPE (Common Platform Enumeration)** — the match path for binaries
@@ -1057,6 +1125,10 @@ not match any known classifier, Syft cannot identify it. In this case:
   as a coverage gap.
 - This is an inherent limitation of any SBOM tool and is not specific
   to extract-sbom's architecture.
+
+When `--grype` is enabled, these identifier limitations propagate to
+vulnerability correlation and are made explicit in the report as
+`NotAssessable` coverage states at component level.
 
 **MSI name-mangling and CPE impact.** In physical mode, mangled internal
 CAB entry names from MSI packages are passed to Syft as-is. Since Syft's
@@ -1203,6 +1275,35 @@ delivery without re-extracting it.
 5. Documentation review and finalization
 6. Performance profiling and optimization if needed
 
+### Phase 6 — Vulnerability Enrichment (`--grype`)
+
+**Goal:** Optional, deterministic report enrichment with per-component
+vulnerability information.
+
+1. `cmd/config`: add `--grype` flag and config plumbing
+2. `vulnscan`: add Grype runner, JSON decoding, BOMRef correlation, and
+  severity normalization
+3. `report`: add summary vulnerability table with component links and detailed
+  per-component vulnerability sections
+4. `report`: add explicit coverage states (`Found`, `None`, `NotAssessable`)
+5. `report`: add Grype runtime metadata section (binary version + DB metadata)
+6. `orchestrator`: invoke vulnscan after SBOM write and before report generation
+7. Unit tests (Go):
+  - severity ordering and stable sorting
+  - BOMRef correlation edge cases (unknown IDs, duplicates)
+  - coverage-state derivation (`Found`, `None`, `NotAssessable`)
+  - graceful behavior on missing Grype binary and malformed output
+8. Integration tests:
+  - `integration/externaltools`: run with a real Grype binary when available
+  - deterministic fixture mode: use recorded Grype JSON to validate report
+    rendering without network/db dependency
+  - verify all three per-component outcomes are represented in one run
+9. Release tests:
+  - `integration/releasetest`: validate release artifact behavior with
+    `--grype` enabled and disabled
+  - assert user-facing report sections and machine-report fields are present
+    and schema-stable
+
 ---
 
 ## 7. Test Fixture Strategy
@@ -1220,6 +1321,16 @@ Examples:
 - `testdata/cab/simple.cab`
 - `testdata/msi/minimal.msi`
 - `testdata/tar/gzip-nested-cab.tar.gz`
+- `testdata/grype/report-fixture.json`
+- `testdata/grype/component-coverage-fixture.json`
+
+For vulnerability-enrichment tests, fixture runs must capture both:
+
+- raw Grype JSON (including vulnerability source references)
+- expected report snippets (summary table rows + linked component sections)
+
+to ensure stable rendering and deterministic vulnerability row ordering across
+releases.
 
 ---
 

@@ -3,10 +3,15 @@ FROM debian:13-slim
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         jq \
         p7zip-full \
         unshield \
     && rm -rf /var/lib/apt/lists/*
+
+# Install latest stable Grype for vulnerability roundtrip test.
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+    | sh -s -- -b /usr/local/bin
 
 WORKDIR /opt/extract-sbom
 

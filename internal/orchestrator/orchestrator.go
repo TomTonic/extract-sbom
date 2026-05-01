@@ -23,6 +23,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/report"
 	"github.com/TomTonic/extract-sbom/internal/sandbox"
 	"github.com/TomTonic/extract-sbom/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // Testable hooks — override in tests to inject errors.
@@ -30,6 +31,7 @@ var (
 	computeInputSummaryFunc = report.ComputeInputSummary
 	scanAllFunc             = scan.ScanAll
 	assembleFunc            = assembly.Assemble
+	vulnscanRunFunc         = vulnscan.Run
 )
 
 // ExitCode represents the process exit status.
@@ -82,13 +84,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	var fatalErr error
 
 	// Step 1: Validate configuration.
-	cfg.EmitProgress(config.ProgressVerbose, "[extract-sbom] step 1/7: validating configuration")
+	cfg.EmitProgress(config.ProgressVerbose, "[extract-sbom] step 1/8: validating configuration")
 	if err := cfg.Validate(); err != nil {
 		return Result{ExitCode: ExitHardSecurity, Error: fmt.Errorf("configuration: %w", err)}
 	}
 
 	// Step 2: Compute input file hashes.
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 2/7: hashing input file")
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 2/8: hashing input file")
 	hashStart := time.Now()
 	inputSummary, err := computeInputSummaryFunc(cfg.InputPath)
 	if err != nil {
@@ -97,7 +99,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] hashing done in %s", time.Since(hashStart).Round(time.Millisecond))
 
 	// Step 3: Resolve sandbox.
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/7: resolving sandbox")
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/8: resolving sandbox")
 	sb, resolveErr := sandbox.Resolve(cfg)
 	addIssue("sandbox-resolve", resolveErr)
 	sandboxInfo := report.SandboxSummary{
@@ -131,7 +133,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	}
 
 	// Step 4: Extract.
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 4/7: extracting containers")
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 4/8: extracting containers")
 	extractStart := time.Now()
 	policyEngine := policy.NewEngine(cfg.PolicyMode)
 
@@ -155,7 +157,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	var scans []scan.ScanResult
 	var totalScannedComponents int
 	if tree != nil {
-		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 5/7: scanning with syft")
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 5/8: scanning with syft")
 		scanStart := time.Now()
 		scans, err = scanAllFunc(ctx, tree, cfg)
 		totalScannedComponents = scan.CountScannedComponents(scans)
@@ -177,7 +179,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	var sbomPath string
 	var suppressions []assembly.SuppressionRecord
 	if tree != nil {
-		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/7: assembling sbom")
+		cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 6/8: assembling sbom")
 		assembleStart := time.Now()
 		bom, asmSuppressions, asmErr := assembleFunc(tree, scans, cfg)
 		suppressions = asmSuppressions
@@ -231,8 +233,17 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	// Step 7: Generate report.
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 7/7: writing report(s)")
+	// Step 7: Optional vulnerability enrichment using Grype.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 7/8: vulnerability enrichment")
+	vulnResult := vulnscanRunFunc(ctx, sbomPath, cfg.GrypeEnabled, assembledBOM)
+	if vulnResult != nil {
+		for _, issue := range vulnResult.Errors {
+			addIssue("vulnscan", fmt.Errorf("%s: %s", issue.Code, issue.Message))
+		}
+	}
+
+	// Step 8: Generate report.
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 8/8: writing report(s)")
 	endTime := time.Now()
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
@@ -242,6 +253,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 			Config:           cfg,
 			Tree:             tree,
 			Scans:            scans,
+			Vulnerabilities:  vulnResult,
 			PolicyDecisions:  policyEngine.Decisions(),
 			SandboxInfo:      sandboxInfo,
 			ProcessingIssues: processingIssues,

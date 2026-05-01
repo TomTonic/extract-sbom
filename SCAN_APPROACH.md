@@ -21,23 +21,26 @@ The document uses a small set of fixed terms.
 | status | The extraction phase decision for a node. The scan phase does not rewrite it. |
 | scan target | A node that the scan phase actually sends to Syft. Only nodes with status `extracted` or `syft-native` become scan targets. |
 | evidence path | An optional, more specific path that supports a component finding, for example a manifest inside a JAR. |
+| vulnerability coverage status | Per indexed component: `Found`, `None`, or `NotAssessable`. |
 
 ## 2. Evidence Sources
 
-extract-sbom relies on observed facts from four places:
+extract-sbom relies on observed facts from four mandatory places and one optional place:
 
 - the bytes of the original delivery file
 - the format detection and extraction results recorded while walking the delivery
 - MSI Property table data when the artifact is an MSI package
 - Syft package data, including Syft's package locations
+- optional Grype JSON output and Grype runtime metadata when `--grype` is enabled
 
 Around those facts, extract-sbom adds hashes, delivery paths, statuses, and a
 deterministic output order. It does not invent packages, infer vendor intent,
 or fill gaps with guesses.
 
-## 3. Two Phases
+## 3. Two Mandatory Phases Plus One Optional Enrichment Phase
 
-Processing always runs in two sequential phases.
+Processing always runs in two mandatory sequential phases and can run one
+additional optional phase.
 
 **Phase 1 — Extraction.** `internal/extract` walks the delivery recursively
 and builds the extraction tree. For every file it encounters, it identifies the
@@ -54,8 +57,13 @@ tries to reuse those results for their `syft-native` child nodes where possible,
 and finally scans only the remaining `syft-native` nodes that could not be
 resolved from a parent directory result.
 
-The two phases are strictly sequential. No extraction happens during scanning
-and no scanning happens during extraction.
+**Phase 3 — Optional vulnerability enrichment (`--grype`).** If enabled,
+extract-sbom runs Grype against the generated SBOM and correlates matches to
+component object IDs (`bom-ref`). This phase is report enrichment only: it does
+not change extraction statuses, scan targets, or SBOM component structure.
+
+The mandatory phases are strictly sequential. No extraction happens during
+scanning and no scanning happens during extraction.
 
 ## 4. Running Example
 
@@ -527,6 +535,36 @@ Every removed component is still traceable: the audit report lists the
 suppressed entry, its delivery path, the reason for suppression, and the kept
 replacement component.
 
+### 8.2 Vulnerability Enrichment Rendering (`--grype`)
+
+When `--grype` is enabled, the report adds two vulnerability-focused views that
+remain linked to the same component object IDs used throughout the SBOM and
+occurrence index.
+
+**Summary-level vulnerability table (prominent placement).**
+
+- Columns: `Name`, `Installed`, `Fixed In`, `Vulnerability`, `Severity`
+  (with CVSS score when available), `EPSS`, `Risk`, `KEV`.
+- `Name` links to the matching component section in the occurrence index.
+- Rendering remains deterministic. Row order is driven by risk context first
+  (`risk`, `KEV`, EPSS percentile/value), then severity rank, then stable
+  lexical tie-breakers.
+
+**Per-component vulnerability section.**
+
+Every indexed component gets exactly one explicit vulnerability coverage status:
+
+- `Found`: at least one correlated vulnerability match with full metadata,
+  including package type, risk, KEV, fix state/versions, CVSS
+  version/score/vector, description, EPSS, and source references.
+- `None`: Grype evaluated the component and reported no matches.
+- `NotAssessable`: vulnerability matching could not be performed for this
+  component (for example missing PURL/CPE) or enrichment was unavailable.
+
+Additionally, the report includes Grype runtime metadata (binary version and
+database metadata) and any enrichment issues (for example tool missing or
+execution error) in a dedicated diagnostics block.
+
 ## 9. Why The Result Is Deterministic
 
 For the same input file and the same effective configuration, extract-sbom
@@ -571,7 +609,8 @@ to do any of the following:
 - malware analysis
 - behavioral analysis
 - exploitability assessment
-- vulnerability matching by itself
+- authoritative vulnerability triage beyond identifier-based matching; optional
+  `--grype` enrichment is correlation support, not a replacement for analyst review
 
 Its job is to make one supplier delivery transparent enough that downstream
 vulnerability and compliance tooling can work on a defensible basis.

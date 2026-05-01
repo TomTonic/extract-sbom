@@ -147,6 +147,7 @@ func TestRootCmdFlagsExist(t *testing.T) {
 		"root-version",
 		"root-delivery-date",
 		"root-property",
+		"grype",
 		"unsafe",
 		"max-depth",
 		"max-files",
@@ -288,6 +289,27 @@ func TestLoadConfigRejectsInvalidPolicy(t *testing.T) {
 	}
 	if _, err := loadConfig(cmd, []string{inputPath}); err == nil {
 		t.Fatal("expected error for invalid policy")
+	}
+}
+
+func TestLoadConfigParsesGrypeFlag(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("grype", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(cmd, []string{inputPath})
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+	if !cfg.GrypeEnabled {
+		t.Fatal("GrypeEnabled = false, want true")
 	}
 }
 
