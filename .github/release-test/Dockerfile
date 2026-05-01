@@ -6,7 +6,6 @@ RUN apt-get update \
         jq \
         p7zip-full \
         unshield \
-    && if [ ! -x /usr/bin/7zz ] && [ -x /usr/bin/7z ]; then ln -s /usr/bin/7z /usr/local/bin/7zz; fi \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/extract-sbom

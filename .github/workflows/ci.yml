@@ -75,7 +75,7 @@ jobs:
       - name: Install external tools for release test
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq p7zip-full unshield
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq 7zip unshield
 
       - name: Build release candidate for release tests
         run: |

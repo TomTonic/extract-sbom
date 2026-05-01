@@ -12,14 +12,32 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/sandbox"
 )
 
+// sevenZipCandidates lists the binary names tried in priority order.
+// 7zz is the official 7-Zip binary (package: 7zip on Debian/Ubuntu ≥22.04).
+// 7za and 7z are provided by p7zip-full and are CLI-compatible for extraction.
+var sevenZipCandidates = []string{"7zz", "7za", "7z"}
+
+// resolve7zBinary returns the first available 7-Zip binary name and true,
+// or ("7zz", false) if none is found (7zz is used as the canonical name in
+// tool-missing diagnostics).
+func resolve7zBinary() (string, bool) {
+	for _, name := range sevenZipCandidates {
+		if _, err := lookPath(name); err == nil {
+			return name, true
+		}
+	}
+	return "7zz", false
+}
+
 // extract7z extracts CAB, MSI, 7z, or RAR files using 7-Zip via the sandbox.
 // After extraction, the output directory is validated by safeguard to detect
 // path traversal, symlinks, special files, and resource limit violations.
 func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits) error {
-	if !isToolAvailable("7zz") {
+	binary, found := resolve7zBinary()
+	if !found {
 		node.Status = StatusToolMissing
 		node.StatusDetail = "7zz (7-Zip) is not installed; cannot extract " + node.Format.Format.String()
-		node.Tool = "7zz"
+		node.Tool = binary
 		return nil
 	}
 
@@ -28,14 +46,14 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
 
-	node.Tool = "7zz"
+	node.Tool = binary
 	node.SandboxUsed = sb.Name()
 
 	args := []string{"x", filePath, "-o" + outDir, "-y"}
-	if err := sb.Run(ctx, "7zz", args, filePath, outDir); err != nil {
+	if err := sb.Run(ctx, binary, args, filePath, outDir); err != nil {
 		os.RemoveAll(outDir)
 		node.Status = StatusFailed
-		node.StatusDetail = fmt.Sprintf("7zz extraction failed: %v", err)
+		node.StatusDetail = fmt.Sprintf("%s extraction failed: %v", binary, err)
 		return nil
 	}
 
@@ -133,6 +151,12 @@ func isToolAvailable(tool string) bool {
 // IsToolAvailable exposes tool availability checks for other modules.
 func IsToolAvailable(tool string) bool {
 	return isToolAvailable(tool)
+}
+
+// Resolve7zBinary returns the first available 7-Zip binary name and true,
+// or ("7zz", false) if none of the known candidates (7zz, 7za, 7z) is found.
+func Resolve7zBinary() (string, bool) {
+	return resolve7zBinary()
 }
 
 // lookPath is injected in tests to simulate tool presence.

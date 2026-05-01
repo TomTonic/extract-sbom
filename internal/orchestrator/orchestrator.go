@@ -115,10 +115,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				"Extraction of MSI, CAB, 7z, ISO, and InstallShield formats will be skipped. "+
 				"Pass --unsafe to allow unsandboxed extraction.")
 	} else {
-		if !extract.IsToolAvailable("7zz") {
+		if binary, found := extract.Resolve7zBinary(); !found {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] WARNING: 7zz not found on PATH. Extraction of MSI, CAB, 7z, and ISO archives will fail.")
 			addIssue("tool-availability", fmt.Errorf("7zz not found on PATH"))
+		} else {
+			cfg.EmitProgress(config.ProgressNormal,
+				"[extract-sbom] 7-Zip binary: %s", binary)
 		}
 		if !extract.IsToolAvailable("unshield") {
 			cfg.EmitProgress(config.ProgressNormal,
