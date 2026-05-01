@@ -57,6 +57,10 @@ linters:
       - linters: [gosec]
         text: "G204"
         path: internal/sandbox/
+      # Subprocess execution is the designed purpose of the release integration test.
+      - linters: [gosec]
+        text: "G204"
+        path: integration/releasetest/
       # Best-effort cleanup: Close on read-only handles, RemoveAll in cleanup.
       - linters: [errcheck]
         text: "Close"
@@ -73,6 +77,11 @@ linters:
       - linters: [errcheck]
         text: "fmt.Fprint"
         path: internal/report/
+      # t.Fatal calls runtime.Goexit(), so tree is never nil past the nil check.
+      # staticcheck does not model t.Fatal as a terminating call for SA5011.
+      - linters: [staticcheck]
+        text: "SA5011"
+        path: integration/externaltools/
 
 formatters:
   enable:
