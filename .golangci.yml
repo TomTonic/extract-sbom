@@ -77,11 +77,11 @@ linters:
       - linters: [errcheck]
         text: "fmt.Fprint"
         path: internal/report/
-      # t.Fatal calls runtime.Goexit(), so tree is never nil past the nil check.
+      # t.Fatal calls runtime.Goexit(), so pointers are never nil past the nil check.
       # staticcheck does not model t.Fatal as a terminating call for SA5011.
       - linters: [staticcheck]
         text: "SA5011"
-        path: integration/externaltools/
+        path: "_test\\.go$"
 
 formatters:
   enable:
