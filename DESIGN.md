@@ -31,7 +31,9 @@ of container artifacts and their contents.
 
 ### 1.3 Non-Goals
 
-- Performing CVE scanning (e.g., via Grype) is **explicitly excluded**
+- Full vulnerability triage and exploitability assessment are excluded
+- Optional vulnerability correlation via a local Grype invocation (`--grype`) is in scope
+  as report enrichment only; it must not change extraction or SBOM assembly behavior
 - No malware or virus scanning — extract-sbom inspects delivery structure and
   software components, but does not assess whether any content is malicious
 - No execution or dynamic analysis of delivered software
@@ -73,7 +75,9 @@ a convenience wrapper, not as a mandatory runtime dependency.
    - Apply controlled extraction where applicable
 4. Invoke **Syft** (in library mode where possible) to catalog software components
 5. Merge all findings into one consolidated SBOM
-6. Produce a detailed audit report
+6. If explicitly requested (`--grype`), run Grype against the generated SBOM and
+  correlate vulnerability matches to SBOM components
+7. Produce a detailed audit report
 
 ### 3.2 Determinism
 
@@ -384,11 +388,15 @@ All relevant code must be written in **Go**.
 - **7-Zip** is the preferred extractor for Microsoft CAB, MSI, and related formats
 - **unshield** is the required extractor for InstallShield proprietary CABs
 - **Syft** is mandatory, preferably used in library mode
+- **Grype** is optional and only used when `--grype` is set
 - External extraction tools are optional at runtime; if missing, the corresponding
   formats are recorded as non-extractable in the SBOM rather than causing a fatal error
 - Direct metadata reads from supported container formats (for example MSI
   product metadata) should remain available even when payload extraction tools
   are missing
+- If `--grype` is set but Grype cannot be executed, extract-sbom must still
+  produce SBOM and report and explicitly document that vulnerability enrichment
+  could not be performed
 
 ---
 
@@ -435,6 +443,13 @@ At minimum:
 - Optional evidence paths where component identification relied on internal
   files rather than a single physical artifact
 - Whether unsafe override mode was active
+- Vulnerability enrichment status for every indexed component:
+  - vulnerabilities found (with severity and source metadata), or
+  - no vulnerabilities found, or
+  - not assessable (for example no usable identifier such as PURL/CPE)
+- Grype execution metadata (binary version and vulnerability database version)
+- Prominent vulnerability summary in the summary section, ordered by severity
+  from highest to lowest, with links to detailed per-component sections
 - Unidentified binaries and other coverage gaps
 - Summary of completeness and limitations
 - Explicit statement of residual risk and uncertainty
@@ -457,6 +472,10 @@ extract-sbom is complete when:
 - Container metadata (e.g. MSI properties) is extracted and used for CPE enrichment
 - MSI container metadata remains available even when payload extraction is not
   possible
+- When `--grype` is enabled and Grype is available, vulnerability data is
+  correlated to SBOM components and included in the report per component
+- When `--grype` is enabled and Grype is unavailable or fails, the report
+  clearly states that vulnerability enrichment could not be completed
 - Hard security findings still produce a final SBOM and report whenever overall
   orchestration can continue, with affected subtrees marked incomplete
 - Once root processing state exists, later hard security findings no longer
