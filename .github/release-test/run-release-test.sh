@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-candidate="/opt/extract-sbom/extract-sbom"
-input_zip="/opt/extract-sbom/testdata/vendor-suite-3.2.zip"
-expected_paths="/opt/extract-sbom/testdata/expected-delivery-paths.txt"
+candidate="${RELEASE_TEST_CANDIDATE:-/opt/extract-sbom/extract-sbom}"
+input_zip="${RELEASE_TEST_INPUT_ZIP:-/opt/extract-sbom/testdata/vendor-suite-3.2.zip}"
+expected_paths="${RELEASE_TEST_EXPECTED_PATHS:-/opt/extract-sbom/testdata/expected-delivery-paths.txt}"
 out_dir="$(mktemp -d /tmp/extract-sbom-release-test.XXXXXX)"
 
 cleanup() {
@@ -101,5 +101,4 @@ if jq -e '[.components[]? | .properties[]? | select(.name == "extract-sbom:deliv
 fi
 echo "  ok: plain PDF absent"
 
-echo "release candidate passed containerized release test"
-
+echo "release candidate passed release test"
