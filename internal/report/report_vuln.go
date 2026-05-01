@@ -4,17 +4,25 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-// vulnerabilitySummaryRow holds one resolved-vulnerability row for the summary table.
+// vulnerabilitySummaryRow holds one grype-inspired vulnerability table row.
 type vulnerabilitySummaryRow struct {
-	Severity        string
-	VulnerabilityID string
 	ComponentID     string
-	Package         string
+	Name            string
+	Installed       string
+	FixedIn         string
+	Type            string
+	VulnerabilityID string
+	Severity        string
+	EPSS            *float64
+	EPSSPercentile  *float64
+	Risk            *float64
+	KEV             bool
 }
 
 // writeVulnerabilitySummary renders the vulnerability enrichment section to w,
@@ -38,23 +46,37 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 	}
 
 	rows := buildVulnerabilitySummaryRows(v, occurrences)
+	uniqueVulns := map[string]struct{}{}
+	affectedComponents := map[string]struct{}{}
+	for i := range rows {
+		uniqueVulns[rows[i].VulnerabilityID] = struct{}{}
+		affectedComponents[rows[i].ComponentID] = struct{}{}
+	}
+	fmt.Fprintf(w, "- Vulnerability findings: matches=%d unique-vulnerabilities=%d affected-components=%d\n", len(rows), len(uniqueVulns), len(affectedComponents))
 	if len(rows) == 0 {
 		fmt.Fprintln(w, "- Vulnerability findings: no matched vulnerabilities")
 		return
 	}
 
-	fmt.Fprintln(w, "\nVulnerability summary (highest severity first):")
+	fmt.Fprintln(w, "\nVulnerability summary (grype-inspired view):")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Severity | Vulnerability | Component | Package |")
-	fmt.Fprintln(w, "|---|---|---|---|")
+	fmt.Fprintln(w, "| Name | Installed | Fixed In | Type | Vulnerability | Severity | EPSS | Risk |")
+	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|")
 	for i := range rows {
 		anchor := occurrenceAnchorID(rows[i].ComponentID)
-		fmt.Fprintf(w, "| %s | %s | [%s](#%s) | %s |\n",
-			strings.ToUpper(rows[i].Severity),
+		name := escapeMarkdownCell(rows[i].Name)
+		if rows[i].ComponentID != "" {
+			name = fmt.Sprintf("[%s](#%s)", name, anchor)
+		}
+		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			name,
+			emptyDash(rows[i].Installed),
+			emptyDash(rows[i].FixedIn),
+			emptyDash(rows[i].Type),
 			rows[i].VulnerabilityID,
-			rows[i].ComponentID,
-			anchor,
-			escapeMarkdownCell(rows[i].Package),
+			strings.ToUpper(rows[i].Severity),
+			formatEPSS(rows[i].EPSS, rows[i].EPSSPercentile),
+			formatRisk(rows[i].Risk, rows[i].KEV),
 		)
 	}
 }
@@ -65,26 +87,56 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 	if v == nil || len(v.MatchesByBOMRef) == 0 {
 		return nil
 	}
-	packageByID := map[string]string{}
+	byID := map[string]componentOccurrence{}
 	for i := range occurrences {
-		packageByID[occurrences[i].ObjectID] = occurrences[i].PackageName
+		byID[occurrences[i].ObjectID] = occurrences[i]
 	}
 
 	rows := make([]vulnerabilitySummaryRow, 0)
 	for compID, matches := range v.MatchesByBOMRef {
+		occ := byID[compID]
 		for i := range matches {
+			name := strings.TrimSpace(matches[i].ArtifactName)
+			if name == "" {
+				name = strings.TrimSpace(occ.PackageName)
+			}
+			installed := strings.TrimSpace(matches[i].ArtifactVersion)
+			if installed == "" {
+				installed = strings.TrimSpace(occ.Version)
+			}
 			rows = append(rows, vulnerabilitySummaryRow{
-				Severity:        normalizeSeverity(matches[i].Severity),
-				VulnerabilityID: matches[i].VulnerabilityID,
 				ComponentID:     compID,
-				Package:         packageByID[compID],
+				Name:            name,
+				Installed:       installed,
+				FixedIn:         strings.Join(matches[i].FixVersions, ", "),
+				Type:            matches[i].ArtifactType,
+				VulnerabilityID: matches[i].VulnerabilityID,
+				Severity:        normalizeSeverity(matches[i].Severity),
+				EPSS:            matches[i].EPSS,
+				EPSSPercentile:  matches[i].EPSSPercentile,
+				Risk:            matches[i].Risk,
+				KEV:             matches[i].KEV != nil && *matches[i].KEV,
 			})
 		}
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
+		leftRisk := 0.0
+		rightRisk := 0.0
+		if rows[i].Risk != nil {
+			leftRisk = *rows[i].Risk
+		}
+		if rows[j].Risk != nil {
+			rightRisk = *rows[j].Risk
+		}
+		if leftRisk != rightRisk {
+			return leftRisk > rightRisk
+		}
 		if severityRank(rows[i].Severity) != severityRank(rows[j].Severity) {
 			return severityRank(rows[i].Severity) < severityRank(rows[j].Severity)
+		}
+		if rows[i].Name != rows[j].Name {
+			return rows[i].Name < rows[j].Name
 		}
 		if rows[i].VulnerabilityID != rows[j].VulnerabilityID {
 			return rows[i].VulnerabilityID < rows[j].VulnerabilityID
@@ -106,6 +158,15 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 		for i := range matches {
 			m := matches[i]
 			fmt.Fprintf(w, "  - `%s` (%s)", m.VulnerabilityID, strings.ToUpper(normalizeSeverity(m.Severity)))
+			if m.ArtifactType != "" {
+				fmt.Fprintf(w, " type=`%s`", m.ArtifactType)
+			}
+			if m.Risk != nil {
+				fmt.Fprintf(w, " risk=`%s`", formatNumber(*m.Risk))
+			}
+			if m.KEV != nil && *m.KEV {
+				fmt.Fprintf(w, " kev=`yes`")
+			}
 			if m.Namespace != "" {
 				fmt.Fprintf(w, " namespace=`%s`", m.Namespace)
 			}
@@ -121,6 +182,9 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			}
 			if m.FixState != "" || len(m.FixVersions) > 0 {
 				fmt.Fprintf(w, "    - Fix: state=`%s` versions=`%s`\n", emptyDash(m.FixState), strings.Join(m.FixVersions, ", "))
+			}
+			if m.EPSS != nil {
+				fmt.Fprintf(w, "    - EPSS: %s\n", formatEPSS(m.EPSS, m.EPSSPercentile))
 			}
 			for _, u := range m.URLs {
 				fmt.Fprintf(w, "    - Reference: %s\n", u)
@@ -179,4 +243,35 @@ func emptyDash(v string) string {
 		return "-"
 	}
 	return v
+}
+
+// formatEPSS formats EPSS and percentile values as human-readable text.
+func formatEPSS(epss *float64, percentile *float64) string {
+	if epss == nil {
+		return "-"
+	}
+	p := fmt.Sprintf("%.1f%%", (*epss)*100)
+	if percentile == nil {
+		return p
+	}
+	return fmt.Sprintf("%s (%sth)", p, formatNumber((*percentile)*100))
+}
+
+// formatRisk formats risk values and appends KEV when flagged.
+func formatRisk(risk *float64, kev bool) string {
+	if risk == nil {
+		if kev {
+			return "KEV"
+		}
+		return "-"
+	}
+	if kev {
+		return fmt.Sprintf("%s KEV", formatNumber(*risk))
+	}
+	return formatNumber(*risk)
+}
+
+// formatNumber renders v with a single decimal place.
+func formatNumber(v float64) string {
+	return strconv.FormatFloat(v, 'f', 1, 64)
 }
