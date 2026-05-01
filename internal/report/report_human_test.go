@@ -145,7 +145,6 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"# extract-sbom Audit Report",
 		"## Table of Contents",
 		"## Summary",
-		"## How To Use This Report",
 		"## Method At A Glance",
 		"## Processing Errors",
 		"## Residual Risk and Limitations",
@@ -312,7 +311,6 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 
 	for _, link := range []string{
 		"- [Summary](#summary)",
-		"- [How To Use This Report](#how-to-use-this-report)",
 		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
@@ -333,7 +331,7 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 }
 
 // TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst verifies that
-// Summary/guide/method/errors/risk appear before the large appendix sections.
+// Summary/method/errors/risk appear before the large appendix sections.
 func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	t.Parallel()
 
@@ -346,7 +344,6 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	output := buf.String()
 
 	summaryIdx := strings.Index(output, "## Summary")
-	howToUseIdx := strings.Index(output, "## How To Use This Report")
 	methodIdx := strings.Index(output, "## Method At A Glance")
 	errorsIdx := strings.Index(output, "## Processing Errors")
 	riskIdx := strings.Index(output, "## Residual Risk and Limitations")
@@ -355,13 +352,12 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	scanIdx := strings.Index(output, "## Scan Task Log")
 	extractionIdx := strings.Index(output, "## Extraction Log")
 
-	if summaryIdx == -1 || howToUseIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
+	if summaryIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
 		t.Fatal("one or more expected sections are missing")
 	}
 
-	if summaryIdx >= appendixIdx || howToUseIdx >= appendixIdx || methodIdx >= appendixIdx ||
+	if summaryIdx >= appendixIdx || methodIdx >= appendixIdx ||
 		summaryIdx >= scanIdx || summaryIdx >= extractionIdx ||
-		howToUseIdx >= scanIdx || howToUseIdx >= extractionIdx ||
 		methodIdx >= scanIdx || methodIdx >= extractionIdx ||
 		errorsIdx >= scanIdx || errorsIdx >= extractionIdx ||
 		riskIdx >= scanIdx || riskIdx >= extractionIdx ||
@@ -370,7 +366,7 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	}
 }
 
-func TestGenerateHumanIncludesTriageGuidanceAndDeepLinks(t *testing.T) {
+func TestGenerateHumanIncludesMethodDeepLinks(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
@@ -382,8 +378,6 @@ func TestGenerateHumanIncludesTriageGuidanceAndDeepLinks(t *testing.T) {
 	output := buf.String()
 
 	for _, fragment := range []string{
-		"jq '.matches[] | select((.vulnerability.severity == \"High\") or (.vulnerability.severity == \"Critical\")) | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' grype.json",
-		"The heading `### <artifact_id>` corresponds to the SBOM `bom-ref` and to Grype `artifact.id`.",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#3-two-phases",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#81-how-deduplication-works",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#6-package-detection-reliability",

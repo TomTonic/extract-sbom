@@ -30,22 +30,22 @@ type vulnerabilitySummaryRow struct {
 
 // writeVulnerabilitySummary renders the vulnerability enrichment section to w,
 // including state, grype version, and a per-severity summary table.
-func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []componentOccurrence) {
+func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []componentOccurrence, t translations) {
 	if data.Vulnerabilities == nil {
-		fmt.Fprintln(w, "- Vulnerability enrichment: not requested")
+		fmt.Fprintf(w, "- %s\n", t.vulnEnrichmentNotRequested)
 		return
 	}
 
 	v := data.Vulnerabilities
-	fmt.Fprintf(w, "- Vulnerability enrichment state: `%s`\n", v.State)
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnEnrichmentStateTemplate, v.State))
 	if v.GrypeVersion != "" {
-		fmt.Fprintf(w, "- Grype version: `%s`\n", v.GrypeVersion)
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnGrypeVersionTemplate, v.GrypeVersion))
 	}
 	if v.DBSchemaVersion != "" || v.DBBuilt != "" || v.DBUpdated != "" {
-		fmt.Fprintf(w, "- Grype DB: schema=`%s` built=`%s` updated=`%s`\n", emptyDash(v.DBSchemaVersion), emptyDash(v.DBBuilt), emptyDash(v.DBUpdated))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnGrypeDBTemplate, emptyDash(v.DBSchemaVersion), emptyDash(v.DBBuilt), emptyDash(v.DBUpdated)))
 	}
 	if len(v.Errors) > 0 {
-		fmt.Fprintf(w, "- Vulnerability enrichment issues: %d\n", len(v.Errors))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnEnrichmentIssuesTemplate, len(v.Errors)))
 	}
 
 	rows := buildVulnerabilitySummaryRows(v, occurrences)
@@ -55,15 +55,24 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 		uniqueVulns[rows[i].VulnerabilityID] = struct{}{}
 		affectedComponents[rows[i].ComponentID] = struct{}{}
 	}
-	fmt.Fprintf(w, "- Vulnerability findings: matches=%d unique-vulnerabilities=%d affected-components=%d\n", len(rows), len(uniqueVulns), len(affectedComponents))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnFindingsTemplate, len(rows), len(uniqueVulns), len(affectedComponents)))
 	if len(rows) == 0 {
-		fmt.Fprintln(w, "- Vulnerability findings: no matched vulnerabilities")
+		fmt.Fprintf(w, "- %s\n", t.vulnNoMatchedFindings)
 		return
 	}
 
-	fmt.Fprintln(w, "\nVulnerability summary (grype-inspired view):")
+	fmt.Fprintf(w, "\n%s\n", t.vulnSummaryHeading)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |")
+	fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		t.vulnTableName,
+		t.vulnTableInstalled,
+		t.vulnTableFixedIn,
+		t.vulnTableVulnerability,
+		t.vulnTableSeverity,
+		t.vulnTableEPSS,
+		t.vulnTableRisk,
+		t.vulnTableKEV,
+	)
 	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|")
 	for i := range rows {
 		anchor := occurrenceAnchorID(rows[i].ComponentID)
@@ -79,7 +88,7 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 			formatSeverity(rows[i].Severity, rows[i].CVSSScore),
 			formatEPSS(rows[i].EPSS, rows[i].EPSSPercentile),
 			formatRisk(rows[i].Risk),
-			formatKEV(rows[i].KEV),
+			formatKEV(rows[i].KEV, t),
 		)
 	}
 }
@@ -193,13 +202,13 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 
 // writeOccurrenceVulnerabilityBlock renders the per-component vulnerability
 // detail block within the component occurrence index section.
-func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *vulnscan.Result) {
+func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *vulnscan.Result, t translations) {
 	if v == nil || v.State == vulnscan.StateNotRequested {
 		return
 	}
 	matches := v.MatchesByBOMRef[occ.ObjectID]
 	if len(matches) > 0 {
-		fmt.Fprintf(w, "- Vulnerability status: `found` (%d)\n", len(matches))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnStatusFoundTemplate, len(matches)))
 		for i := range matches {
 			m := matches[i]
 			fmt.Fprintf(w, "  - `%s` (%s)", m.VulnerabilityID, strings.ToUpper(normalizeSeverity(m.Severity)))
@@ -209,7 +218,7 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			if m.Risk != nil {
 				fmt.Fprintf(w, " risk=`%s`", formatNumber(*m.Risk))
 			}
-			fmt.Fprintf(w, " kev=`%s`", formatKEV(m.KEV != nil && *m.KEV))
+			fmt.Fprintf(w, " kev=`%s`", formatKEV(m.KEV != nil && *m.KEV, t))
 			if m.Namespace != "" {
 				fmt.Fprintf(w, " namespace=`%s`", m.Namespace)
 			}
@@ -221,40 +230,40 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			}
 			fmt.Fprintln(w)
 			if m.DataSource != "" {
-				fmt.Fprintf(w, "    - Source: %s\n", m.DataSource)
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailSourceTemplate, m.DataSource))
 			}
 			if m.FixState != "" || len(m.FixVersions) > 0 {
-				fmt.Fprintf(w, "    - Fix: state=`%s` versions=`%s`\n", emptyDash(m.FixState), strings.Join(m.FixVersions, ", "))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailFixTemplate, emptyDash(m.FixState), strings.Join(m.FixVersions, ", ")))
 			}
 			if m.CVSSVector != "" || m.CVSSVersion != "" || m.CVSSScore != nil {
-				fmt.Fprintf(w, "    - CVSS: version=`%s` score=`%s` vector=`%s`\n", emptyDash(m.CVSSVersion), formatRisk(m.CVSSScore), emptyDash(m.CVSSVector))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailCVSSTemplate, emptyDash(m.CVSSVersion), formatRisk(m.CVSSScore), emptyDash(m.CVSSVector)))
 			} else {
-				fmt.Fprintln(w, "    - CVSS: version=`-` score=`-` vector=`-`")
+				fmt.Fprintf(w, "    - %s\n", t.vulnDetailCVSSNone)
 			}
 			if strings.TrimSpace(m.Description) != "" {
-				fmt.Fprintf(w, "    - Description: %s\n", strings.TrimSpace(m.Description))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailDescriptionTemplate, strings.TrimSpace(m.Description)))
 			} else {
-				fmt.Fprintln(w, "    - Description: -")
+				fmt.Fprintf(w, "    - %s\n", t.vulnDetailDescriptionNone)
 			}
 			if m.EPSS != nil {
-				fmt.Fprintf(w, "    - EPSS: %s\n", formatEPSS(m.EPSS, m.EPSSPercentile))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailEPSSTemplate, formatEPSS(m.EPSS, m.EPSSPercentile)))
 			}
 			for _, u := range m.URLs {
-				fmt.Fprintf(w, "    - Reference: %s\n", u)
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailReferenceTemplate, u))
 			}
 		}
 		return
 	}
 
 	if v.State == vulnscan.StateUnavailable || v.State == vulnscan.StateCompletedWithErrors {
-		fmt.Fprintln(w, "- Vulnerability status: `not-assessable` (enrichment unavailable or incomplete)")
+		fmt.Fprintf(w, "- %s\n", t.vulnStatusNotAssessableUnavailable)
 		return
 	}
 	if occ.PURL == "" && occ.CPE == "" {
-		fmt.Fprintln(w, "- Vulnerability status: `not-assessable` (no PURL/CPE)")
+		fmt.Fprintf(w, "- %s\n", t.vulnStatusNotAssessableNoID)
 		return
 	}
-	fmt.Fprintln(w, "- Vulnerability status: `none`")
+	fmt.Fprintf(w, "- %s\n", t.vulnStatusNone)
 }
 
 // normalizeSeverity lowercases and trims raw, returning "unknown" for empty input.
@@ -319,11 +328,11 @@ func formatRisk(risk *float64) string {
 }
 
 // formatKEV formats the KEV indicator used by grype-like output.
-func formatKEV(kev bool) string {
+func formatKEV(kev bool, t translations) string {
 	if kev {
-		return "yes"
+		return t.vulnKEVYes
 	}
-	return "no"
+	return t.vulnKEVNo
 }
 
 // formatNumber renders v with a single decimal place.
