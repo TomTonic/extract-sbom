@@ -14,6 +14,14 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
+func floatPtr(v float64) *float64 {
+	return &v
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
 func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
 	t.Parallel()
 
@@ -57,6 +65,16 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 			"extract-sbom:AAA": {{
 				VulnerabilityID: "CVE-2026-0001",
 				Severity:        "high",
+				ArtifactType:    "java-archive",
+				FixVersions:     []string{"1.0.1"},
+				CVSSScore:       floatPtr(9.8),
+				CVSSVersion:     "3.1",
+				CVSSVector:      "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+				Description:     "Remote code execution in component pkg-a",
+				EPSS:            floatPtr(0.944),
+				EPSSPercentile:  floatPtr(0.99),
+				Risk:            floatPtr(100.0),
+				KEV:             boolPtr(true),
 				DataSource:      "https://example.test/cve-2026-0001",
 				URLs:            []string{"https://nvd.nist.gov/vuln/detail/CVE-2026-0001"},
 			}},
@@ -71,9 +89,16 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 
 	checks := []string{
 		"Vulnerability summary (grype-inspired view):",
+		"| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |",
 		"[pkg-a](#component-extract-sbom-aaa)",
+		"HIGH (9.8)",
+		"94.4% (99th)",
+		"| 100.0 | yes |",
 		"Vulnerability status: `found` (1)",
 		"`CVE-2026-0001` (HIGH)",
+		"kev=`yes`",
+		"CVSS: version=`3.1` score=`9.8` vector=`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`",
+		"Description: Remote code execution in component pkg-a",
 		"Reference: https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
 		"Vulnerability status: `none`",
 	}

@@ -115,11 +115,26 @@ cat <<'JSON'
       "vulnerability": {
         "id": "GHSA-crg9-44h2-xw35",
         "severity": "Critical",
+				"description": "Apache ActiveMQ is vulnerable to Remote Code Execution",
         "namespace": "github:language:java",
         "dataSource": "https://example.test/vuln",
         "urls": ["https://github.com/advisories/GHSA-crg9-44h2-xw35"],
         "risk": 100.0,
-        "kev": true,
+				"knownExploited": [
+					{"cve": "CVE-2023-46604"}
+				],
+				"cvss": [
+					{
+						"version": "2.0",
+						"vector": "AV:N/AC:L/Au:N/C:P/I:P/A:P",
+						"metrics": {"baseScore": 7.5}
+					},
+					{
+						"version": "3.1",
+						"vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+						"metrics": {"baseScore": 9.8}
+					}
+				],
         "epss": [
           {
             "epss": 0.944,
@@ -180,5 +195,17 @@ JSON
 	}
 	if m.KEV == nil || !*m.KEV {
 		t.Fatalf("kev=%v want true", m.KEV)
+	}
+	if m.CVSSVersion != "3.1" {
+		t.Fatalf("cvssVersion=%q want 3.1", m.CVSSVersion)
+	}
+	if m.CVSSVector != "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" {
+		t.Fatalf("cvssVector=%q", m.CVSSVector)
+	}
+	if m.CVSSScore == nil || *m.CVSSScore != 9.8 {
+		t.Fatalf("cvssScore=%v want 9.8", m.CVSSScore)
+	}
+	if m.Description == "" {
+		t.Fatal("description should be populated")
 	}
 }

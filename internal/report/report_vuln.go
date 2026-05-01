@@ -16,9 +16,12 @@ type vulnerabilitySummaryRow struct {
 	Name            string
 	Installed       string
 	FixedIn         string
-	Type            string
 	VulnerabilityID string
 	Severity        string
+	CVSSScore       *float64
+	CVSSVersion     string
+	CVSSVector      string
+	Description     string
 	EPSS            *float64
 	EPSSPercentile  *float64
 	Risk            *float64
@@ -60,7 +63,7 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 
 	fmt.Fprintln(w, "\nVulnerability summary (grype-inspired view):")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Name | Installed | Fixed In | Type | Vulnerability | Severity | EPSS | Risk |")
+	fmt.Fprintln(w, "| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |")
 	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|")
 	for i := range rows {
 		anchor := occurrenceAnchorID(rows[i].ComponentID)
@@ -72,11 +75,11 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 			name,
 			emptyDash(rows[i].Installed),
 			emptyDash(rows[i].FixedIn),
-			emptyDash(rows[i].Type),
 			rows[i].VulnerabilityID,
-			strings.ToUpper(rows[i].Severity),
+			formatSeverity(rows[i].Severity, rows[i].CVSSScore),
 			formatEPSS(rows[i].EPSS, rows[i].EPSSPercentile),
-			formatRisk(rows[i].Risk, rows[i].KEV),
+			formatRisk(rows[i].Risk),
+			formatKEV(rows[i].KEV),
 		)
 	}
 }
@@ -93,6 +96,7 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 	}
 
 	rows := make([]vulnerabilitySummaryRow, 0)
+	seen := map[string]struct{}{}
 	for compID, matches := range v.MatchesByBOMRef {
 		occ := byID[compID]
 		for i := range matches {
@@ -104,14 +108,30 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 			if installed == "" {
 				installed = strings.TrimSpace(occ.Version)
 			}
+			key := strings.Join([]string{
+				compID,
+				name,
+				installed,
+				strings.TrimSpace(matches[i].VulnerabilityID),
+				normalizeSeverity(matches[i].Severity),
+				strings.Join(matches[i].FixVersions, ", "),
+			}, "|")
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+
 			rows = append(rows, vulnerabilitySummaryRow{
 				ComponentID:     compID,
 				Name:            name,
 				Installed:       installed,
 				FixedIn:         strings.Join(matches[i].FixVersions, ", "),
-				Type:            matches[i].ArtifactType,
 				VulnerabilityID: matches[i].VulnerabilityID,
 				Severity:        normalizeSeverity(matches[i].Severity),
+				CVSSScore:       matches[i].CVSSScore,
+				CVSSVersion:     matches[i].CVSSVersion,
+				CVSSVector:      matches[i].CVSSVector,
+				Description:     matches[i].Description,
 				EPSS:            matches[i].EPSS,
 				EPSSPercentile:  matches[i].EPSSPercentile,
 				Risk:            matches[i].Risk,
@@ -131,6 +151,31 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 		}
 		if leftRisk != rightRisk {
 			return leftRisk > rightRisk
+		}
+		if rows[i].KEV != rows[j].KEV {
+			return rows[i].KEV
+		}
+		leftEPSSPct := 0.0
+		rightEPSSPct := 0.0
+		if rows[i].EPSSPercentile != nil {
+			leftEPSSPct = *rows[i].EPSSPercentile
+		}
+		if rows[j].EPSSPercentile != nil {
+			rightEPSSPct = *rows[j].EPSSPercentile
+		}
+		if leftEPSSPct != rightEPSSPct {
+			return leftEPSSPct > rightEPSSPct
+		}
+		leftEPSS := 0.0
+		rightEPSS := 0.0
+		if rows[i].EPSS != nil {
+			leftEPSS = *rows[i].EPSS
+		}
+		if rows[j].EPSS != nil {
+			rightEPSS = *rows[j].EPSS
+		}
+		if leftEPSS != rightEPSS {
+			return leftEPSS > rightEPSS
 		}
 		if severityRank(rows[i].Severity) != severityRank(rows[j].Severity) {
 			return severityRank(rows[i].Severity) < severityRank(rows[j].Severity)
@@ -164,9 +209,7 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			if m.Risk != nil {
 				fmt.Fprintf(w, " risk=`%s`", formatNumber(*m.Risk))
 			}
-			if m.KEV != nil && *m.KEV {
-				fmt.Fprintf(w, " kev=`yes`")
-			}
+			fmt.Fprintf(w, " kev=`%s`", formatKEV(m.KEV != nil && *m.KEV))
 			if m.Namespace != "" {
 				fmt.Fprintf(w, " namespace=`%s`", m.Namespace)
 			}
@@ -182,6 +225,16 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			}
 			if m.FixState != "" || len(m.FixVersions) > 0 {
 				fmt.Fprintf(w, "    - Fix: state=`%s` versions=`%s`\n", emptyDash(m.FixState), strings.Join(m.FixVersions, ", "))
+			}
+			if m.CVSSVector != "" || m.CVSSVersion != "" || m.CVSSScore != nil {
+				fmt.Fprintf(w, "    - CVSS: version=`%s` score=`%s` vector=`%s`\n", emptyDash(m.CVSSVersion), formatRisk(m.CVSSScore), emptyDash(m.CVSSVector))
+			} else {
+				fmt.Fprintln(w, "    - CVSS: version=`-` score=`-` vector=`-`")
+			}
+			if strings.TrimSpace(m.Description) != "" {
+				fmt.Fprintf(w, "    - Description: %s\n", strings.TrimSpace(m.Description))
+			} else {
+				fmt.Fprintln(w, "    - Description: -")
 			}
 			if m.EPSS != nil {
 				fmt.Fprintf(w, "    - EPSS: %s\n", formatEPSS(m.EPSS, m.EPSSPercentile))
@@ -254,24 +307,55 @@ func formatEPSS(epss *float64, percentile *float64) string {
 	if percentile == nil {
 		return p
 	}
-	return fmt.Sprintf("%s (%sth)", p, formatNumber((*percentile)*100))
+	return fmt.Sprintf("%s (%s)", p, formatPercentileRank((*percentile)*100))
 }
 
-// formatRisk formats risk values and appends KEV when flagged.
-func formatRisk(risk *float64, kev bool) string {
+// formatRisk formats risk values.
+func formatRisk(risk *float64) string {
 	if risk == nil {
-		if kev {
-			return "KEV"
-		}
 		return "-"
 	}
-	if kev {
-		return fmt.Sprintf("%s KEV", formatNumber(*risk))
-	}
 	return formatNumber(*risk)
+}
+
+// formatKEV formats the KEV indicator used by grype-like output.
+func formatKEV(kev bool) string {
+	if kev {
+		return "yes"
+	}
+	return "no"
 }
 
 // formatNumber renders v with a single decimal place.
 func formatNumber(v float64) string {
 	return strconv.FormatFloat(v, 'f', 1, 64)
+}
+
+// formatSeverity renders severity and appends CVSS score in parentheses.
+func formatSeverity(severity string, cvss *float64) string {
+	if cvss == nil {
+		return strings.ToUpper(normalizeSeverity(severity))
+	}
+	return fmt.Sprintf("%s (%s)", strings.ToUpper(normalizeSeverity(severity)), formatNumber(*cvss))
+}
+
+// formatPercentileRank renders percentile values as ordinal ranks, e.g. 99th.
+func formatPercentileRank(pct float64) string {
+	whole := int(pct + 0.5)
+	if whole <= 0 {
+		return "0th"
+	}
+	if whole%100 >= 11 && whole%100 <= 13 {
+		return fmt.Sprintf("%dth", whole)
+	}
+	switch whole % 10 {
+	case 1:
+		return fmt.Sprintf("%dst", whole)
+	case 2:
+		return fmt.Sprintf("%dnd", whole)
+	case 3:
+		return fmt.Sprintf("%drd", whole)
+	default:
+		return fmt.Sprintf("%dth", whole)
+	}
 }

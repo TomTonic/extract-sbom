@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -51,6 +52,10 @@ type Issue struct {
 type VMatch struct {
 	VulnerabilityID string   `json:"vulnerabilityId"`
 	Severity        string   `json:"severity"`
+	CVSSScore       *float64 `json:"cvssScore,omitempty"`
+	CVSSVersion     string   `json:"cvssVersion,omitempty"`
+	CVSSVector      string   `json:"cvssVector,omitempty"`
+	Description     string   `json:"description,omitempty"`
 	Namespace       string   `json:"namespace,omitempty"`
 	DataSource      string   `json:"dataSource,omitempty"`
 	URLs            []string `json:"urls,omitempty"`
@@ -162,6 +167,7 @@ func Run(ctx context.Context, sbomPath string, enabled bool, bom *cdx.BOM) *Resu
 		vm := VMatch{
 			VulnerabilityID: m.Vulnerability.ID,
 			Severity:        normalizeSeverity(m.Vulnerability.Severity),
+			Description:     strings.TrimSpace(m.Vulnerability.Description),
 			Namespace:       m.Vulnerability.Namespace,
 			DataSource:      m.Vulnerability.DataSource,
 			URLs:            uniqueSortedStrings(m.Vulnerability.URLs),
@@ -175,6 +181,16 @@ func Run(ctx context.Context, sbomPath string, enabled bool, bom *cdx.BOM) *Resu
 			ArtifactPURL:    m.Artifact.PURL,
 			Risk:            m.Vulnerability.Risk,
 			KEV:             m.Vulnerability.KEV,
+		}
+		if len(m.Vulnerability.KnownExploited) > 0 {
+			kev := true
+			vm.KEV = &kev
+		}
+		if entry := selectBestCVSS(m.Vulnerability.CVSS); entry != nil {
+			vm.CVSSVersion = entry.Version
+			vm.CVSSVector = entry.Vector
+			score := entry.Metrics.BaseScore
+			vm.CVSSScore = &score
 		}
 		if len(m.Vulnerability.EPSS) > 0 {
 			best := m.Vulnerability.EPSS[0]
@@ -334,6 +350,52 @@ func uniqueSortedStrings(values []string) []string {
 	return out
 }
 
+// selectBestCVSS chooses the entry with the highest CVSS version and, for ties,
+// the highest base score.
+func selectBestCVSS(entries []grypeCVSS) *grypeCVSS {
+	if len(entries) == 0 {
+		return nil
+	}
+	best := entries[0]
+	bestVersion := cvssVersionRank(best.Version)
+	for i := 1; i < len(entries); i++ {
+		current := entries[i]
+		currentVersion := cvssVersionRank(current.Version)
+		if currentVersion > bestVersion {
+			best = current
+			bestVersion = currentVersion
+			continue
+		}
+		if currentVersion == bestVersion && current.Metrics.BaseScore > best.Metrics.BaseScore {
+			best = current
+		}
+	}
+	return &best
+}
+
+// cvssVersionRank converts CVSS version text (for example 3.1) to a sortable
+// integer rank where newer versions have higher values.
+func cvssVersionRank(version string) int {
+	v := strings.TrimSpace(version)
+	if v == "" {
+		return 0
+	}
+	parts := strings.Split(v, ".")
+	major := 0
+	minor := 0
+	if len(parts) > 0 {
+		if parsedMajor, err := strconv.Atoi(parts[0]); err == nil {
+			major = parsedMajor
+		}
+	}
+	if len(parts) > 1 {
+		if parsedMinor, err := strconv.Atoi(parts[1]); err == nil {
+			minor = parsedMinor
+		}
+	}
+	return major*100 + minor
+}
+
 type grypeJSON struct {
 	Descriptor struct {
 		Version   string `json:"version"`
@@ -357,14 +419,19 @@ type grypeMatch struct {
 		PURL    string `json:"purl"`
 	} `json:"artifact"`
 	Vulnerability struct {
-		ID         string   `json:"id"`
-		Severity   string   `json:"severity"`
-		Namespace  string   `json:"namespace"`
-		DataSource string   `json:"dataSource"`
-		URLs       []string `json:"urls"`
-		Risk       *float64 `json:"risk"`
-		KEV        *bool    `json:"kev"`
-		EPSS       []struct {
+		ID             string   `json:"id"`
+		Severity       string   `json:"severity"`
+		Description    string   `json:"description"`
+		Namespace      string   `json:"namespace"`
+		DataSource     string   `json:"dataSource"`
+		URLs           []string `json:"urls"`
+		Risk           *float64 `json:"risk"`
+		KEV            *bool    `json:"kev"`
+		KnownExploited []struct {
+			CVE string `json:"cve"`
+		} `json:"knownExploited"`
+		CVSS []grypeCVSS `json:"cvss"`
+		EPSS []struct {
 			EPSS       float64 `json:"epss"`
 			Percentile float64 `json:"percentile"`
 		} `json:"epss"`
@@ -377,4 +444,12 @@ type grypeMatch struct {
 		Type    string `json:"type"`
 		Matcher string `json:"matcher"`
 	} `json:"matchDetails"`
+}
+
+type grypeCVSS struct {
+	Version string `json:"version"`
+	Vector  string `json:"vector"`
+	Metrics struct {
+		BaseScore float64 `json:"baseScore"`
+	} `json:"metrics"`
 }
