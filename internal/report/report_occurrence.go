@@ -158,7 +158,7 @@ func writeOccurrenceEntry(w io.Writer, occ componentOccurrence, v *vulnscan.Resu
 	if occ.FoundBy != "" {
 		fmt.Fprintf(w, "- %s: `%s`\n", t.foundBy, occ.FoundBy)
 	}
-	writeOccurrenceVulnerabilityBlock(w, occ, v)
+	writeOccurrenceVulnerabilityBlock(w, occ, v, t)
 	fmt.Fprintln(w)
 }
 

@@ -270,7 +270,6 @@ type reportSection struct {
 const (
 	scanApproachGitHubURL = "https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md"
 
-	anchorHowToUse               = "how-to-use-this-report"
 	anchorMethodOverview         = "method-at-a-glance"
 	anchorAppendix               = "appendix"
 	anchorInputFile              = "input-file"

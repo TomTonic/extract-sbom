@@ -78,10 +78,6 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	writeSummary(w, data, extStats, scnStats, polStats, indexStats, occurrences, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.howToUseSection, anchorHowToUse)
-	writeHowToUseReport(w, t)
-	fmt.Fprintln(w)
-
 	writeSectionHeading(w, t.methodOverviewSection, anchorMethodOverview)
 	writeMethodOverview(w, t)
 	fmt.Fprintln(w)

@@ -55,7 +55,6 @@ func writeRootMetadata(w io.Writer, data ReportData, t translations) {
 func reportSections(t translations) []reportSection {
 	return []reportSection{
 		{title: t.summarySection, anchor: anchorSummary, level: 0},
-		{title: t.howToUseSection, anchor: anchorHowToUse, level: 0},
 		{title: t.methodOverviewSection, anchor: anchorMethodOverview, level: 0},
 		{title: t.processingIssuesSection, anchor: anchorProcessingErrors, level: 0},
 		{title: t.residualRiskSection, anchor: anchorResidualRisk, level: 0},
@@ -118,24 +117,6 @@ func collectSuppressionStats(suppressions []assembly.SuppressionRecord) suppress
 		}
 	}
 	return stats
-}
-
-// writeHowToUseReport writes the operator-facing triage workflow section.
-func writeHowToUseReport(w io.Writer, t translations) {
-	componentIndexLink := sectionLink(t.componentIndexSection, anchorComponentIndex)
-	normalizationLink := sectionLink(t.componentNormalizationSection, anchorSuppression)
-	processingLink := sectionLink(t.processingIssuesSection, anchorProcessingErrors)
-	riskLink := sectionLink(t.residualRiskSection, anchorResidualRisk)
-
-	fmt.Fprintln(w, t.howToUseLead)
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "1. %s\n\n", t.howToUseStep1)
-	fmt.Fprintln(w, "```sh")
-	fmt.Fprintln(w, "jq '.matches[] | select((.vulnerability.severity == \"High\") or (.vulnerability.severity == \"Critical\")) | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' grype.json")
-	fmt.Fprintln(w, "```")
-	fmt.Fprintf(w, "2. %s\n", fmt.Sprintf(t.howToUseStep2Template, componentIndexLink))
-	fmt.Fprintf(w, "3. %s\n", t.howToUseStep3)
-	fmt.Fprintf(w, "4. %s\n", fmt.Sprintf(t.howToUseStep4Template, normalizationLink, processingLink, riskLink))
 }
 
 // writeMethodOverview writes a concise explanation of pipeline method and
@@ -227,7 +208,7 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.summaryAssemblyMath, retainedPackages, structuralComponents, idx.TotalComponents))
 	fmt.Fprintf(w, "- %s: %s\n", t.summaryPolicies, fmt.Sprintf(t.summaryPoliciesStatsTemplate, pol.Total, pol.Continue, pol.Skip, pol.Abort))
 	fmt.Fprintf(w, "- %s: %s\n", t.summaryProcessingIssues, fmt.Sprintf(t.summaryProcessingStatsTemplate, len(data.ProcessingIssues)))
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.summaryNextStepTemplate, sectionLink(t.howToUseSection, anchorHowToUse), sectionLink(t.componentIndexSection, anchorComponentIndex)))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.summaryNextStepTemplate, sectionLink(t.componentIndexSection, anchorComponentIndex), sectionLink(t.methodOverviewSection, anchorMethodOverview)))
 
 	fmt.Fprintf(w, "\n%s:\n", t.summaryFindings)
 	findings := summarizeFindings(ext, scn, idx, t)
@@ -235,7 +216,7 @@ func writeSummary(w io.Writer, data ReportData, ext extractionStats, scn scanSta
 		fmt.Fprintf(w, "- %s\n", finding)
 	}
 	fmt.Fprintln(w)
-	writeVulnerabilitySummary(w, data, occurrences)
+	writeVulnerabilitySummary(w, data, occurrences, t)
 }
 
 // summarizeFindings derives short, operator-friendly findings from collected
