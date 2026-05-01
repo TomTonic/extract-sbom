@@ -70,8 +70,8 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 	out := buf.String()
 
 	checks := []string{
-		"Vulnerability summary (highest severity first):",
-		"[extract-sbom:AAA](#component-extract-sbom-aaa)",
+		"Vulnerability summary (grype-inspired view):",
+		"[pkg-a](#component-extract-sbom-aaa)",
 		"Vulnerability status: `found` (1)",
 		"`CVE-2026-0001` (HIGH)",
 		"Reference: https://nvd.nist.gov/vuln/detail/CVE-2026-0001",

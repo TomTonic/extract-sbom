@@ -60,7 +60,12 @@ type VMatch struct {
 	MatchType       string   `json:"matchType,omitempty"`
 	ArtifactName    string   `json:"artifactName,omitempty"`
 	ArtifactVersion string   `json:"artifactVersion,omitempty"`
+	ArtifactType    string   `json:"artifactType,omitempty"`
 	ArtifactPURL    string   `json:"artifactPurl,omitempty"`
+	EPSS            *float64 `json:"epss,omitempty"`
+	EPSSPercentile  *float64 `json:"epssPercentile,omitempty"`
+	Risk            *float64 `json:"risk,omitempty"`
+	KEV             *bool    `json:"kev,omitempty"`
 }
 
 // Result contains all optional vulnerability enrichment outputs.
@@ -166,7 +171,22 @@ func Run(ctx context.Context, sbomPath string, enabled bool, bom *cdx.BOM) *Resu
 			MatchType:       matchType,
 			ArtifactName:    m.Artifact.Name,
 			ArtifactVersion: m.Artifact.Version,
+			ArtifactType:    m.Artifact.Type,
 			ArtifactPURL:    m.Artifact.PURL,
+			Risk:            m.Vulnerability.Risk,
+			KEV:             m.Vulnerability.KEV,
+		}
+		if len(m.Vulnerability.EPSS) > 0 {
+			best := m.Vulnerability.EPSS[0]
+			for i := 1; i < len(m.Vulnerability.EPSS); i++ {
+				if m.Vulnerability.EPSS[i].EPSS > best.EPSS {
+					best = m.Vulnerability.EPSS[i]
+				}
+			}
+			epss := best.EPSS
+			vm.EPSS = &epss
+			pct := best.Percentile
+			vm.EPSSPercentile = &pct
 		}
 		result.MatchesByBOMRef[ref] = append(result.MatchesByBOMRef[ref], vm)
 	}
@@ -333,6 +353,7 @@ type grypeMatch struct {
 		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Version string `json:"version"`
+		Type    string `json:"type"`
 		PURL    string `json:"purl"`
 	} `json:"artifact"`
 	Vulnerability struct {
@@ -341,7 +362,13 @@ type grypeMatch struct {
 		Namespace  string   `json:"namespace"`
 		DataSource string   `json:"dataSource"`
 		URLs       []string `json:"urls"`
-		Fix        struct {
+		Risk       *float64 `json:"risk"`
+		KEV        *bool    `json:"kev"`
+		EPSS       []struct {
+			EPSS       float64 `json:"epss"`
+			Percentile float64 `json:"percentile"`
+		} `json:"epss"`
+		Fix struct {
 			State    string   `json:"state"`
 			Versions []string `json:"versions"`
 		} `json:"fix"`
