@@ -249,6 +249,7 @@ type Config struct {
 	ReportMode       ReportMode    // Human | Machine | Both
 	ProgressLevel    ProgressLevel // Quiet | Normal | Verbose
 	Language         string        // "en" | "de"
+	GrypeEnabled     bool          // GrypeEnabled enables optional Grype vulnerability enrichment when true.
 	RootMetadata     RootMetadata
 	Unsafe           bool
 	Limits           Limits
@@ -298,6 +299,7 @@ func DefaultConfig() Config {
 		ReportMode:       ReportHuman,
 		ProgressLevel:    ProgressNormal,
 		Language:         "en",
+		GrypeEnabled:     false,
 		WorkDir:          os.TempDir(),
 		Limits:           DefaultLimits(),
 		ParallelScanners: defaultParallelScanners(),

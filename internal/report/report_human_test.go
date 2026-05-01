@@ -11,7 +11,103 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/identify"
 	"github.com/TomTonic/extract-sbom/internal/policy"
 	"github.com/TomTonic/extract-sbom/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
+
+func floatPtr(v float64) *float64 {
+	return &v
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Vulnerability enrichment: not requested") {
+		t.Fatal("summary does not contain default vulnerability enrichment state")
+	}
+}
+
+func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:AAA",
+			Name:       "pkg-a",
+			Version:    "1.0.0",
+			PackageURL: "pkg:maven/a/a@1.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery.zip/pkg-a.jar"}},
+		},
+		{
+			BOMRef:     "extract-sbom:BBB",
+			Name:       "pkg-b",
+			Version:    "2.0.0",
+			PackageURL: "pkg:maven/b/b@2.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery.zip/pkg-b.jar"}},
+		},
+	}}
+	data.Vulnerabilities = &vulnscan.Result{
+		State:        vulnscan.StateCompleted,
+		Requested:    true,
+		GrypeVersion: "0.111.0",
+		MatchesByBOMRef: map[string][]vulnscan.VMatch{
+			"extract-sbom:AAA": {{
+				VulnerabilityID: "CVE-2026-0001",
+				Severity:        "high",
+				ArtifactType:    "java-archive",
+				FixVersions:     []string{"1.0.1"},
+				CVSSScore:       floatPtr(9.8),
+				CVSSVersion:     "3.1",
+				CVSSVector:      "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+				Description:     "Remote code execution in component pkg-a",
+				EPSS:            floatPtr(0.944),
+				EPSSPercentile:  floatPtr(0.99),
+				Risk:            floatPtr(100.0),
+				KEV:             boolPtr(true),
+				DataSource:      "https://example.test/cve-2026-0001",
+				URLs:            []string{"https://nvd.nist.gov/vuln/detail/CVE-2026-0001"},
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	out := buf.String()
+
+	checks := []string{
+		"Vulnerability summary (grype-inspired view):",
+		"| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |",
+		"[pkg-a](#component-extract-sbom-aaa)",
+		"HIGH (9.8)",
+		"94.4% (99th)",
+		"| 100.0 | yes |",
+		"Vulnerability status: `found` (1)",
+		"`CVE-2026-0001` (HIGH)",
+		"kev=`yes`",
+		"CVSS: version=`3.1` score=`9.8` vector=`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`",
+		"Description: Remote code execution in component pkg-a",
+		"Reference: https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+		"Vulnerability status: `none`",
+	}
+	for _, c := range checks {
+		if !strings.Contains(out, c) {
+			t.Fatalf("report output missing %q", c)
+		}
+	}
+}
 
 // TestGenerateHumanIncludesGeneratorBuildInfo verifies that build metadata
 // for the generator is visible in the human-readable report.
@@ -49,7 +145,6 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"# extract-sbom Audit Report",
 		"## Table of Contents",
 		"## Summary",
-		"## How To Use This Report",
 		"## Method At A Glance",
 		"## Processing Errors",
 		"## Residual Risk and Limitations",
@@ -216,7 +311,6 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 
 	for _, link := range []string{
 		"- [Summary](#summary)",
-		"- [How To Use This Report](#how-to-use-this-report)",
 		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
@@ -237,7 +331,7 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 }
 
 // TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst verifies that
-// Summary/guide/method/errors/risk appear before the large appendix sections.
+// Summary/method/errors/risk appear before the large appendix sections.
 func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	t.Parallel()
 
@@ -250,7 +344,6 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	output := buf.String()
 
 	summaryIdx := strings.Index(output, "## Summary")
-	howToUseIdx := strings.Index(output, "## How To Use This Report")
 	methodIdx := strings.Index(output, "## Method At A Glance")
 	errorsIdx := strings.Index(output, "## Processing Errors")
 	riskIdx := strings.Index(output, "## Residual Risk and Limitations")
@@ -259,13 +352,12 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	scanIdx := strings.Index(output, "## Scan Task Log")
 	extractionIdx := strings.Index(output, "## Extraction Log")
 
-	if summaryIdx == -1 || howToUseIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
+	if summaryIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
 		t.Fatal("one or more expected sections are missing")
 	}
 
-	if summaryIdx >= appendixIdx || howToUseIdx >= appendixIdx || methodIdx >= appendixIdx ||
+	if summaryIdx >= appendixIdx || methodIdx >= appendixIdx ||
 		summaryIdx >= scanIdx || summaryIdx >= extractionIdx ||
-		howToUseIdx >= scanIdx || howToUseIdx >= extractionIdx ||
 		methodIdx >= scanIdx || methodIdx >= extractionIdx ||
 		errorsIdx >= scanIdx || errorsIdx >= extractionIdx ||
 		riskIdx >= scanIdx || riskIdx >= extractionIdx ||
@@ -274,7 +366,7 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	}
 }
 
-func TestGenerateHumanIncludesTriageGuidanceAndDeepLinks(t *testing.T) {
+func TestGenerateHumanIncludesMethodDeepLinks(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
@@ -286,8 +378,6 @@ func TestGenerateHumanIncludesTriageGuidanceAndDeepLinks(t *testing.T) {
 	output := buf.String()
 
 	for _, fragment := range []string{
-		"jq '.matches[] | select((.vulnerability.severity == \"High\") or (.vulnerability.severity == \"Critical\")) | {artifact_id: .artifact.id, package: .artifact.name, version: .artifact.version, vulnerability: .vulnerability.id, severity: .vulnerability.severity}' grype.json",
-		"The heading `### <artifact_id>` corresponds to the SBOM `bom-ref` and to Grype `artifact.id`.",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#3-two-phases",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#81-how-deduplication-works",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#6-package-detection-reliability",

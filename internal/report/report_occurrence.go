@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // writeScanNoPackageIdentitiesSubsection writes scan targets where Syft
@@ -88,7 +90,7 @@ func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionSta
 
 // writeComponentOccurrenceIndex renders the appendix index and splits entries
 // into with-PURL and without-PURL groups for fast triage.
-func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrence, idx componentIndexStats, t translations) {
+func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrence, idx componentIndexStats, v *vulnscan.Result, t translations) {
 	fmt.Fprintf(w, "%s\n\n", t.componentIndexLead)
 
 	if len(occurrences) == 0 {
@@ -113,7 +115,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
 		for i := range withPURL {
-			writeOccurrenceEntry(w, withPURL[i], t)
+			writeOccurrenceEntry(w, withPURL[i], v, t)
 		}
 	}
 
@@ -124,13 +126,13 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
 		for i := range withoutPURL {
-			writeOccurrenceEntry(w, withoutPURL[i], t)
+			writeOccurrenceEntry(w, withoutPURL[i], v, t)
 		}
 	}
 }
 
 // writeOccurrenceEntry renders one normalized occurrence including provenance.
-func writeOccurrenceEntry(w io.Writer, occ componentOccurrence, t translations) {
+func writeOccurrenceEntry(w io.Writer, occ componentOccurrence, v *vulnscan.Result, t translations) {
 	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", occurrenceAnchorID(occ.ObjectID))
 	fmt.Fprintf(w, "### %s\n\n", occ.ObjectID)
 	fmt.Fprintf(w, "- %s: `%s`\n", t.packageName, occ.PackageName)
@@ -156,6 +158,7 @@ func writeOccurrenceEntry(w io.Writer, occ componentOccurrence, t translations) 
 	if occ.FoundBy != "" {
 		fmt.Fprintf(w, "- %s: `%s`\n", t.foundBy, occ.FoundBy)
 	}
+	writeOccurrenceVulnerabilityBlock(w, occ, v, t)
 	fmt.Fprintln(w)
 }
 
@@ -197,6 +200,7 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 			PackageName:    comp.Name,
 			Version:        comp.Version,
 			PURL:           comp.PackageURL,
+			CPE:            comp.CPE,
 			DeliveryPaths:  deliveryPaths,
 			EvidencePaths:  componentPropertyValues(comp, "extract-sbom:evidence-path"),
 			EvidenceSource: firstComponentPropertyValue(comp, "extract-sbom:evidence-source"),
