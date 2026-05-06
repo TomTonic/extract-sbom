@@ -329,6 +329,14 @@ Path to a text file with one password per line. Empty lines and lines starting
 with `#` are ignored. Passwords from the file are appended after any
 `--password` values.
 
+Limits on the password file:
+- Maximum file size: **1 MiB**
+- Maximum number of passwords: **10,000**
+- On Unix systems, the file must not be group- or world-readable (permissions
+  must be `0600` or stricter). extract-sbom will refuse to read a
+  password file with looser permissions to prevent credential exposure on
+  multi-user systems.
+
 **`EXTRACT_SBOM_PASSWORDS`**
 
 Optional environment variable with comma-separated passwords. These passwords
