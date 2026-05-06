@@ -100,6 +100,13 @@ Examples include:
 - ZIP, CAB, MSI, 7z, TAR variants
 - Arbitrary nesting combinations thereof
 
+Encrypted archive behavior requirements:
+
+- Password-protected archives must support ordered password attempts
+  (no-password first, then configured candidates).
+- Passwords apply uniformly to all archive formats via the unified
+  7-Zip extraction path.
+
 Formats already handled by Syft (e.g., directory trees or recognized ecosystems)
 are passed directly to Syft without forced unpacking.
 
@@ -117,12 +124,18 @@ Every extraction attempt must be recorded, including:
 - Extraction tool used
 - Outcome and reason
 
+For password-protected containers, the report/audit trail must record that
+password-based extraction was attempted (and whether it succeeded) without
+recording the plaintext password value.
+
 ### 4.3 Syft-First Principle
 
 Formats that Syft already understands natively (e.g. JAR, RPM, DEB, wheel,
 nupkg, apk) must be passed directly to Syft without extraction by extract-sbom.
 extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI) that
 Syft cannot see through.
+For encrypted ZIP archives specifically, extract-sbom detects encryption and
+falls back to external extraction with ordered password attempts.
 
 This ensures:
 
@@ -386,11 +399,14 @@ All relevant code must be written in **Go**.
 - Dependencies on external binaries and libraries must be kept minimal
 - The concrete selection of helper tools is a solution design decision and must be documented
 - **7-Zip** is the preferred extractor for Microsoft CAB, MSI, and related formats
+- **7-Zip** is also the fallback extractor for encrypted ZIP archives
 - **unshield** is the required extractor for InstallShield proprietary CABs
 - **Syft** is mandatory, preferably used in library mode
 - **Grype** is optional and only used when `--grype` is set
 - External extraction tools are optional at runtime; if missing, the corresponding
   formats are recorded as non-extractable in the SBOM rather than causing a fatal error
+- Password candidates for encrypted archives are configurable via CLI,
+  environment, and file-based input, with deterministic precedence/order
 - Direct metadata reads from supported container formats (for example MSI
   product metadata) should remain available even when payload extraction tools
   are missing

@@ -29,10 +29,11 @@ func resolve7zBinary() (string, bool) {
 	return "7zz", false
 }
 
-// extract7z extracts CAB, MSI, 7z, or RAR files using 7-Zip via the sandbox.
+// extract7z extracts CAB, MSI, 7z, RAR files using 7-Zip via the sandbox.
 // After extraction, the output directory is validated by safeguard to detect
 // path traversal, symlinks, special files, and resource limit violations.
-func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits) error {
+// password may be empty, in which case no -p flag is passed to 7-Zip.
+func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits, password string) error {
 	binary, found := resolve7zBinary()
 	if !found {
 		node.Status = StatusToolMissing
@@ -50,6 +51,9 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 	node.SandboxUsed = sb.Name()
 
 	args := []string{"x", filePath, "-o" + outDir, "-y"}
+	if password != "" {
+		args = append(args, "-p"+password)
+	}
 	if err := sb.Run(ctx, binary, args, filePath, outDir); err != nil {
 		os.RemoveAll(outDir)
 		node.Status = StatusFailed
@@ -60,10 +64,86 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 	return finalizeExternalExtraction(node, outDir, limits)
 }
 
+// extract7zWithPasswords extracts an archive via 7-Zip, trying each supplied
+// password in order until extraction succeeds.
+//
+// The empty string (no password) is always tried first, before any entries in
+// passwords. This means non-encrypted archives succeed on the first attempt
+// without any special-casing in the caller.
+//
+// If the archive is encrypted and no password matches, the node status is set
+// to StatusFailed with a clear message and the function returns nil (not a
+// hard error — the failure is captured in the node and surfaced in the report).
+//
+// Parameters:
+//   - ctx: context for cancellation
+//   - node: extraction node whose status will be updated
+//   - filePath: absolute path to the archive file
+//   - sb: sandbox for external tool execution
+//   - workDir: base directory for temporary extraction directories
+//   - limits: resource limits for post-extraction validation
+//   - passwords: candidate passwords to try (in order); may be nil or empty
+func extract7zWithPasswords(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits, passwords []string) error {
+	// Build the full candidate list: no-password attempt first, then supplied
+	// passwords. Using a sentinel value rather than an empty string lets us
+	// distinguish "no -p flag" from "explicit empty password".
+	type attempt struct {
+		password string
+		useFlag  bool // false → omit -p entirely
+	}
+	candidates := []attempt{{password: "", useFlag: false}}
+	for _, pw := range passwords {
+		candidates = append(candidates, attempt{password: pw, useFlag: true})
+	}
+
+	for i, cand := range candidates {
+		// Reset mutable node fields before each attempt so a previous failure
+		// does not pollute the next attempt's state.
+		node.Status = StatusPending
+		node.Tool = ""
+		node.SandboxUsed = ""
+		node.ExtractedDir = ""
+		node.EntriesCount = 0
+		node.TotalSize = 0
+		node.StatusDetail = ""
+
+		pw := ""
+		if cand.useFlag {
+			pw = cand.password
+		}
+
+		if err := extract7z(ctx, node, filePath, sb, workDir, limits, pw); err != nil {
+			// Hard infrastructure error (e.g. temp dir creation) — propagate.
+			return err
+		}
+
+		if node.Status == StatusExtracted {
+			// Success.
+			if cand.useFlag {
+				node.StatusDetail += fmt.Sprintf(" (password index %d matched)", i)
+			}
+			return nil
+		}
+
+		if node.Status == StatusToolMissing {
+			// Tool not available — no point trying further passwords.
+			return nil
+		}
+
+		// StatusFailed: clean up the output dir (already done by extract7z on
+		// failure) and try the next candidate.
+	}
+
+	node.Status = StatusFailed
+	node.StatusDetail = "encrypted archive: extraction failed (no matching password found)"
+	return nil
+}
+
 // extractUnshield extracts InstallShield CABs using unshield via the sandbox.
 // After extraction, the output directory is validated by safeguard to detect
 // path traversal, symlinks, special files, and resource limit violations.
-func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits) error {
+// passwords is the ordered list of candidate passwords to try; may be nil.
+func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits, passwords []string) error {
 	if !isToolAvailable("unshield") {
 		node.Status = StatusToolMissing
 		node.StatusDetail = "unshield is not installed; cannot extract InstallShield CAB"
@@ -71,23 +151,64 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 		return nil
 	}
 
-	outDir, err := os.MkdirTemp(workDir, "extract-sbom-unshield-*")
-	if err != nil {
-		return fmt.Errorf("extract: create temp dir: %w", err)
+	// Build candidate list: no-password first, then each supplied password.
+	type attempt struct {
+		password string
+		useFlag  bool
+	}
+	candidates := []attempt{{password: "", useFlag: false}}
+	for _, pw := range passwords {
+		candidates = append(candidates, attempt{password: pw, useFlag: true})
 	}
 
-	node.Tool = "unshield"
-	node.SandboxUsed = sb.Name()
+	for i, cand := range candidates {
+		node.Status = StatusPending
+		node.Tool = ""
+		node.SandboxUsed = ""
+		node.ExtractedDir = ""
+		node.EntriesCount = 0
+		node.TotalSize = 0
+		node.StatusDetail = ""
 
-	args := []string{"-d", outDir, "x", filePath}
-	if err := sb.Run(ctx, "unshield", args, filePath, outDir); err != nil {
-		os.RemoveAll(outDir)
+		outDir, err := os.MkdirTemp(workDir, "extract-sbom-unshield-*")
+		if err != nil {
+			return fmt.Errorf("extract: create temp dir: %w", err)
+		}
+
+		node.Tool = "unshield"
+		node.SandboxUsed = sb.Name()
+
+		args := []string{"-d", outDir, "x", filePath}
+		if cand.useFlag && cand.password != "" {
+			args = append(args, "-P", cand.password)
+		}
+
+		if runErr := sb.Run(ctx, "unshield", args, filePath, outDir); runErr != nil {
+			os.RemoveAll(outDir)
+			node.Status = StatusFailed
+			node.StatusDetail = fmt.Sprintf("unshield extraction failed: %v", runErr)
+			continue // try next password
+		}
+
+		if finalErr := finalizeExternalExtraction(node, outDir, limits); finalErr != nil {
+			return finalErr
+		}
+
+		if node.Status == StatusExtracted {
+			if cand.useFlag {
+				node.StatusDetail += fmt.Sprintf(" (password index %d matched)", i)
+			}
+			return nil
+		}
+	}
+
+	if node.Status != StatusExtracted {
 		node.Status = StatusFailed
-		node.StatusDetail = fmt.Sprintf("unshield extraction failed: %v", err)
-		return nil
+		if len(passwords) > 0 {
+			node.StatusDetail = "encrypted archive: extraction failed (no matching password found)"
+		}
 	}
-
-	return finalizeExternalExtraction(node, outDir, limits)
+	return nil
 }
 
 // finalizeExternalExtraction validates and summarizes an output directory created

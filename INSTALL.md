@@ -57,9 +57,15 @@ Or place the binary anywhere on your `PATH`.
 The binary itself has no external Go runtime dependencies. Certain input formats,
 however, require external tools at runtime:
 
-- `7zz` (7-Zip): required for CAB, 7z, MSI payload, RAR, and TAR XZ/Zstd extraction
+- `7zz` (7-Zip): required for CAB, 7z, MSI payload, RAR, TAR XZ/Zstd, and encrypted ZIP fallback extraction
 - `unshield`: required for InstallShield CAB extraction
 - `bwrap` (Bubblewrap, Linux only): required for sandboxed external extraction unless `--unsafe` is used
+
+Encrypted archive note:
+
+- encrypted ZIPs are detected and re-routed to 7-Zip automatically
+- password-protected external formats (ZIP via 7-Zip re-route, 7z, RAR, MSI/CAB payload paths, InstallShield via unshield) use ordered password attempts
+- passwords can be supplied via `--password` (repeatable), `EXTRACT_SBOM_PASSWORDS` (comma-separated), or `--password-file` (one password per line)
 
 Syft is compiled into the binary. No separate Syft installation is needed.
 
@@ -94,7 +100,7 @@ Fix:
 
 ### 6.2 Missing 7zz
 
-When input requires 7-Zip-backed extraction (e.g., CAB, 7z, MSI, RAR):
+When input requires 7-Zip-backed extraction (e.g., CAB, 7z, MSI, RAR, encrypted ZIP):
 
 - extraction node status becomes `tool-missing`
 - status detail mentions `7zz (7-Zip) is not installed`

@@ -27,7 +27,7 @@ func TestExtract7zMarksToolMissingWhenUnavailable(t *testing.T) {
 	})
 
 	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
-	err := extract7z(context.Background(), node, "/tmp/input.cab", sandbox.NewPassthroughSandbox(), t.TempDir(), config.DefaultLimits())
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sandbox.NewPassthroughSandbox(), t.TempDir(), config.DefaultLimits(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestExtract7zUsesSandboxOutputAndSummarizesFiles(t *testing.T) {
 	}}
 
 	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
-	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, t.TempDir(), config.DefaultLimits())
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, t.TempDir(), config.DefaultLimits(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestExtractUnshieldPassesDestinationDirectory(t *testing.T) {
 	}}
 
 	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.InstallShieldCAB}}
-	err := extractUnshield(context.Background(), node, "/tmp/setup.cab", sb, t.TempDir(), config.DefaultLimits())
+	err := extractUnshield(context.Background(), node, "/tmp/setup.cab", sb, t.TempDir(), config.DefaultLimits(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestExtract7zRejectsUnsafePostExtractionOutput(t *testing.T) {
 	}}
 
 	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.CAB}}
-	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, t.TempDir(), config.DefaultLimits())
+	err := extract7z(context.Background(), node, "/tmp/input.cab", sb, t.TempDir(), config.DefaultLimits(), "")
 	if err == nil {
 		t.Fatal("expected hard security error, got nil")
 	}

@@ -34,8 +34,7 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sb sandbo
 		OriginalPath: inputPath,
 	}
 
-	stats := &safeguard.ExtractionStats{}
-	if err := extractRecursive(ctx, root, inputPath, baseName, 0, cfg, sb, stats); err != nil {
+	if err := extractRecursive(ctx, root, inputPath, baseName, 0, cfg, sb); err != nil {
 		// If we have a tree at all, return it with the error info.
 		return root, err
 	}
@@ -56,7 +55,7 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sb sandbo
 // - hard security errors are propagated (policy may decide continuation)
 // - per-extraction timeout applies to one archive operation
 func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string, deliveryPath string,
-	depth int, cfg config.Config, sb sandbox.Sandbox, stats *safeguard.ExtractionStats) error {
+	depth int, cfg config.Config, sb sandbox.Sandbox) error {
 	if depth > cfg.Limits.MaxDepth {
 		node.Status = StatusSkipped
 		node.StatusDetail = fmt.Sprintf("depth limit %d exceeded", cfg.Limits.MaxDepth)
@@ -106,18 +105,10 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 	}
 
 	switch info.Format {
-	case identify.ZIP:
-		err = extractZIP(extractCtx, node, filePath, cfg.WorkDir, cfg.Limits, stats, cfg)
-	case identify.TAR:
-		err = extractTAR(extractCtx, node, filePath, nil, cfg.WorkDir, cfg.Limits, stats, cfg)
-	case identify.GzipTAR:
-		err = extractCompressedTAR(extractCtx, node, filePath, "gzip", cfg.WorkDir, cfg.Limits, stats, cfg)
-	case identify.Bzip2TAR:
-		err = extractCompressedTAR(extractCtx, node, filePath, "bzip2", cfg.WorkDir, cfg.Limits, stats, cfg)
-	case identify.XzTAR, identify.ZstdTAR:
-		err = extract7z(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits)
+	case identify.ZIP, identify.TAR, identify.GzipTAR, identify.Bzip2TAR, identify.XzTAR, identify.ZstdTAR:
+		err = extract7zWithPasswords(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits, cfg.Passwords)
 	case identify.CAB, identify.SevenZip, identify.RAR:
-		err = extract7z(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits)
+		err = extract7zWithPasswords(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits, cfg.Passwords)
 	case identify.MSI:
 		if meta, msiErr := ReadMSIMetadata(filePath, cfg.Limits.MaxEntrySize); msiErr == nil {
 			node.Metadata = meta
@@ -125,9 +116,9 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 		if cfg.InterpretMode == config.InterpretInstallerSemantic && node.Metadata != nil {
 			node.InstallerHint = "msi-file-table-remapping-available"
 		}
-		err = extract7z(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits)
+		err = extract7zWithPasswords(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits, cfg.Passwords)
 	case identify.InstallShieldCAB:
-		err = extractUnshield(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits)
+		err = extractUnshield(extractCtx, node, filePath, sb, cfg.WorkDir, cfg.Limits, cfg.Passwords)
 	default:
 		node.Status = StatusSkipped
 		node.StatusDetail = fmt.Sprintf("no extraction handler for format %s", info.Format)
@@ -165,7 +156,7 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 	}
 
 	if node.ExtractedDir != "" {
-		if walkErr := recurseIntoDir(ctx, node, node.ExtractedDir, deliveryPath, depth+1, cfg, sb, stats); walkErr != nil {
+		if walkErr := recurseIntoDir(ctx, node, node.ExtractedDir, deliveryPath, depth+1, cfg, sb); walkErr != nil {
 			return walkErr
 		}
 	}
@@ -180,7 +171,7 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 // It enforces policy behavior (strict vs partial) for resource/security errors
 // at child level while keeping an auditable tree of encountered artifacts.
 func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, parentDeliveryPath string,
-	depth int, cfg config.Config, sb sandbox.Sandbox, stats *safeguard.ExtractionStats) error {
+	depth int, cfg config.Config, sb sandbox.Sandbox) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("extract: read dir %s: %w", dir, err)
@@ -189,7 +180,7 @@ func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, par
 	for _, entry := range entries {
 		if entry.IsDir() {
 			subDir := filepath.Join(dir, entry.Name())
-			if walkErr := recurseIntoDir(ctx, parent, subDir, parentDeliveryPath+"/"+entry.Name(), depth, cfg, sb, stats); walkErr != nil {
+			if walkErr := recurseIntoDir(ctx, parent, subDir, parentDeliveryPath+"/"+entry.Name(), depth, cfg, sb); walkErr != nil {
 				return walkErr
 			}
 			continue
@@ -200,7 +191,7 @@ func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, par
 
 		child := &ExtractionNode{Path: childDeliveryPath, OriginalPath: childPath}
 
-		if err := extractRecursive(ctx, child, childPath, childDeliveryPath, depth, cfg, sb, stats); err != nil {
+		if err := extractRecursive(ctx, child, childPath, childDeliveryPath, depth, cfg, sb); err != nil {
 			if _, ok := err.(*safeguard.HardSecurityError); ok {
 				child.Status = StatusSecurityBlocked
 				child.StatusDetail = err.Error()
@@ -250,4 +241,22 @@ func CleanupNode(node *ExtractionNode) {
 	for _, child := range node.Children {
 		CleanupNode(child)
 	}
+}
+
+// isSkippedExtension reports whether filePath ends with an extension present
+// in skipList. Matching is case-insensitive.
+func isSkippedExtension(filePath string, skipList []string) bool {
+	if len(skipList) == 0 {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == "" {
+		return false
+	}
+	for _, s := range skipList {
+		if strings.EqualFold(s, ext) {
+			return true
+		}
+	}
+	return false
 }
