@@ -421,9 +421,9 @@ func classifyExtractionIssue(node *extract.ExtractionNode) string {
 		return "password-required"
 	case strings.Contains(lower, "timeout"):
 		return "timeout"
-	case strings.Contains(lower, "invalid tar header") || strings.Contains(lower, "headers error") || strings.Contains(lower, "unconfirmed start of archive"):
+	case strings.Contains(lower, "invalid tar header") || strings.Contains(lower, "headers error") || strings.Contains(lower, "unconfirmed start of archive") || strings.Contains(lower, "unexpected end of archive"):
 		return "archive-corrupt-or-truncated"
-	case strings.Contains(lower, "not a valid zip") || strings.Contains(lower, "can not open the file as archive"):
+	case strings.Contains(lower, "not a valid zip") || strings.Contains(lower, "can not open the file as archive") || strings.Contains(lower, "cannot open the file as") || strings.Contains(lower, "is not archive"):
 		return "format-mismatch-or-invalid-archive"
 	default:
 		return "extraction-failed"

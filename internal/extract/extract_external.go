@@ -64,6 +64,9 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 		os.RemoveAll(outDir)
 		node.Status = StatusFailed
 		node.StatusDetail = formatExtractionFailureDetail(binary, node, filePath, err)
+		if ctx.Err() == context.DeadlineExceeded {
+			return ctx.Err()
+		}
 		return nil
 	}
 
@@ -200,6 +203,9 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 			os.RemoveAll(outDir)
 			node.Status = StatusFailed
 			node.StatusDetail = fmt.Sprintf("unshield extraction failed: %v", runErr)
+			if ctx.Err() == context.DeadlineExceeded {
+				return ctx.Err()
+			}
 			continue // try next password
 		}
 
