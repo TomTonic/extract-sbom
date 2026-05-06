@@ -1,10 +1,13 @@
 package extract
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
@@ -49,6 +52,9 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 
 	node.Tool = binary
 	node.SandboxUsed = sb.Name()
+	if meta := collect7zListMetadata(ctx, binary, filePath); meta != nil {
+		node.ArchiveMeta = meta
+	}
 
 	args := []string{"x", filePath, "-o" + outDir, "-y"}
 	if password != "" {
@@ -57,7 +63,7 @@ func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sa
 	if err := sb.Run(ctx, binary, args, filePath, outDir); err != nil {
 		os.RemoveAll(outDir)
 		node.Status = StatusFailed
-		node.StatusDetail = fmt.Sprintf("%s extraction failed: %v", binary, err)
+		node.StatusDetail = formatExtractionFailureDetail(binary, node, filePath, err)
 		return nil
 	}
 
@@ -239,6 +245,207 @@ func finalizeExternalExtraction(node *ExtractionNode, outDir string, limits conf
 	node.StatusDetail = fmt.Sprintf("extracted %d entries", entriesCount)
 
 	return nil
+}
+
+func formatExtractionFailureDetail(binary string, node *ExtractionNode, filePath string, err error) string {
+	base := summarizeToolError(err)
+	detail := ""
+	if base != "" {
+		detail = fmt.Sprintf("%s extraction failed: %s", binary, base)
+	}
+
+	lower := strings.ToLower(base)
+	switch {
+	case strings.Contains(lower, "invalid tar header"):
+		detail += "; hint: file appears truncated/corrupt, or it is not a real TAR stream"
+	case strings.Contains(lower, "can not open the file as archive"):
+		detail += "; hint: file content does not match the detected archive format, or archive is damaged"
+	case strings.Contains(lower, "wrong password") || strings.Contains(lower, "data error in encrypted file"):
+		detail += "; hint: archive is encrypted; configure a matching password via --password"
+	case strings.Contains(lower, "headers error") || strings.Contains(lower, "unconfirmed start of archive"):
+		detail += "; hint: central directory/header structure is inconsistent (often truncated file or appended payload)"
+	}
+
+	if detail == "" {
+		detail = fmt.Sprintf("%s extraction failed (%s)", binary, filepath.Base(filePath))
+		if node.Format.Format != 0 {
+			detail += ": detected=" + node.Format.Format.String()
+		}
+	}
+
+	return detail
+}
+
+func summarizeToolError(err error) string {
+	type parseSection int
+	const (
+		sectionGeneric parseSection = iota
+		sectionErrors
+		sectionWarnings
+	)
+
+	lines := strings.Split(err.Error(), "\n")
+	errors := make([]string, 0, 3)
+	warnings := make([]string, 0, 2)
+	generic := make([]string, 0, 2)
+	section := sectionGeneric
+
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		switch line {
+		case "ERRORS:":
+			section = sectionErrors
+			continue
+		case "WARNINGS:":
+			section = sectionWarnings
+			continue
+		case "--":
+			continue
+		}
+		if strings.HasPrefix(line, "stderr:") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "stderr:"))
+			if line == "" {
+				continue
+			}
+		}
+		if isToolNoiseLine(line) {
+			continue
+		}
+
+		switch section {
+		case sectionErrors:
+			errors = append(errors, line)
+		case sectionWarnings:
+			warnings = append(warnings, line)
+		default:
+			generic = append(generic, line)
+		}
+	}
+
+	if len(errors) > 0 {
+		if len(warnings) > 0 {
+			return strings.Join(append(limitStrings(errors, 2), "warning: "+warnings[0]), "; ")
+		}
+		return strings.Join(limitStrings(errors, 2), "; ")
+	}
+	if len(generic) > 0 {
+		return generic[0]
+	}
+	if len(warnings) > 0 {
+		return "warning: " + warnings[0]
+	}
+	return strings.TrimSpace(err.Error())
+}
+
+func isToolNoiseLine(line string) bool {
+	l := strings.ToLower(strings.TrimSpace(line))
+	if l == "" {
+		return true
+	}
+	if strings.Contains(l, "execution failed") || strings.HasPrefix(l, "sandbox:") {
+		return true
+	}
+	if strings.HasPrefix(l, "7-zip") || strings.HasPrefix(l, "scanning the drive") ||
+		strings.HasPrefix(l, "extracting archive:") || strings.HasPrefix(l, "path =") ||
+		strings.HasPrefix(l, "type =") || strings.HasPrefix(l, "physical size =") ||
+		strings.HasPrefix(l, "headers size =") || strings.HasPrefix(l, "tail size =") ||
+		strings.HasPrefix(l, "characteristics =") {
+		return true
+	}
+	return false
+}
+
+func limitStrings(values []string, maxItems int) []string {
+	if len(values) <= maxItems {
+		return values
+	}
+	return values[:maxItems]
+}
+
+// collect7zListMetadata performs a best-effort `7zz l -slt` and extracts
+// compact archive metadata for report rendering.
+func collect7zListMetadata(ctx context.Context, binary string, filePath string) *ArchiveMetadata {
+	cmd := exec.CommandContext(ctx, binary, "l", "-slt", filePath) //nolint:gosec // G204: binary is resolved from fixed 7-Zip candidate names.
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil
+	}
+	if err := cmd.Start(); err != nil {
+		return nil
+	}
+
+	meta := &ArchiveMetadata{}
+	methods := map[string]struct{}{}
+	inHeader := true
+
+	scanner := bufio.NewScanner(stdout)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "----------") {
+			inHeader = false
+			continue
+		}
+
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+
+		if inHeader {
+			switch key {
+			case "Type":
+				meta.Type = val
+			case "Physical Size":
+				meta.PhysicalSize = val
+			case "Headers Size":
+				meta.HeadersSize = val
+			case "Solid":
+				meta.Solid = val
+			case "Blocks":
+				meta.Blocks = val
+			}
+		}
+
+		switch key {
+		case "Method":
+			if val != "" {
+				methods[val] = struct{}{}
+			}
+		case "Encrypted":
+			if val == "+" || strings.EqualFold(val, "true") {
+				meta.HasEncryptedItem = true
+			}
+		}
+	}
+
+	_ = cmd.Wait()
+	if scanErr := scanner.Err(); scanErr != nil {
+		return nil
+	}
+
+	if len(methods) > 0 {
+		meta.Methods = make([]string, 0, len(methods))
+		for m := range methods {
+			meta.Methods = append(meta.Methods, m)
+		}
+		sort.Strings(meta.Methods)
+	}
+
+	if meta.Type == "" && len(meta.Methods) == 0 && meta.PhysicalSize == "" && meta.HeadersSize == "" &&
+		meta.Solid == "" && meta.Blocks == "" && !meta.HasEncryptedItem {
+		return nil
+	}
+	return meta
 }
 
 // summarizeExtractedDir walks an extracted directory and returns the count and

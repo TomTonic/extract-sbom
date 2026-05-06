@@ -253,6 +253,22 @@ type processingEntry struct {
 	Source string
 	// Location is a stage name or logical node path, depending on Source.
 	Location string
+	// Classification is a compact machine- and human-readable error class.
+	Classification string
+	// Status is the extraction status name for extraction-source rows.
+	Status string
+	// DetectedFormat is the detected archive/container format.
+	DetectedFormat string
+	// Tool is the extractor/scanner tool relevant for this row.
+	Tool string
+	// ArchiveType is the 7-Zip-reported Type field.
+	ArchiveType string
+	// ArchiveMethod is the 7-Zip-reported Method field(s).
+	ArchiveMethod string
+	// Encrypted is a compact yes/no marker from 7-Zip listing metadata.
+	Encrypted string
+	// PhysicalSize is the 7-Zip-reported physical archive size.
+	PhysicalSize string
 	// Detail is plain-text diagnostic content.
 	Detail string
 }
