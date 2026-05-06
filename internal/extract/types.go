@@ -59,6 +59,18 @@ type ContainerMetadata struct {
 	Language       string
 }
 
+// ArchiveMetadata holds best-effort metadata discovered from `7zz l -slt`.
+// It is attached per extraction node and rendered in the extraction log.
+type ArchiveMetadata struct {
+	Type             string
+	Methods          []string
+	PhysicalSize     string
+	HeadersSize      string
+	Solid            string
+	Blocks           string
+	HasEncryptedItem bool
+}
+
 // ExtractionNode is the central processing data structure.
 // Each node represents a container artifact encountered during traversal.
 // The tree of nodes forms the extraction state from which both the SBOM
@@ -72,6 +84,7 @@ type ExtractionNode struct {
 	ExtractedDir string              // filesystem path of extracted contents (empty if SyftNative)
 	Children     []*ExtractionNode   // child nodes from recursive extraction
 	Metadata     *ContainerMetadata  // non-nil for formats with structured metadata (MSI)
+	ArchiveMeta  *ArchiveMetadata    // best-effort 7-Zip listing metadata (if available)
 	// InstallerHint is set when installer-semantic interpretation can provide
 	// richer modeling than purely physical extraction paths.
 	InstallerHint string

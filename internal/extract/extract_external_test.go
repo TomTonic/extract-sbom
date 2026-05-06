@@ -2,10 +2,12 @@ package extract
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
@@ -230,5 +232,23 @@ func TestExtractInstallShieldToolMissingRecordsStatusCorrectly(t *testing.T) {
 	}
 	if tree.Tool != "unshield" {
 		t.Errorf("Tool = %q, want unshield", tree.Tool)
+	}
+}
+
+func TestFormatExtractionFailureDetailAddsTarHint(t *testing.T) {
+	t.Parallel()
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.TAR}}
+	err := errors.New("sandbox: 7zz execution failed: exit status 2\nstderr: extract: read tar entry: archive/tar: invalid tar header")
+
+	detail := formatExtractionFailureDetail("7zz", node, "/tmp/broken.tar", err)
+	if !strings.Contains(detail, "invalid tar header") {
+		t.Fatalf("detail missing raw cause: %q", detail)
+	}
+	if !strings.Contains(detail, "hint:") {
+		t.Fatalf("detail missing hint: %q", detail)
+	}
+	if strings.Contains(detail, "broken.tar") {
+		t.Fatalf("detail should stay compact and not repeat filename: %q", detail)
 	}
 }
