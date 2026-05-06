@@ -355,8 +355,8 @@ This mode:
 
 Policy determines behavior when limits are reached:
 
-- **strict** (default): abort processing, document fully
-- **partial**: skip offending subtree, continue elsewhere, document clearly
+- **partial** (default): skip offending subtree, continue elsewhere, document clearly
+- **strict**: abort processing, document fully
 
 ### 7.2 Policy Transparency
 
