@@ -122,7 +122,6 @@ func TestRunWithPathTraversalZIPStillWritesSBOMAndReport(t *testing.T) {
 			t.Errorf("report file not written: %v", err)
 		}
 	}
-
 }
 
 func TestRunWithDeniedSandboxReportsToolMissing(t *testing.T) {
