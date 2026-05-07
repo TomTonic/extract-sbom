@@ -313,15 +313,28 @@ All limits must be configurable.
 The extraction logic must robustly prevent:
 
 - Zip-bomb style amplification
-- Path traversal (absolute paths, `..` segments)
 - Symlink escapes
 - Materialization of special files (devices, pipes)
 - Inheritance of unsafe permissions
 
+Path traversal handling for externally extracted formats is an explicit trust
+boundary decision in this project:
+
+- `extract-sbom` does **not** implement a ZIP-only or format-specific pre-parser
+  gate ahead of external extractors.
+- For formats extracted via external tools (especially 7-Zip), path
+  normalization and traversal-safe member mapping are delegated to the
+  extractor implementation.
+- In sandboxed mode, namespace confinement is the second containment layer.
+- In `--unsafe` mode, this containment layer is intentionally disabled; the
+  residual traversal risk is therefore tied to extractor correctness and must
+  be treated operationally as a trust assumption.
+
 ### 6.3 Hard Security Events
 
-Hard security violations — path traversal, symlink escape, special file
-materialization — are **never** overridable, regardless of any CLI flag or
+Hard security violations detected by extract-sbom in the materialized output
+tree — symlink escape, special file materialization — are **never** overridable,
+regardless of any CLI flag or
 configuration. They abort the affected extraction subtree immediately.
 
 If the overall orchestration can still continue, extract-sbom shall still write
@@ -342,8 +355,8 @@ an unsafe recursive extraction mode via a dedicated command-line parameter.
 This mode:
 
 - Is intended only for controlled environments and forensic fallback use
-- Affects **only** the sandbox isolation requirement; hard security checks
-  (§6.3) remain fully enforced
+- Affects the sandbox isolation requirement; with external extractors, path
+  traversal containment then depends on extractor behavior (see §6.2)
 - Must never silently activate
 - Must be highlighted prominently in the audit output and machine-readable report metadata
 

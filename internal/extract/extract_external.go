@@ -33,8 +33,9 @@ func resolve7zBinary() (string, bool) {
 }
 
 // extract7z extracts CAB, MSI, 7z, RAR files using 7-Zip via the sandbox.
-// After extraction, the output directory is validated by safeguard to detect
-// path traversal, symlinks, special files, and resource limit violations.
+// After extraction, safeguard validates the materialized output tree for
+// symlinks, special files, and resource limit violations. Path normalization
+// is delegated to the extractor/sandbox boundary.
 // password may be empty, in which case no -p flag is passed to 7-Zip.
 func extract7z(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits, password string) error {
 	binary, found := resolve7zBinary()
@@ -156,8 +157,8 @@ func extract7zWithPasswords(ctx context.Context, node *ExtractionNode, filePath 
 }
 
 // extractUnshield extracts InstallShield CABs using unshield via the sandbox.
-// After extraction, the output directory is validated by safeguard to detect
-// path traversal, symlinks, special files, and resource limit violations.
+// After extraction, safeguard validates the materialized output tree for
+// symlinks, special files, and resource limit violations.
 // passwords is the ordered list of candidate passwords to try; may be nil.
 func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string, sb sandbox.Sandbox, workDir string, limits config.Limits, passwords []string) error {
 	if !isToolAvailable("unshield") {

@@ -99,7 +99,7 @@ func TestExtractUsesConfiguredWorkDir(t *testing.T) {
 	CleanupNode(tree)
 }
 
-func TestExtractZIPRejectsPathTraversal(t *testing.T) {
+func TestExtractZIPPathTraversalEntryIsNormalizedBy7Zip(t *testing.T) {
 	t.Parallel()
 	if _, ok := resolve7zBinary(); !ok {
 		t.Skip("7-Zip not available")
@@ -142,18 +142,24 @@ func TestExtractZIPRejectsPathTraversal(t *testing.T) {
 
 	sb := sandbox.NewPassthroughSandbox()
 
-	tree, _ := Extract(context.Background(), zipPath, cfg, sb)
-
-	if tree != nil && tree.Status == StatusExtracted {
-		evilPath := filepath.Join(tree.ExtractedDir, "../../../etc/passwd")
-		if _, err := os.Stat(evilPath); err == nil {
-			t.Fatal("path traversal entry was extracted — SECURITY VIOLATION")
-		}
+	tree, err := Extract(context.Background(), zipPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("extraction tree is nil")
+	}
+	if tree.Status != StatusExtracted {
+		t.Fatalf("root status = %v, want %v", tree.Status, StatusExtracted)
 	}
 
-	if tree != nil {
-		CleanupNode(tree)
+	// We rely on 7-Zip path normalization for traversal-style entry names.
+	normalized := filepath.Join(tree.ExtractedDir, "etc", "passwd")
+	if _, statErr := os.Stat(normalized); statErr != nil {
+		t.Fatalf("normalized path not found at %q: %v", normalized, statErr)
 	}
+
+	CleanupNode(tree)
 }
 
 func TestExtractZIPFileCountLimitPropagates(t *testing.T) {
