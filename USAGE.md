@@ -517,6 +517,10 @@ malicious or accidentally complex archives in CI.
 Disable external extractor sandboxing. External tools (`7zz`, `unshield`) run
 without isolation constraints.
 
+In this mode, containment relies on extractor behavior (for example 7-Zip path
+normalization for traversal-style archive member names), because namespace
+isolation is intentionally disabled.
+
 **When to use:**
 
 - macOS/BSD: `bwrap` is unavailable on these platforms; `--unsafe` is the
