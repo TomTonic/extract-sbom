@@ -123,15 +123,15 @@ identifies the format first, then acts.
 
 | Node | Tool | Status after Phase 1 |
 |---|---|---|
-| `vendor-suite-3.2.zip` | extract-sbom — Go `archive/zip` | `extracted` |
+| `vendor-suite-3.2.zip` | `7zz` (sandboxed) | `extracted` |
 | `linux/server-3.2.rpm` | — | `syft-native` — RPM is a Syft-native format |
 | `linux/libssl1.1_1.1.1n-0_amd64.deb` | — | `syft-native` — DEB is a Syft-native format |
-| `linux/apache-tomcat-9.0.98.tar.gz` | extract-sbom — Go `archive/tar` + `compress/gzip` | `extracted` |
+| `linux/apache-tomcat-9.0.98.tar.gz` | `7zz` (sandboxed) | `extracted` |
 | `lib/catalina.jar` | — | `syft-native` |
 | `lib/tomcat-embed-core-9.0.98.jar` | — | `syft-native` |
 | `lib/servlet-api.jar` | — | `syft-native` |
 | `webapps/vendor-app.ear` | — | `syft-native` |
-| `linux/resources.tgz` | extract-sbom — Go `archive/tar` + `compress/gzip` | `extracted` |
+| `linux/resources.tgz` | `7zz` (sandboxed) | `extracted` |
 | `translations/de.properties` | — | `skipped` — plain file |
 | `translations/en.properties` | — | `skipped` — plain file |
 | `windows/client-setup.msi` | extract-sbom reads MSI Property table; `7zz` (sandboxed) extracts payload | `extracted`; MSI product metadata recorded |

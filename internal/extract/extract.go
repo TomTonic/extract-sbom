@@ -7,7 +7,6 @@
 // Implementation files are responsibility-focused:
 // - types.go: extraction domain model and statuses
 // - extract_flow.go: recursive traversal and status assignment flow
-// - extract_inprocess.go: ZIP/TAR extraction paths with safeguard checks
 // - extract_external.go: sandboxed 7zz/unshield extraction and tool lookup
 // - msi.go: direct MSI metadata parsing from OLE streams
 package extract

@@ -31,6 +31,9 @@ func writeExtractionTree(w io.Writer, node *extract.ExtractionNode, depth int, t
 	if node.Duration > 0 {
 		fmt.Fprintf(w, " %s=%s", t.duration, node.Duration.Round(time.Millisecond))
 	}
+	if meta := formatArchiveMetaForLog(node); meta != "" {
+		fmt.Fprintf(w, " %s", meta)
+	}
 	if node.StatusDetail != "" {
 		fmt.Fprintf(w, " (%s)", node.StatusDetail)
 	}
@@ -39,6 +42,39 @@ func writeExtractionTree(w io.Writer, node *extract.ExtractionNode, depth int, t
 	for _, child := range node.Children {
 		writeExtractionTree(w, child, depth+1, t)
 	}
+}
+
+func formatArchiveMetaForLog(node *extract.ExtractionNode) string {
+	if node == nil || node.ArchiveMeta == nil {
+		return ""
+	}
+	meta := node.ArchiveMeta
+	parts := make([]string, 0, 7)
+	if meta.Type != "" {
+		parts = append(parts, "type="+meta.Type)
+	}
+	if len(meta.Methods) > 0 {
+		parts = append(parts, "method="+strings.Join(meta.Methods, " / "))
+	}
+	if meta.HasEncryptedItem {
+		parts = append(parts, "encrypted=yes")
+	}
+	if meta.PhysicalSize != "" {
+		parts = append(parts, "physical-size="+meta.PhysicalSize)
+	}
+	if meta.HeadersSize != "" {
+		parts = append(parts, "headers-size="+meta.HeadersSize)
+	}
+	if meta.Solid != "" {
+		parts = append(parts, "solid="+meta.Solid)
+	}
+	if meta.Blocks != "" {
+		parts = append(parts, "blocks="+meta.Blocks)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "{" + strings.Join(parts, " ") + "}"
 }
 
 // writeResidualRisk writes the explicit limitations statement required for

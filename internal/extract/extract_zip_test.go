@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
@@ -15,6 +14,9 @@ import (
 
 func TestExtractZIPProducesExtractionTree(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	zipPath := createTestZIP(t, dir, "delivery.zip", map[string][]byte{
@@ -46,10 +48,6 @@ func TestExtractZIPProducesExtractionTree(t *testing.T) {
 		t.Errorf("EntriesCount = %d, want 2", tree.EntriesCount)
 	}
 
-	if tree.Tool != "archive/zip" {
-		t.Errorf("Tool = %q, want archive/zip", tree.Tool)
-	}
-
 	if tree.ExtractedDir == "" {
 		t.Fatal("ExtractedDir is empty")
 	}
@@ -66,63 +64,11 @@ func TestExtractZIPProducesExtractionTree(t *testing.T) {
 	CleanupNode(tree)
 }
 
-func TestExtractZIPInvalidUTF8EntryNameIsSanitized(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	zipPath := filepath.Join(dir, "invalid-name.zip")
-	f, err := os.Create(zipPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := zip.NewWriter(f)
-
-	rawNameBytes := []byte{'0', '1', '_', 'D', 'B', '-', 0x84, 'n', 'd', 'e', 'r', 'u', 'n', 'g', 'e', 'n', '.', 't', 'x', 't'}
-	hdr := &zip.FileHeader{Name: string(rawNameBytes), Method: zip.Deflate}
-	fw, err := w.CreateHeader(hdr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, writeErr := fw.Write([]byte("content")); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-	if closeErr := w.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	if closeErr := f.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-
-	cfg := config.DefaultConfig()
-	cfg.InputPath = zipPath
-	cfg.OutputDir = dir
-	cfg.Unsafe = true
-
-	tree, err := Extract(context.Background(), zipPath, cfg, sandbox.NewPassthroughSandbox())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tree.Status != StatusExtracted {
-		t.Fatalf("status = %v, want %v", tree.Status, StatusExtracted)
-	}
-	if !strings.Contains(tree.StatusDetail, "sanitized 1 ZIP entry names") {
-		t.Fatalf("StatusDetail = %q, want sanitization hint", tree.StatusDetail)
-	}
-
-	if tree.ExtractedDir == "" {
-		t.Fatal("ExtractedDir is empty")
-	}
-
-	sanitizedName := sanitizeArchiveEntryName(string(rawNameBytes))
-	if _, err := os.Stat(filepath.Join(tree.ExtractedDir, sanitizedName)); err != nil {
-		t.Fatalf("sanitized entry not found: %v", err)
-	}
-
-	CleanupNode(tree)
-}
-
 func TestExtractUsesConfiguredWorkDir(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 	workDir := filepath.Join(dir, "work")
 	if err := os.MkdirAll(workDir, 0o750); err != nil {
@@ -153,8 +99,11 @@ func TestExtractUsesConfiguredWorkDir(t *testing.T) {
 	CleanupNode(tree)
 }
 
-func TestExtractZIPRejectsPathTraversal(t *testing.T) {
+func TestExtractZIPPathTraversalEntryIsNormalizedBy7Zip(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	zipPath := filepath.Join(dir, "evil.zip")
@@ -193,22 +142,31 @@ func TestExtractZIPRejectsPathTraversal(t *testing.T) {
 
 	sb := sandbox.NewPassthroughSandbox()
 
-	tree, _ := Extract(context.Background(), zipPath, cfg, sb)
-
-	if tree != nil && tree.Status == StatusExtracted {
-		evilPath := filepath.Join(tree.ExtractedDir, "../../../etc/passwd")
-		if _, err := os.Stat(evilPath); err == nil {
-			t.Fatal("path traversal entry was extracted — SECURITY VIOLATION")
-		}
+	tree, err := Extract(context.Background(), zipPath, cfg, sb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tree == nil {
+		t.Fatal("extraction tree is nil")
+	}
+	if tree.Status != StatusExtracted {
+		t.Fatalf("root status = %v, want %v", tree.Status, StatusExtracted)
 	}
 
-	if tree != nil {
-		CleanupNode(tree)
+	// We rely on 7-Zip path normalization for traversal-style entry names.
+	normalized := filepath.Join(tree.ExtractedDir, "etc", "passwd")
+	if _, statErr := os.Stat(normalized); statErr != nil {
+		t.Fatalf("normalized path not found at %q: %v", normalized, statErr)
 	}
+
+	CleanupNode(tree)
 }
 
 func TestExtractZIPFileCountLimitPropagates(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	zipPath := createTestZIP(t, dir, "overflow.zip", map[string][]byte{

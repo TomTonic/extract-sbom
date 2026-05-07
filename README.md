@@ -83,9 +83,28 @@ inspection: one file in, one consolidated CycloneDX SBOM and one auditable repor
 
 - Identifies archive/container formats (ZIP, TAR variants, CAB, MSI, 7z, RAR, InstallShield CAB)
 - Extracts recursively with policy and resource limits
+- Detects encrypted ZIP entries and automatically re-routes those archives to 7-Zip
+- Tries configured passwords in order for password-protected formats handled by external extractors
 - Uses Syft in library mode for component cataloging
 - Assembles one deterministic CycloneDX 1.6 SBOM
 - Generates an auditable report in English or German
+
+## Encrypted Archives and Password Sources
+
+For encrypted archives, extract-sbom supports ordered password attempts from:
+
+- `--password` (repeatable)
+- `EXTRACT_SBOM_PASSWORDS` (comma-separated)
+- `--password-file` (one password per line, `#` comments allowed)
+
+Password attempts are ordered by source precedence:
+
+1. command-line flags (`--password`)
+2. environment variable (`EXTRACT_SBOM_PASSWORDS`)
+3. password file (`--password-file`)
+
+Within extraction, extract-sbom first tries without a password, then each
+configured password in order. Secrets are never printed in logs or reports.
 
 ## Optional Vulnerability Enrichment (`--grype`)
 

@@ -19,27 +19,18 @@ coding agent invocations.
 | `github.com/spf13/viper` | v1.x | Configuration binding | Binds CLI flags, env vars, and config files to a single config struct. Pairs naturally with cobra. |
 | `github.com/richardlehane/mscfb` | v1.x | OLE/CFBF compound document reader | Required for reading MSI Property tables (ProductName, Manufacturer, ProductVersion). Used in both physical and installer-semantic modes for container metadata enrichment (see §5.8). |
 
-Go Standard Library modules used directly for archive handling:
-
-| Stdlib package | Purpose |
-|---|---|
-| `archive/zip` | ZIP extraction with per-entry streaming (Go 1.0+, mature, actively CVE-patched) |
-| `archive/tar` | TAR extraction with per-entry streaming (Go 1.0+, mature, actively CVE-patched) |
-| `compress/gzip` | Gzip decompression for `.tar.gz` |
-| `compress/bzip2` | Bzip2 decompression for `.tar.bz2` (read-only — sufficient for our case) |
-
 Additional Go compression modules (only if the corresponding TAR variant must be supported):
 
 | Library | Purpose |
 |---|---|
-| `github.com/ulikunitz/xz` | XZ decompression for `.tar.xz` |
-| `github.com/klauspost/compress/zstd` | Zstandard decompression for `.tar.zst` |
+| `github.com/ulikunitz/xz` | XZ decompression for `.tar.xz` (used by tests only) |
+| `github.com/klauspost/compress/zstd` | Zstandard decompression for `.tar.zst` (used by tests only) |
 
 ### 1.2 External Binaries
 
 | Binary | Purpose | Rationale |
 |---|---|---|
-| **7-Zip** (`7zz`) | Extract Microsoft CAB and MSI files; also 7z and RAR if encountered | No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. 7-Zip handles both natively, is widely packaged on Linux, and is the preferred extractor per DESIGN.md §9.2. |
+| **7-Zip** (`7zz`) | Extract all supported archive formats: ZIP, TAR (all compressed variants), CAB, MSI, 7z, RAR | 7-Zip is the single extraction engine for all archive formats. No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. Using 7-Zip for ZIP/TAR as well avoids maintaining two extraction code paths and ensures a uniform security posture (sandboxed, post-extraction safeguard walk) for all formats. |
 | **unshield** | Extract InstallShield CAB files (`data1.cab` + `data1.hdr`) | InstallShield uses a proprietary cabinet format incompatible with Microsoft CABs. `unshield` (MIT, actively maintained, v1.6.2) is the only tool capable of extracting these. Available via Linux package managers and Homebrew. |
 | **Grype** (`grype`) | Optional vulnerability scan of the generated SBOM (`--grype`) | Grype provides stable JSON output with per-match package identity and vulnerability source metadata. Using the generated SBOM as input preserves deterministic component identities and avoids rescanning the extracted filesystem. |
 | **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
@@ -49,42 +40,36 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 | Mechanism | Available | Not Available |
 |---|---|---|
 | `bwrap` | All external binary invocations (`7zz`, `unshield`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
-| `7zz` | Microsoft CAB/MSI extraction proceeds normally. Also handles 7z/RAR inputs. | Microsoft CAB/7z/RAR archives are recorded as non-extractable components in the SBOM. MSI payload extraction is skipped, but MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
+| `7zz` | All archive extraction (ZIP, TAR, CAB, MSI, 7z, RAR) proceeds normally. | All archives are recorded as non-extractable components in the SBOM (contents cannot be scanned). MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
 | `unshield` | InstallShield CAB extraction proceeds normally. | InstallShield CABs are recorded as non-extractable components in the SBOM. Audit report notes missing tool. |
 | `grype` (only if `--grype`) | SBOM is scanned and vulnerability matches are correlated to component BOM refs in the report. | SBOM and report are still produced; report marks vulnerability enrichment as unavailable and includes root-cause metadata (tool missing, execution error, or DB issue). |
 | Syft (library) | Required | Fatal error. |
 
-### 1.4 Why Go Standard Library over mholt/archives
+### 1.4 Extraction Architecture: Single 7-Zip Path
 
-An earlier design iteration considered `github.com/mholt/archives` (v0.1.x)
-as a unified, pure-Go archive library. It was removed for the following reasons:
+All archive formats (ZIP, TAR and compressed variants, CAB, MSI, 7z, RAR) are
+extracted via the external 7-Zip binary. InstallShield CAB is the only exception
+(requires `unshield`).
 
-1. **Maturity gap.** mholt/archives has five releases, has not been updated in
-   over six months, and covers a broad format surface (ZIP, TAR, RAR, 7z,
-   eleven compression algorithms). A wide format surface combined with a short
-   track record increases the likelihood of undiscovered parsing bugs —
-   even if the library does not execute archive contents.
+An earlier design used Go's `archive/zip` and `archive/tar` standard library
+packages for in-process ZIP/TAR extraction. That code was removed in favour of
+a unified 7-Zip path for the following reasons:
 
-2. **Go stdlib is battle-tested.** `archive/zip` and `archive/tar` have been
-   part of the Go standard library since Go 1.0 (2012). They receive prompt
-   CVE-grade fixes via the Go release process, are fuzz-tested by the Go
-   team and OSS-Fuzz, and are among the most widely used Go packages.
-   For the two formats that dominate vendor deliveries (ZIP, TAR), stdlib
-   provides all the functionality we need: per-entry streaming extraction
-   with header inspection before writing any bytes.
+1. **Single security posture.** All formats run under Bubblewrap namespace
+   isolation and receive the same post-extraction safeguard walk. There is no
+   separate code path with different security properties to audit or maintain.
 
-3. **We do not need mholt/archives' extra format coverage.** The formats
-   mholt/archives adds beyond stdlib (RAR, 7z as pure Go) are uncommon in
-   software deliveries. For the rare cases where they appear, 7-Zip
-   (already required for CAB/MSI) handles them as well.
+2. **Simpler dispatch logic.** One extraction function (`extract7zWithPasswords`)
+   handles all archive types. The format-dispatch switch in `extract_flow.go`
+   has one branch instead of two.
 
-4. **Reduced dependency surface.** stdlib modules add zero supply-chain risk.
-   Fewer third-party dependencies means fewer transitive CVEs to track and
-   a simpler audit trail — which matters for a tool whose purpose is to *assess*
-   supply chain integrity.
+3. **Password support for all formats.** Passwords configured via `--password`,
+   `--password-file`, or `EXTRACT_SBOM_PASSWORDS` apply uniformly to every
+   archive format without special-casing ZIP.
 
-The trade-off is that we have two extraction paths (in-process stdlib for ZIP/TAR,
-external 7-Zip for CAB/MSI/7z/RAR). This is justified in §1.5.
+4. **No in-process parser risk for any format.** 7-Zip runs as an isolated
+   subprocess. A parser bug in 7-Zip cannot directly compromise the host
+   process; a bug in Go's stdlib parser would run in-process without isolation.
 
 ### 1.5 Security Architecture
 
@@ -102,35 +87,18 @@ untrusted archives:
 | Special files (devices, pipes) | File-type check before writing | `safeguard` |
 | Resource exhaustion (depth, time) | Configurable depth limit and per-extraction timeout | `extract` |
 
-These mitigations apply to *all* extraction paths (Go stdlib and 7-Zip).
+These mitigations apply to all extraction paths.
 
-**Two extraction paths — one security standard.**
+**Single extraction path — uniform security standard.**
 
 | Path | Format coverage | Safeguard integration |
 |---|---|---|
-| Go stdlib (in-process) | ZIP, TAR (+compressed variants) | Per-entry streaming: each entry's header is validated by `safeguard` *before* any bytes are written to disk. Extraction can be aborted mid-stream on the first violation. |
-| 7-Zip (external, sandboxed) | CAB, MSI, 7z, RAR | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
+| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
+| unshield (external, sandboxed) | InstallShield CAB only | Same Bubblewrap isolation + post-extraction safeguard walk. |
 
-The in-process path provides *proactive* per-entry checks; the 7-Zip path provides
-*reactive* post-extraction checks plus process-level isolation via Bubblewrap.
-Both paths enforce the same `safeguard` invariants. Hard security violations
-(path traversal, symlink escape, special files) are **never** overridable,
-regardless of `--unsafe`.
-
-**Why in-process extraction is acceptable for ZIP/TAR.** The specific concern
-with in-process archive parsing is that a parser bug could let a crafted archive
-compromise the host process. For extract-sbom this risk is bounded:
-
-- Go's `archive/zip` and `archive/tar` are memory-safe (no buffer overflows).
-- Both are continuously fuzz-tested by the Go team and OSS-Fuzz.
-- We never interpret the *content* of extracted files — we only write them to
-  disk and pass the directory to Syft. A parser bug could at worst cause a
-  crash or incorrect extraction, not code execution.
-- extract-sbom is not a persistent service; it runs as a one-shot CLI tool.
-  A crash is a clean failure, not a persistent compromise.
-
-For formats without comparable Go-stdlib maturity (CAB, MSI), we do not accept
-this trade-off and use an external process under sandbox isolation instead.
+Post-extraction safeguard checks enforce the same invariants for every format.
+Hard security violations (path traversal, symlink escape, special files) are
+**never** overridable, regardless of `--unsafe`.
 
 ### 1.6 CAB / MSI / Setup.exe — Architecture and Limitations
 
@@ -267,6 +235,8 @@ main()
 - `--root-delivery-date`: delivery date for the inspected software delivery (`YYYY-MM-DD`)
 - `--root-property`: repeated `key=value` property added to the SBOM root component
 - `--grype`: enable optional Grype-based vulnerability enrichment of the report
+- `--password`: repeatable candidate password for encrypted archives (tried in order)
+- `--password-file`: file with one password per line for encrypted archives
 - `--unsafe`: enable unsandboxed extraction (must never be silent)
 - `--max-depth`, `--max-files`, `--max-size`, `--max-entry-size`,
   `--max-ratio`, `--timeout`: override default limits
@@ -297,6 +267,7 @@ type Config struct {
     ReportMode      ReportMode    // Human | Machine | Both
     Language        string        // "en" | "de"
     GrypeEnabled    bool
+    Passwords       []string      // ordered candidates for encrypted archives
   RootMetadata    RootMetadata
     Unsafe          bool
     Limits          Limits
@@ -330,6 +301,8 @@ func (c *Config) Validate() error
   work dir must exist and be writable).
 - `RootMetadata.Validate()` normalizes duplicate property keys, validates the
   delivery-date format, and rejects malformed `key=value` pairs.
+- Password candidates are merged from `--password`, `EXTRACT_SBOM_PASSWORDS`,
+  and `--password-file` with deterministic precedence and stable order.
 - If `RootMetadata.Name` is empty, assembly derives a deterministic fallback
   from the input filename; explicit CLI input always wins.
 
@@ -348,7 +321,7 @@ type FormatInfo struct {
     MIMEType   string
     Extension  string
     SyftNative bool     // true if Syft already understands this format (JAR, RPM, DEB, etc.)
-    Extractable bool   // true if we can extract it (Go stdlib or 7z or unshield)
+    Extractable bool   // true if we can extract it (7zz or unshield)
 }
 
 func Identify(ctx context.Context, path string) (FormatInfo, error)
@@ -360,6 +333,8 @@ func Identify(ctx context.Context, path string) (FormatInfo, error)
   - ZIP: `PK\x03\x04` — then further check for Syft-native ZIP-based
     formats (JAR/WAR/EAR via manifest, .whl/.egg via extension, .nupkg,
     .apk, etc.). If Syft-native → `SyftNative = true`.
+    Encryption is evaluated in the extraction stage by checking ZIP entry
+    flags; encrypted ZIPs are re-routed to 7-Zip.
   - TAR: `ustar` at offset 257
   - CAB (Microsoft): `MSCF` at offset 0
   - CAB (InstallShield): `ISc(` at offset 0, or `data*.cab`/`data*.hdr` naming pattern
@@ -484,7 +459,7 @@ type ExtractionNode struct {
     Children      []*ExtractionNode
     Metadata      *ContainerMetadata // non-nil for formats with structured metadata (MSI)
     InstallerHint string         // installer-semantic enrichment hint (when available)
-    Tool          string         // "archive/zip" | "archive/tar" | "7zz" | "unshield" | "syft"
+    Tool          string         // "7zz" | "unshield" | "syft"
     SandboxUsed   string         // sandbox mechanism used for external tools
     Duration      time.Duration
     EntriesCount  int
@@ -513,7 +488,6 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sandbox s
 - `extract.go`: package-level extraction model overview
 - `types.go`: extraction statuses and node metadata structures
 - `extract_flow.go`: recursive traversal, status assignment order, policy handling
-- `extract_inprocess.go`: ZIP/TAR extractors and in-process safeguard checks
 - `extract_external.go`: sandboxed `7zz`/`unshield` integration and tool lookup
 - `msi.go`: direct MSI metadata parsing (`_StringPool`, `_StringData`, `Property`)
 
@@ -531,11 +505,13 @@ For each file encountered:
      → do NOT extract
   4. If SyftNative == false AND file is a recognized container format:
      → extract:
-        ├─ ZIP                 → Go stdlib archive/zip (in-process, per-entry safeguard)
-        ├─ TAR / compressed TAR → Go stdlib archive/tar + compress/* (in-process, per-entry safeguard)
-      ├─ CAB, MSI, 7z, RAR   → 7zz via sandbox (post-extraction safeguard walk)
-      ├─ InstallShield CAB   → unshield via sandbox (post-extraction safeguard walk)
-      └─ Unknown container   → mark as non-extractable leaf
+        ├─ ZIP, TAR, compressed TAR → 7zz via sandbox (post-extraction safeguard walk,
+        │                             password attempts: none, then configured list)
+        ├─ CAB, MSI, 7z, RAR   → 7zz via sandbox (post-extraction safeguard walk,
+        │                         password attempts: none, then configured list)
+        ├─ InstallShield CAB   → unshield via sandbox (post-extraction safeguard walk,
+        │                         password attempts: none, then configured list)
+        └─ Unknown container   → mark as non-extractable leaf
      → for each extracted child: recurse (depth + 1)
   5. If not a container format:
      → mark as plain leaf (will be picked up by Syft when its parent directory is scanned)
@@ -543,7 +519,7 @@ For each file encountered:
 
 **Example:** A delivery ZIP contains a DLL, a JAR, and a nested MSI.
 
-- ZIP → extracted with `archive/zip`
+- ZIP → extracted with 7zz via sandbox
 - DLL → plain leaf, cataloged when Syft scans the extracted directory
 - JAR → SyftNative (Syft's Java cataloger handles it directly)
 - MSI → Property table read directly from the original file → extracted with 7zz via sandbox
@@ -551,14 +527,11 @@ For each file encountered:
 
 **Design decisions:**
 
-- **Go stdlib extraction** (`archive/zip`, `archive/tar`) runs in-process.
-  Each entry header is passed to `safeguard.ValidatePath` and
-  `safeguard.ValidateEntry` before any bytes are written. On violation,
-  extraction stops immediately (hard security) or the entry is skipped
-  (policy-dependent for resource limits).
 - **7-Zip extraction** is always mediated by the sandbox interface.
   After 7-Zip completes, `safeguard` walks the output directory to validate
   all resulting paths and file types.
+- Password-based extraction attempts are deterministic: first without password,
+  then each configured candidate in order. Password values are never logged.
 - **MSI metadata extraction** is independent of 7-Zip. If payload extraction
   is unavailable, the MSI node still remains in the tree with enriched
   metadata and a non-extractable or partial status.
@@ -1038,15 +1011,16 @@ already initialized the root processing state.
 7-Zip and unshield are the only external binary dependencies for
 extraction. Their roles are strictly partitioned:
 
-- **7-Zip** covers Microsoft CAB, MSI (OLE compound documents), plus
-  7z and RAR inputs if encountered.
+- **7-Zip** covers all archive formats: ZIP, TAR (all compressed variants),
+  Microsoft CAB, MSI (OLE compound documents), 7z, and RAR. Passwords
+  configured via `--password`, `--password-file`, or `EXTRACT_SBOM_PASSWORDS`
+  are tried in order for any format that supports encryption.
 - **unshield** covers InstallShield proprietary CABs — a format that no
   other tool (including 7-Zip) can handle.
 
-For ZIP and TAR — the dominant delivery formats — Go's standard library
-provides mature, streaming extraction with per-entry validation callbacks.
-This eliminates the need for an external extractor and the associated
-sandbox overhead in the common case.
+Using 7-Zip as the single extraction engine ensures a uniform security
+posture: every extraction runs as an isolated subprocess under Bubblewrap
+namespace isolation and receives a post-extraction safeguard walk.
 
 Both external binaries are optional at runtime. If either is missing, the
 corresponding format is recorded as non-extractable in the SBOM. Both
@@ -1068,7 +1042,8 @@ This principle has three benefits:
 3. **Reduced attack surface:** Files that Syft understands natively
    are never parsed by extract-sbom's extraction code.
 
-extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI)
+extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI,
+7z, RAR, InstallShield CAB)
 that Syft cannot see through, in order to present their contents to Syft.
 
 ### 5.6 Downstream Vulnerability Matching (CPE / PURL)
@@ -1215,7 +1190,7 @@ delivery without re-extracting it.
 2. `config`: types, defaults, `Validate()`
 3. `identify`: ZIP/TAR/GzipTAR detection via file magic bytes + Syft-native format list
 4. `safeguard`: path validation, symlink check, ratio check
-5. `extract`: single-level extraction for ZIP/TAR via Go stdlib (`archive/zip`, `archive/tar`)
+5. `extract`: single-level extraction for ZIP/TAR via `7zz` (external, sandboxed)
 6. `scan`: Syft library-mode integration (Syft-first: native leaves + extracted dirs)
 7. `assembly`: minimal unified BOM with root component, deterministic BOMRefs,
   baseline `extract-sbom:delivery-path` properties for all produced components,
@@ -1308,10 +1283,12 @@ vulnerability information.
 
 ## 7. Test Fixture Strategy
 
-Test archives will be generated programmatically in Go test helpers where
-possible (using `archive/zip`, `archive/tar`, etc.). For CAB and MSI
+Test archives are generated programmatically in Go test helpers where
+possible (using `archive/zip`, `archive/tar`, etc. for creating fixtures —
+these packages are only used by test code to create test data, not for
+production extraction). For CAB and MSI
 formats where no Go creation library exists, pre-built minimal test
-fixtures will be committed to `testdata/`.
+fixtures are committed to `testdata/`.
 
 Fixture naming convention: `testdata/<format>/<scenario>.<ext>`
 Examples:

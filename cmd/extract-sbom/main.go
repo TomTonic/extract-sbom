@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -42,30 +43,32 @@ func rootCmd() *cobra.Command {
 	bi := buildinfo.Read()
 
 	var (
-		configPath string
-		outputDir  string
-		workDir    string
-		sbomFormat string
-		policyStr  string
-		modeStr    string
-		reportStr  string
-		progress   string
-		language   string
-		mfg        string
-		name       string
-		version    string
-		delivDate  string
-		rootProps  []string
-		skipExts   []string
-		grype      bool
-		unsafe     bool
-		maxDepth   int
-		maxFiles   int
-		maxSize    int64
-		maxEntry   int64
-		maxRatio   int
-		timeout    string
-		parallel   int
+		configPath   string
+		outputDir    string
+		workDir      string
+		sbomFormat   string
+		policyStr    string
+		modeStr      string
+		reportStr    string
+		progress     string
+		language     string
+		mfg          string
+		name         string
+		version      string
+		delivDate    string
+		rootProps    []string
+		skipExts     []string
+		passwords    []string
+		passwordFile string
+		grype        bool
+		unsafe       bool
+		maxDepth     int
+		maxFiles     int
+		maxSize      int64
+		maxEntry     int64
+		maxRatio     int
+		timeout      string
+		parallel     int
 	)
 
 	cmd := &cobra.Command{
@@ -163,6 +166,8 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&timeout, "timeout", "", "Per-extraction timeout")
 	cmd.Flags().IntVar(&parallel, "parallel", defaults.ParallelScanners, "Number of concurrent Syft scan workers")
 	cmd.Flags().StringSliceVar(&skipExts, "skip-extensions", nil, "Comma-separated extensions excluded from extraction (e.g. .docx,.xlsx). Overrides built-in defaults; pass empty string to disable all filtering.")
+	cmd.Flags().StringArrayVar(&passwords, "password", nil, "Password to try when extracting encrypted archives (repeatable; tried in order)")
+	cmd.Flags().StringVar(&passwordFile, "password-file", "", "Path to a file containing passwords (one per line) for encrypted archives")
 
 	return cmd
 }
@@ -266,6 +271,19 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 		cfg.SkipExtensions = v.GetStringSlice("skip-extensions")
 	}
 
+	// Passwords: merge from CLI flags (--password, repeatable), environment
+	// variable (EXTRACT_SBOM_PASSWORDS, comma-separated), and password file
+	// (--password-file, one password per line).
+	// Order: CLI flags first, then env var, then file — matching precedence.
+	cfg.Passwords = append(cfg.Passwords, v.GetStringSlice("password")...)
+	if pwFile := v.GetString("password-file"); pwFile != "" {
+		filePWs, err := loadPasswordFile(pwFile)
+		if err != nil {
+			return config.Config{}, fmt.Errorf("password-file: %w", err)
+		}
+		cfg.Passwords = append(cfg.Passwords, filePWs...)
+	}
+
 	for _, prop := range v.GetStringSlice("root-property") {
 		k, value, ok := parseKeyValue(prop)
 		if !ok {
@@ -293,4 +311,53 @@ func parseKeyValue(s string) (string, string, bool) {
 		return "", "", false
 	}
 	return s[:idx], s[idx+1:], true
+}
+
+// loadPasswordFile reads passwords from a file, one per line.
+// Lines that are empty or begin with '#' (after trimming whitespace) are
+// ignored so the file can include comments. The file is read fully before
+// returning so the caller can handle errors cleanly.
+//
+// This function does not log or print the passwords it reads. Callers must
+// ensure the returned slice is never written to any log or report.
+//
+// The file must not exceed maxPasswordFileBytes in size and must contain
+// no more than maxPasswordCount non-empty, non-comment lines. These caps
+// prevent DoS via unbounded password-retry loops.
+const (
+	maxPasswordFileBytes = 1 * 1024 * 1024 // 1 MiB
+	maxPasswordCount     = 10_000
+)
+
+func loadPasswordFile(path string) ([]string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("open password file %q: %w", path, err)
+	}
+	if info.Size() > maxPasswordFileBytes {
+		return nil, fmt.Errorf("password file %q exceeds %d-byte limit (%d bytes)", path, maxPasswordFileBytes, info.Size())
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open password file %q: %w", path, err)
+	}
+	defer f.Close()
+
+	var passwords []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if len(passwords) >= maxPasswordCount {
+			return nil, fmt.Errorf("password file %q exceeds %d-password limit", path, maxPasswordCount)
+		}
+		passwords = append(passwords, line)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read password file %q: %w", path, err)
+	}
+	return passwords, nil
 }

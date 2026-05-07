@@ -508,3 +508,197 @@ func TestLoadConfigValidTimeout(t *testing.T) {
 		t.Fatalf("Timeout = %s, want 30s", cfg.Limits.Timeout)
 	}
 }
+
+// TestLoadPasswordFile validates that loadPasswordFile reads passwords from a
+// file correctly, ignoring blank lines and comment lines beginning with '#'.
+func TestLoadPasswordFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "simple list",
+			content: "alpha\nbeta\ngamma\n",
+			want:    []string{"alpha", "beta", "gamma"},
+		},
+		{
+			name:    "comments and blank lines are ignored",
+			content: "# header comment\n\nalpha\n  \n# another comment\nbeta\n",
+			want:    []string{"alpha", "beta"},
+		},
+		{
+			name:    "empty file yields empty slice",
+			content: "",
+			want:    nil,
+		},
+		{
+			name:    "only comments yields empty slice",
+			content: "# pw1\n# pw2\n",
+			want:    nil,
+		},
+		{
+			name:    "trailing whitespace is trimmed from entries",
+			content: "  pw1  \npw2\n",
+			want:    []string{"pw1", "pw2"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			pwFile := filepath.Join(dir, "passwords.txt")
+			if err := os.WriteFile(pwFile, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := loadPasswordFile(pwFile)
+			if err != nil {
+				t.Fatalf("loadPasswordFile error: %v", err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i, v := range tc.want {
+				if got[i] != v {
+					t.Errorf("passwords[%d] = %q, want %q", i, got[i], v)
+				}
+			}
+		})
+	}
+}
+
+// TestLoadPasswordFileMissing validates that loadPasswordFile returns an error
+// when the specified file does not exist.
+func TestLoadPasswordFileMissing(t *testing.T) {
+	t.Parallel()
+	_, err := loadPasswordFile("/nonexistent/path/passwords.txt")
+	if err == nil {
+		t.Fatal("expected error for missing file, got nil")
+	}
+}
+
+// TestLoadConfigPasswordFlag validates that --password flags are collected into
+// Config.Passwords in the order they were supplied.
+func TestLoadConfigPasswordFlag(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := filepath.Join(dir, "output")
+	workDir := filepath.Join(dir, "work")
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("output-dir", outputDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("work-dir", workDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("password", "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("password", "beta"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(cmd, []string{inputPath})
+	if err != nil {
+		t.Fatalf("loadConfig error: %v", err)
+	}
+	if len(cfg.Passwords) != 2 || cfg.Passwords[0] != "alpha" || cfg.Passwords[1] != "beta" {
+		t.Errorf("Passwords = %v, want [alpha beta]", cfg.Passwords)
+	}
+}
+
+// TestLoadConfigPasswordFile validates that --password-file is loaded and its
+// passwords are appended to Config.Passwords after any --password entries.
+func TestLoadConfigPasswordFile(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := filepath.Join(dir, "output")
+	workDir := filepath.Join(dir, "work")
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	pwFile := filepath.Join(dir, "passwords.txt")
+	if err := os.WriteFile(pwFile, []byte("fromfile1\nfromfile2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("output-dir", outputDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("work-dir", workDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("password", "fromflag"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("password-file", pwFile); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(cmd, []string{inputPath})
+	if err != nil {
+		t.Fatalf("loadConfig error: %v", err)
+	}
+	// Expected: flag passwords first, then file passwords.
+	want := []string{"fromflag", "fromfile1", "fromfile2"}
+	if len(cfg.Passwords) != len(want) {
+		t.Fatalf("Passwords = %v, want %v", cfg.Passwords, want)
+	}
+	for i, v := range want {
+		if cfg.Passwords[i] != v {
+			t.Errorf("Passwords[%d] = %q, want %q", i, cfg.Passwords[i], v)
+		}
+	}
+}
+
+// TestLoadConfigMissingPasswordFile validates that --password-file with a
+// non-existent path is rejected with a descriptive error.
+func TestLoadConfigMissingPasswordFile(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := filepath.Join(dir, "output")
+	workDir := filepath.Join(dir, "work")
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("output-dir", outputDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("work-dir", workDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("password-file", "/nonexistent/pw.txt"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadConfig(cmd, []string{inputPath})
+	if err == nil {
+		t.Fatal("expected error for missing password file, got nil")
+	}
+}

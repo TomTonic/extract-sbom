@@ -255,6 +255,16 @@ type Config struct {
 	Limits           Limits
 	ProgressFn       ProgressReporter // optional runtime progress sink
 	ParallelScanners int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
+	// Passwords is the ordered list of candidate passwords to try when an
+	// encrypted archive is encountered during extraction. Passwords are tried
+	// in the order given; the first that successfully unlocks the archive is
+	// used. An empty list means no password is available and encrypted archives
+	// are recorded as failed with a clear status message.
+	// Passwords may be supplied via --password (repeatable), --password-file
+	// (one password per line), or the EXTRACT_SBOM_PASSWORDS environment
+	// variable (comma-separated). All sources are merged; CLI flags take
+	// precedence in ordering (CLI → env → file).
+	Passwords []string
 	// SkipExtensions lists file extensions (lowercase, with leading dot) that
 	// are excluded from recursive extraction and Syft-native scanning. Paths
 	// whose extension appears in this list are recorded as StatusSkipped with
@@ -408,6 +418,13 @@ func (c *Config) Validate() error {
 	}
 	if c.Limits.Timeout < 1*time.Second {
 		return fmt.Errorf("timeout must be at least 1s, got %s", c.Limits.Timeout)
+	}
+
+	// Guard against unbounded password retry loops: too many passwords can
+	// cause O(n) extraction attempts, each consuming significant disk I/O.
+	const maxPasswords = 10_000
+	if len(c.Passwords) > maxPasswords {
+		return fmt.Errorf("too many passwords: %d (maximum is %d)", len(c.Passwords), maxPasswords)
 	}
 
 	return nil

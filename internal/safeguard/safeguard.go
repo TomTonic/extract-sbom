@@ -1,10 +1,10 @@
-// Package safeguard provides the hard security boundary for extract-sbom's
-// archive extraction. It validates paths, symlinks, file types, and
-// compression ratios before any bytes are written to disk.
+// Package safeguard provides extraction safety checks for extract-sbom.
+// It validates entry metadata (when available) and materialized extraction
+// trees for symlinks, file types, and resource limits.
 //
-// Hard security violations (path traversal, symlink escape, special files)
-// are never overridable, not even in unsafe mode. Resource limit violations
-// are reported via separate error types for policy-based handling.
+// Hard security violations discovered by safeguard are never overridable.
+// Resource limit violations are reported via separate error types for
+// policy-based handling.
 package safeguard
 
 import (
@@ -252,18 +252,18 @@ func saturatingAddInt64(a int64, b int64) int64 {
 	return a + b
 }
 
-// ValidatePostExtraction walks an extraction output directory and validates
-// all resulting paths and file types. This is used for external tool
-// extractions (7-Zip, unshield) where per-entry validation is not possible
+// ValidatePostExtraction walks an extraction output directory and validates the
+// resulting in-tree paths and file types. This is used for external tool
+// extractions (7-Zip, unshield) where per-entry validation is not available
 // during extraction.
 //
 // Parameters:
 //   - outputDir: the directory that was extracted into
 //   - limits: configured extraction limits
 //
-// Returns a HardSecurityError on the first path traversal, symlink, or
-// special file found. Returns a ResourceLimitError if file count or total
-// size limits are exceeded. Returns nil if all entries pass validation.
+// Returns a HardSecurityError on the first in-tree symlink or special file
+// found. Returns a ResourceLimitError if file count or total size limits are
+// exceeded. Returns nil if all entries pass validation.
 func ValidatePostExtraction(outputDir string, limits config.Limits) error {
 	stats := &ExtractionStats{}
 

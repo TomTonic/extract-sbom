@@ -252,6 +252,9 @@ Result:
 The delivery file to analyze. Can be archive (ZIP, TAR, CAB, MSI, 7z, RAR,
 InstallShield CAB) or container (OCI image, Docker archive).
 
+For encrypted ZIP archives, extract-sbom detects encryption and automatically
+re-routes extraction to 7-Zip.
+
 **`--output-dir` (required)**
 
 Writable directory where SBOM and report files are written. Created if
@@ -275,7 +278,7 @@ temp (`/tmp` on Linux/macOS). Useful for:
 Configuration is resolved in the following order (highest → lowest):
 
 1. Command-line flags
-2. Environment variables (prefix `EXTRACT_SBOM_`, e.g. `EXTRACT_SBOM_OUTPUT_DIR`)
+2. Environment variables (prefix `EXTRACT_SBOM_`, e.g. `EXTRACT_SBOM_OUTPUT_DIR`, `EXTRACT_SBOM_PASSWORDS`)
 3. Configuration file (explicit `--config` or auto-discovered `.extract-sbom.yaml` / `.extract-sbom.yml` in the current directory or the user's home directory)
 4. Built-in defaults
 
@@ -303,6 +306,50 @@ Comma-separated list of file extensions (with leading dot) to exclude from
 recursive extraction and Syft-native scanning (for example:
 `.docx,.xlsx,.pdf`). This overrides the built-in default list. Pass an empty
 string to explicitly disable extension filtering.
+
+**`--password` (repeatable)**
+
+Adds one candidate password for encrypted archives. You can pass this flag
+multiple times; passwords are tried in the same order they are specified.
+
+Example:
+
+```bash
+extract-sbom \
+  --password first-guess \
+  --password second-guess \
+  --unsafe \
+  --output-dir out \
+  vendor-delivery.zip
+```
+
+**`--password-file`**
+
+Path to a text file with one password per line. Empty lines and lines starting
+with `#` are ignored. Passwords from the file are appended after any
+`--password` values.
+
+Limits on the password file:
+- Maximum file size: **1 MiB**
+- Maximum number of passwords: **10,000**
+- On Unix systems, the file must not be group- or world-readable (permissions
+  must be `0600` or stricter). extract-sbom will refuse to read a
+  password file with looser permissions to prevent credential exposure on
+  multi-user systems.
+
+**`EXTRACT_SBOM_PASSWORDS`**
+
+Optional environment variable with comma-separated passwords. These passwords
+are applied after `--password` and before `--password-file` entries.
+
+Effective password order is therefore:
+
+1. `--password` values (in provided order)
+2. `EXTRACT_SBOM_PASSWORDS` values (left-to-right)
+3. `--password-file` entries (top-to-bottom)
+
+During extraction, extract-sbom first tries without a password, then each
+configured password in this effective order.
 
 ### Policy and Interpretation
 
@@ -469,6 +516,10 @@ malicious or accidentally complex archives in CI.
 
 Disable external extractor sandboxing. External tools (`7zz`, `unshield`) run
 without isolation constraints.
+
+In this mode, containment relies on extractor behavior (for example 7-Zip path
+normalization for traversal-style archive member names), because namespace
+isolation is intentionally disabled.
 
 **When to use:**
 
