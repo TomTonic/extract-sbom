@@ -170,6 +170,14 @@ type translations struct {
 	processingScanErrorsLabel          string
 	processingSourceHeader             string
 	processingLocationHeader           string
+	processingClassHeader              string
+	processingStatusHeader             string
+	processingDetectedHeader           string
+	processingToolHeader               string
+	processingArchiveTypeHeader        string
+	processingArchiveMethodHeader      string
+	processingEncryptedHeader          string
+	processingPhysicalSizeHeader       string
 	processingDetailHeader             string
 	additionalEntriesOmittedTemplate   string
 	noneValue                          string
@@ -364,6 +372,14 @@ func getTranslations(lang string) translations {
 			processingScanErrorsLabel:          "scan-fehler",
 			processingSourceHeader:             "Quelle",
 			processingLocationHeader:           "Ort",
+			processingClassHeader:              "Klasse",
+			processingStatusHeader:             "Status",
+			processingDetectedHeader:           "Erkannt",
+			processingToolHeader:               "Werkzeug",
+			processingArchiveTypeHeader:        "Archiv-Type",
+			processingArchiveMethodHeader:      "Archiv-Method",
+			processingEncryptedHeader:          "Verschluesselt",
+			processingPhysicalSizeHeader:       "Phys. Groesse",
 			processingDetailHeader:             "Detail",
 			additionalEntriesOmittedTemplate:   "%d zusaetzliche Eintraege ausgelassen",
 			noneValue:                          "keine",
@@ -553,6 +569,14 @@ func getTranslations(lang string) translations {
 			processingScanErrorsLabel:          "scan-errors",
 			processingSourceHeader:             "Source",
 			processingLocationHeader:           "Location",
+			processingClassHeader:              "Class",
+			processingStatusHeader:             "Status",
+			processingDetectedHeader:           "Detected",
+			processingToolHeader:               "Tool",
+			processingArchiveTypeHeader:        "Archive Type",
+			processingArchiveMethodHeader:      "Archive Method",
+			processingEncryptedHeader:          "Encrypted",
+			processingPhysicalSizeHeader:       "Physical Size",
 			processingDetailHeader:             "Detail",
 			additionalEntriesOmittedTemplate:   "%d additional entries omitted",
 			noneValue:                          "none",

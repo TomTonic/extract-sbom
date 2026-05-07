@@ -10,6 +10,7 @@ import (
 
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/identify"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
@@ -283,13 +284,92 @@ func TestCollectProcessingEntriesToolMissingFallbackDetail(t *testing.T) {
 	for _, e := range entries {
 		if e.Location == "a.msi" {
 			found = true
-			if !strings.Contains(e.Detail, "status=") {
-				t.Fatalf("expected fallback detail with status=, got %q", e.Detail)
+			if e.Status != "tool-missing" {
+				t.Fatalf("expected status tool-missing, got %q", e.Status)
+			}
+			if e.Classification != "tool-missing" {
+				t.Fatalf("expected classification tool-missing, got %q", e.Classification)
 			}
 		}
 	}
 	if !found {
 		t.Fatal("tool-missing entry not found")
+	}
+}
+
+func TestCollectProcessingEntriesIncludesArchiveMetadataContext(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Tree = &extract.ExtractionNode{
+		Path:   "root.zip",
+		Status: extract.StatusExtracted,
+		Children: []*extract.ExtractionNode{
+			{
+				Path:         "a.zip",
+				Status:       extract.StatusFailed,
+				StatusDetail: "7zz failed",
+				Tool:         "7zz",
+				Format:       identify.FormatInfo{Format: identify.ZIP},
+				ArchiveMeta: &extract.ArchiveMetadata{
+					Type:             "zip",
+					Methods:          []string{"Deflate"},
+					HasEncryptedItem: true,
+				},
+			},
+		},
+	}
+
+	entries := collectProcessingEntries(data)
+	if len(entries) == 0 {
+		t.Fatal("expected extraction entry")
+	}
+
+	got := entries[0]
+	if got.Status != "failed" {
+		t.Fatalf("status = %q, want failed", got.Status)
+	}
+	if got.DetectedFormat != "ZIP" {
+		t.Fatalf("detected = %q, want ZIP", got.DetectedFormat)
+	}
+	if got.Tool != "7zz" {
+		t.Fatalf("tool = %q, want 7zz", got.Tool)
+	}
+	if got.ArchiveType != "zip" {
+		t.Fatalf("archive type = %q, want zip", got.ArchiveType)
+	}
+	if got.ArchiveMethod != "Deflate" {
+		t.Fatalf("archive method = %q, want Deflate", got.ArchiveMethod)
+	}
+	if got.Encrypted != "yes" {
+		t.Fatalf("encrypted = %q, want yes", got.Encrypted)
+	}
+}
+
+func TestWriteExtractionTreeRendersArchiveMetadata(t *testing.T) {
+	t.Parallel()
+
+	node := &extract.ExtractionNode{
+		Path:   "sample.zip",
+		Format: identify.FormatInfo{Format: identify.ZIP},
+		Status: extract.StatusExtracted,
+		ArchiveMeta: &extract.ArchiveMetadata{
+			Type:             "zip",
+			Methods:          []string{"Deflate", "Store"},
+			PhysicalSize:     "1234",
+			HeadersSize:      "120",
+			HasEncryptedItem: true,
+		},
+	}
+
+	var buf bytes.Buffer
+	writeExtractionTree(&buf, node, 0, getTranslations("en"))
+	out := buf.String()
+
+	for _, want := range []string{"{type=zip", "method=Deflate / Store", "encrypted=yes", "physical-size=1234", "headers-size=120"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q: %q", want, out)
+		}
 	}
 }
 

@@ -13,11 +13,14 @@ import (
 
 func TestExtractTARGZProducesExtractionTree(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	tarPath := createTestTARGZ(t, dir, "delivery.tar.gz", map[string][]byte{
-		"app.bin":        []byte("ELF fake binary"),
-		"config/app.yml": []byte("key: value"),
+		"file1.txt": []byte("content one"),
+		"file2.txt": []byte("content two"),
 	})
 
 	cfg := config.DefaultConfig()
@@ -45,6 +48,9 @@ func TestExtractTARGZProducesExtractionTree(t *testing.T) {
 
 func TestExtractTARWithSymlinkRejects(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	tarPath := filepath.Join(dir, "symlink.tar")
@@ -104,6 +110,9 @@ func TestExtractTARWithSymlinkRejects(t *testing.T) {
 
 func TestExtractPlainTARProducesExtractionTree(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	tarPath := createTestTAR(t, dir, "delivery.tar", map[string][]byte{
@@ -128,14 +137,14 @@ func TestExtractPlainTARProducesExtractionTree(t *testing.T) {
 	if tree.EntriesCount != 2 {
 		t.Errorf("EntriesCount = %d, want 2", tree.EntriesCount)
 	}
-	if tree.Tool != "archive/tar" {
-		t.Errorf("Tool = %q, want archive/tar", tree.Tool)
-	}
 	CleanupNode(tree)
 }
 
 func TestExtractPlainTARExecutableFileDoesNotTripSpecialFile(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	tarPath := filepath.Join(dir, "delivery.tar")
@@ -181,6 +190,9 @@ func TestExtractPlainTARExecutableFileDoesNotTripSpecialFile(t *testing.T) {
 
 func TestExtractBzip2TARInvalidDataFailsGracefully(t *testing.T) {
 	t.Parallel()
+	if _, ok := resolve7zBinary(); !ok {
+		t.Skip("7-Zip not available")
+	}
 	dir := t.TempDir()
 
 	fakeBzip2 := append([]byte{'B', 'Z', 'h', '9'}, make([]byte, 64)...)
@@ -204,16 +216,4 @@ func TestExtractBzip2TARInvalidDataFailsGracefully(t *testing.T) {
 		t.Errorf("status = Extracted for invalid bzip2 data, want Failed or Skipped")
 	}
 	CleanupNode(tree)
-}
-
-func TestTarHeaderFileModeBounds(t *testing.T) {
-	t.Parallel()
-
-	if got := tarHeaderFileMode(-1); got != 0 {
-		t.Fatalf("tarHeaderFileMode(-1) = %v, want 0", got)
-	}
-
-	if got := tarHeaderFileMode(0o755); got != os.FileMode(0o755) {
-		t.Fatalf("tarHeaderFileMode(0755) = %v, want %v", got, os.FileMode(0o755))
-	}
 }

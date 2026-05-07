@@ -291,7 +291,10 @@ func TestGenerateHumanWithProcessingIssues(t *testing.T) {
 	if !strings.Contains(output, "## Processing Errors") {
 		t.Fatal("report does not contain Processing Errors section")
 	}
-	if !strings.Contains(output, "| pipeline | assembly | failed to merge components |") {
+	if !strings.Contains(output, "| Source | Location | Class | Status | Detected | Tool | Archive Type | Archive Method | Encrypted | Physical Size | Detail |") {
+		t.Fatal("report does not contain structured processing issue header")
+	}
+	if !strings.Contains(output, "| pipeline | assembly | pipeline-error |") || !strings.Contains(output, "failed to merge components") {
 		t.Fatal("report does not contain processing issue details")
 	}
 }
