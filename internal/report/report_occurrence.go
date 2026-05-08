@@ -149,35 +149,43 @@ func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnsc
 			fmt.Fprintf(w, "- %s: `%s`\n", t.purlsLabel, p)
 		}
 	}
-	fmt.Fprintf(w, "- %s: %d\n\n", t.occurrencesLabel, len(group.Occurrences))
+
+	sharedVulnLines, perOccurrenceVulnLines := resolvePackageVulnerabilityBlocks(group, v, t)
 
 	for i := range group.Occurrences {
-		writeOccurrenceEntry(w, group.Occurrences[i], v, t, 5)
+		writeOccurrenceListEntry(w, group.Occurrences[i], t, perOccurrenceVulnLines[group.Occurrences[i].ObjectID])
 	}
+	writeVulnerabilityLines(w, sharedVulnLines, "")
+	fmt.Fprintln(w)
 }
 
-// writeOccurrenceEntry renders one normalized occurrence including provenance.
-func writeOccurrenceEntry(w io.Writer, occ componentOccurrence, v *vulnscan.Result, t translations, headingLevel int) {
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", occurrenceAnchorID(occ.ObjectID))
-	fmt.Fprintf(w, "%s %s\n\n", strings.Repeat("#", headingLevel), occ.ObjectID)
+// writeOccurrenceListEntry renders one normalized occurrence as nested list
+// item inside a package-group entry.
+func writeOccurrenceListEntry(w io.Writer, occ componentOccurrence, t translations, vulnLines []string) {
+	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, occurrenceAnchorID(occ.ObjectID), occ.ObjectID)
 	for _, dp := range occ.DeliveryPaths {
-		fmt.Fprintf(w, "- %s: `%s`\n", t.deliveryPath, dp)
+		fmt.Fprintf(w, "  - %s: `%s`\n", t.deliveryPath, dp)
 	}
 	switch {
 	case len(occ.EvidencePaths) > 0:
 		for _, evidencePath := range occ.EvidencePaths {
-			fmt.Fprintf(w, "- %s: `%s`\n", t.evidencePath, evidencePath)
+			fmt.Fprintf(w, "  - %s: `%s`\n", t.evidencePath, evidencePath)
 		}
 	case occ.EvidenceSource != "":
-		fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, occ.EvidenceSource)
+		fmt.Fprintf(w, "  - %s: `%s`\n", t.evidencePath, occ.EvidenceSource)
 	default:
-		fmt.Fprintf(w, "- %s: %s\n", t.evidencePath, t.noEvidenceRecorded)
+		fmt.Fprintf(w, "  - %s: %s\n", t.evidencePath, t.noEvidenceRecorded)
 	}
 	if occ.FoundBy != "" {
-		fmt.Fprintf(w, "- %s: `%s`\n", t.foundBy, occ.FoundBy)
+		fmt.Fprintf(w, "  - %s: `%s`\n", t.foundBy, occ.FoundBy)
 	}
-	writeOccurrenceVulnerabilityBlock(w, occ, v, t)
-	fmt.Fprintln(w)
+	writeVulnerabilityLines(w, vulnLines, "  ")
+}
+
+func writeVulnerabilityLines(w io.Writer, lines []string, indent string) {
+	for _, line := range lines {
+		fmt.Fprintf(w, "%s%s\n", indent, line)
+	}
 }
 
 // buildPackageOccurrenceGroups groups occurrences by package name/version and
