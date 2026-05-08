@@ -73,7 +73,6 @@ type translations struct {
 	evidencePath                       string
 	foundBy                            string
 	noEvidenceRecorded                 string
-	processingTime                     string
 	scanError                          string
 	componentsFound                    string
 	noComponents                       string
@@ -98,8 +97,6 @@ type translations struct {
 	noPolicyDecisions                  string
 	noProcessingIssues                 string
 	summaryLead                        string
-	summaryAssemblyMath                string
-	summaryNextStepTemplate            string
 	vulnEnrichmentNotRequested         string
 	vulnEnrichmentStateTemplate        string
 	vulnGrypeVersionTemplate           string
@@ -137,12 +134,9 @@ type translations struct {
 	methodBulletTrust                  string
 	methodMoreDetails                  string
 	appendixLead                       string
-	summaryExtraction                  string
-	summaryScan                        string
-	summaryComponents                  string
-	summaryPolicies                    string
-	summaryProcessingIssues            string
-	summaryFindings                    string
+	summaryKeyFindingsSection          string
+	summaryAnalysisSection             string
+	summaryVulnSection                 string
 	endOfReport                        string
 	policyDecisionAt                   string
 	linkTwoPhases                      string
@@ -150,11 +144,8 @@ type translations struct {
 	linkFinalSBOMBuild                 string
 	linkDeduplication                  string
 	linkPackageDetectionReliability    string
-	summaryExtractionStatsTemplate     string
-	summaryScanStatsTemplate           string
-	summaryComponentsStatsTemplate     string
-	summaryPoliciesStatsTemplate       string
-	summaryProcessingStatsTemplate     string
+	summaryAnalysisProseTemplate       string
+	summaryAnalysisMethodRef           string
 	findingToolMissingTemplate         string
 	findingExtractionGapTemplate       string
 	findingScanFailedTemplate          string
@@ -163,6 +154,8 @@ type translations struct {
 	findingNoPackageIdentityTemplate   string
 	findingIndexQualityTemplate        string
 	findingNoCriticalLimitations       string
+	findingPolicyDecisionsTemplate     string
+	findingProcessingIssuesTemplate    string
 	processingPipelineLabel            string
 	processingExtractionFailedLabel    string
 	processingSecurityBlockedLabel     string
@@ -273,7 +266,6 @@ func getTranslations(lang string) translations {
 			evidencePath:                       "Belegpfad",
 			foundBy:                            "Erkannt durch",
 			noEvidenceRecorded:                 "kein komponentenspezifischer Beleg erfasst",
-			processingTime:                     "Verarbeitungszeit",
 			scanError:                          "Fehler:",
 			componentsFound:                    "Komponenten gefunden",
 			noComponents:                       "keine Komponenten gefunden",
@@ -303,8 +295,6 @@ func getTranslations(lang string) translations {
 			noPolicyDecisions:                  "Keine Richtlinienentscheidungen protokolliert.",
 			noProcessingIssues:                 "Keine Verarbeitungsfehler protokolliert.",
 			summaryLead:                        "Dieser Bericht dokumentiert die beobachteten Paketbefunde, ihre Nachverfolgbarkeit und die Verarbeitungsgrenzen eines einzelnen Prüfungsdurchlaufs über die gelieferte Datei. Er soll die technische Prüfung von SBOM-basierten Schwachstellenbefunden und die Reproduzierbarkeit der zugrunde liegenden Evidenz unterstützen.",
-			summaryAssemblyMath:                "Die Assembly behielt nach Normalisierung und Deduplikation %d Paketkomponenten und fügte %d strukturelle Container-Komponenten hinzu. Dadurch entstehen insgesamt %d CycloneDX-Komponenten.",
-			summaryNextStepTemplate:            "Ein sinnvoller Einstieg ist der %s. Für Hintergrund zur Vorgehensweise siehe %s.",
 			vulnEnrichmentNotRequested:         "Schwachstellenanreicherung: nicht angefordert",
 			vulnEnrichmentStateTemplate:        "Schwachstellenanreicherungsstatus: `%s`",
 			vulnGrypeVersionTemplate:           "Grype-Version: `%s`",
@@ -342,12 +332,9 @@ func getTranslations(lang string) translations {
 			methodBulletTrust:                  "Der Lauf ist deterministisch: Die Eingabedatei ist gehasht, die Lieferpfade sind stabil und Fehler oder Abdeckungsgrenzen werden explizit protokolliert statt verborgen.",
 			methodMoreDetails:                  "Vertiefung in SCAN_APPROACH.md:",
 			appendixLead:                       "Die folgenden Abschnitte enthalten die vollständige Rohspur für Stichproben, vertiefte technische Prüfung und Belegexport. Sie sind bewusst ausführlich und werden typischerweise erst benötigt, wenn die relevante Objekt-ID oder der relevante Lieferpfad bereits feststeht.",
-			summaryExtraction:                  "Extraktion",
-			summaryScan:                        "Scans",
-			summaryComponents:                  "Komponentenindex",
-			summaryPolicies:                    "Richtlinienentscheidungen",
-			summaryProcessingIssues:            "Verarbeitungsfehler",
-			summaryFindings:                    "Wesentliche Befunde",
+			summaryKeyFindingsSection:          "Wesentliche Befunde",
+			summaryAnalysisSection:             "Analyseergebnis",
+			summaryVulnSection:                 "Schwachstellenübersicht",
 			endOfReport:                        "Ende des Berichts.",
 			policyDecisionAt:                   "bei",
 			linkTwoPhases:                      "Zwei Phasen",
@@ -355,11 +342,8 @@ func getTranslations(lang string) translations {
 			linkFinalSBOMBuild:                 "Finaler SBOM-Aufbau",
 			linkDeduplication:                  "Deduplikation",
 			linkPackageDetectionReliability:    "Zuverlaessigkeit der Paketerkennung",
-			summaryExtractionStatsTemplate:     "gesamt=%d extrahiert=%d syft-nativ=%d fehlgeschlagen=%d werkzeug-fehlt=%d uebersprungen=%d endungsgefiltert=%d ([Details](#%s)) sicherheitsblockiert=%d ausstehend=%d",
-			summaryScanStatsTemplate:           "gesamt=%d erfolgreich=%d fehler=%d komponenten=%d",
-			summaryComponentsStatsTemplate:     "%d roh -> entfernt %d (fs-artefakte=%d, low-value=%d, schwache-duplikate=%d, purl-duplikate=%d) -> %d im BOM -> gefiltert %d (abs-pfad=%d, low-value=%d, zusammengefuehrt=%d) -> indexiert %d",
-			summaryPoliciesStatsTemplate:       "gesamt=%d weiter=%d ueberspringen=%d abbrechen=%d",
-			summaryProcessingStatsTemplate:     "pipeline=%d",
+			summaryAnalysisProseTemplate:       "Die Lieferung wurde in zwei Phasen entpackt und analysiert. In der Extraktionsphase wurden %d Archive und Dateien geöffnet, davon %d erfolgreich verarbeitet. In der Scanphase führte Syft %d Scan-Aufgaben durch; %d davon wurden erfolgreich abgeschlossen und lieferten %d Roh-Komponenteneinträge. Nach Normalisierung und Deduplikation — %d dateibezogene Einträge ohne verwertbare Paketkoordinaten wurden verworfen und %d PURL-Duplikate zusammengefasst — ergab der Lauf %d indexierte Paketkomponenten: %d tragen eine PURL für den automatisierten CVE-Abgleich, %d nicht.",
+			summaryAnalysisMethodRef:           "Der Lauf ist deterministisch: Die Eingabedatei ist gehasht, Lieferpfade sind stabil, und Abdeckungslücken werden explizit protokolliert statt verborgen. Zur vertieften Erläuterung: %s.",
 			findingToolMissingTemplate:         "%d Extraktionsknoten benoetigen nicht verfuegbare externe Werkzeuge. Beispiele: %s.",
 			findingExtractionGapTemplate:       "%d Extraktionsknoten sind fehlgeschlagen oder blockiert. Beispiele: %s.",
 			findingScanFailedTemplate:          "%d Syft-Scan-Aufgaben sind fehlgeschlagen. Beispiele: %s.",
@@ -368,6 +352,8 @@ func getTranslations(lang string) translations {
 			findingNoPackageIdentityTemplate:   "%d erfolgreiche Scan-Aufgaben lieferten keine Paketidentitaet. Beispiele: %s.",
 			findingIndexQualityTemplate:        "Die Index-Qualitaetsregeln entfernten %d absolute Pfad-Artefakte, %d Low-Value-Datei-Artefakte und fuehrten %d Platzhalter-Duplikate zusammen.",
 			findingNoCriticalLimitations:       "Keine kritischen Verarbeitungsgrenzen in diesem Lauf erkannt.",
+			findingPolicyDecisionsTemplate:     "%d Richtlinienentscheidungen wurden in diesem Lauf ausgelöst. Details: %s.",
+			findingProcessingIssuesTemplate:    "%d Verarbeitungsfehler auf Pipeline-Ebene wurden erfasst. Details: %s.",
 			processingPipelineLabel:            "pipeline",
 			processingExtractionFailedLabel:    "extraktion-fehlgeschlagen",
 			processingSecurityBlockedLabel:     "extraktion-sicherheitsblockiert",
@@ -473,7 +459,6 @@ func getTranslations(lang string) translations {
 			evidencePath:                       "Evidence path",
 			foundBy:                            "Found by",
 			noEvidenceRecorded:                 "no component-specific evidence recorded",
-			processingTime:                     "Processing time",
 			scanError:                          "Error:",
 			componentsFound:                    "components found",
 			noComponents:                       "no components found",
@@ -503,8 +488,6 @@ func getTranslations(lang string) translations {
 			noPolicyDecisions:                  "No policy decisions recorded.",
 			noProcessingIssues:                 "No processing issues recorded.",
 			summaryLead:                        "This report documents the observed package findings, their traceability, and the processing limits of a single inspection run over the supplied delivery. Its purpose is to support technical review of SBOM-based vulnerability findings and reproducibility of the underlying evidence.",
-			summaryAssemblyMath:                "Assembly retained %d package components after normalization and deduplication and added %d structural container components, resulting in %d CycloneDX components overall.",
-			summaryNextStepTemplate:            "A practical starting point is the %s. For method background, see %s.",
 			vulnEnrichmentNotRequested:         "Vulnerability enrichment: not requested",
 			vulnEnrichmentStateTemplate:        "Vulnerability enrichment state: `%s`",
 			vulnGrypeVersionTemplate:           "Grype version: `%s`",
@@ -542,12 +525,9 @@ func getTranslations(lang string) translations {
 			methodBulletTrust:                  "The run is deterministic: the input file is hash-pinned, logical delivery paths are stable, and errors or coverage limits are recorded instead of hidden.",
 			methodMoreDetails:                  "Deep links into SCAN_APPROACH.md:",
 			appendixLead:                       "The sections below preserve the detailed audit trail for spot checks, deeper technical review, and evidence export. They are intentionally exhaustive and are usually only needed once the relevant object id or delivery path is already known.",
-			summaryExtraction:                  "Extraction",
-			summaryScan:                        "Scans",
-			summaryComponents:                  "Component index",
-			summaryPolicies:                    "Policy decisions",
-			summaryProcessingIssues:            "Processing issues",
-			summaryFindings:                    "Key findings",
+			summaryKeyFindingsSection:          "Key Findings",
+			summaryAnalysisSection:             "Analysis Overview",
+			summaryVulnSection:                 "Vulnerability Summary",
 			endOfReport:                        "End of report.",
 			policyDecisionAt:                   "at",
 			linkTwoPhases:                      "Two phases",
@@ -555,11 +535,8 @@ func getTranslations(lang string) translations {
 			linkFinalSBOMBuild:                 "Final SBOM build",
 			linkDeduplication:                  "Deduplication",
 			linkPackageDetectionReliability:    "Package Detection Reliability",
-			summaryExtractionStatsTemplate:     "total=%d extracted=%d syft-native=%d failed=%d tool-missing=%d skipped=%d extension-filtered=%d ([details](#%s)) security-blocked=%d pending=%d",
-			summaryScanStatsTemplate:           "total=%d successful=%d errors=%d components-found=%d",
-			summaryComponentsStatsTemplate:     "%d raw -> removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) -> %d in BOM -> filtered %d (abs-path=%d, low-value=%d, merged=%d) -> indexed %d",
-			summaryPoliciesStatsTemplate:       "total=%d continue=%d skip=%d abort=%d",
-			summaryProcessingStatsTemplate:     "pipeline=%d",
+			summaryAnalysisProseTemplate:       "The delivery was unpacked and recursively scanned in two phases. In the extraction phase, %d archives and files were opened, %d of which were successfully processed. In the scan phase, Syft ran %d scan tasks; %d completed successfully and yielded %d raw component records. After normalization and deduplication \u2014 %d file-level records without actionable package coordinates were discarded and %d PURL-duplicate records were collapsed \u2014 the run produced %d indexed package components: %d carry a PURL suitable for automated CVE lookup, and %d do not.",
+			summaryAnalysisMethodRef:           "The run is deterministic: the input file is hash-pinned, delivery paths are stable, and coverage gaps are recorded explicitly rather than hidden. For a deeper explanation, see %s.",
 			findingToolMissingTemplate:         "%d extraction nodes require unavailable external tools. Examples: %s.",
 			findingExtractionGapTemplate:       "%d extraction nodes failed or were blocked. Examples: %s.",
 			findingScanFailedTemplate:          "%d Syft scan tasks failed. Examples: %s.",
@@ -568,6 +545,8 @@ func getTranslations(lang string) translations {
 			findingNoPackageIdentityTemplate:   "%d successful scan tasks produced no package identities. Examples: %s.",
 			findingIndexQualityTemplate:        "Index quality controls removed %d absolute-path artifacts, %d low-value file artifacts, and merged %d duplicate placeholders.",
 			findingNoCriticalLimitations:       "No critical processing limitations detected in this run.",
+			findingPolicyDecisionsTemplate:     "%d policy decisions were triggered during this run. Details: %s.",
+			findingProcessingIssuesTemplate:    "%d pipeline processing issues were recorded. Details: %s.",
 			processingPipelineLabel:            "pipeline",
 			processingExtractionFailedLabel:    "extraction-failed",
 			processingSecurityBlockedLabel:     "extraction-security-blocked",

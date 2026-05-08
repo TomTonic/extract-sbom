@@ -62,7 +62,6 @@ func TestWriteVulnerabilitySummaryGermanTableHeaders(t *testing.T) {
 	out := buf.String()
 	checks := []string{
 		"Schwachstellenanreicherungsstatus: `completed`",
-		"Schwachstellenübersicht (grype-inspirierte Ansicht):",
 		"| Name | Installiert | Behoben in | Schwachstelle | Schweregrad | EPSS | Risiko | KEV |",
 		"HIGH (9.8)",
 		"| 80.0 | ja |",

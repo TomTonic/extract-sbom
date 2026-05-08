@@ -88,7 +88,7 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 	out := buf.String()
 
 	checks := []string{
-		"Vulnerability summary (grype-inspired view):",
+		"### Vulnerability Summary",
 		"| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |",
 		"[pkg-a](#package-pkg-a-1-0-0)",
 		"HIGH (9.8)",
@@ -146,6 +146,9 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"# extract-sbom Audit Report",
 		"## Table of Contents",
 		"## Summary",
+		"### Analysis Overview",
+		"### Key Findings",
+		"### Vulnerability Summary",
 		"## Method At A Glance",
 		"## Processing Errors",
 		"## Residual Risk and Limitations",
@@ -315,6 +318,9 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 
 	for _, link := range []string{
 		"- [Summary](#summary)",
+		"  - [Analysis Overview](#analysis-overview)",
+		"  - [Key Findings](#key-findings)",
+		"  - [Vulnerability Summary](#vulnerability-summary)",
 		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
@@ -347,6 +353,9 @@ func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *te
 
 	for _, anchor := range []string{
 		"summary",
+		"analysis-overview",
+		"key-findings",
+		"vulnerability-summary",
 		"method-at-a-glance",
 		"processing-errors",
 		"residual-risk-and-limitations",

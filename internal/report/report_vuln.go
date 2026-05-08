@@ -40,12 +40,6 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 
 	v := data.Vulnerabilities
 	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnEnrichmentStateTemplate, v.State))
-	if v.GrypeVersion != "" {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnGrypeVersionTemplate, v.GrypeVersion))
-	}
-	if v.DBSchemaVersion != "" || v.DBBuilt != "" || v.DBUpdated != "" {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnGrypeDBTemplate, emptyDash(v.DBSchemaVersion), emptyDash(v.DBBuilt), emptyDash(v.DBUpdated)))
-	}
 	if len(v.Errors) > 0 {
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnEnrichmentIssuesTemplate, len(v.Errors)))
 	}
@@ -63,7 +57,6 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 		return
 	}
 
-	fmt.Fprintf(w, "\n%s\n", t.vulnSummaryHeading)
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
 		t.vulnTableName,

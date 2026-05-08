@@ -322,4 +322,7 @@ const (
 	anchorScan                   = "scan-results"
 	anchorScanNoPackageIDs       = "scan-tasks-without-package-identities"
 	anchorExtraction             = "extraction-log"
+	anchorSummaryAnalysis        = "analysis-overview"
+	anchorSummaryKeyFindings     = "key-findings"
+	anchorSummaryVuln            = "vulnerability-summary"
 )
