@@ -219,70 +219,106 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 	return rows
 }
 
-// writeOccurrenceVulnerabilityBlock renders the per-component vulnerability
-// detail block within the component occurrence index section.
-func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *vulnscan.Result, t translations) {
-	if v == nil || v.State == vulnscan.StateNotRequested {
-		return
+// resolvePackageVulnerabilityBlocks decides whether vulnerability details
+// should be rendered once at package level (all occurrence blocks identical)
+// or separately under each occurrence (at least one block differs).
+func resolvePackageVulnerabilityBlocks(group packageOccurrenceGroup, v *vulnscan.Result, t translations) ([]string, map[string][]string) {
+	if len(group.Occurrences) == 0 {
+		return nil, nil
 	}
+
+	occurrenceBlocks := make(map[string][]string, len(group.Occurrences))
+	for i := range group.Occurrences {
+		occ := group.Occurrences[i]
+		occurrenceBlocks[occ.ObjectID] = occurrenceVulnerabilityLines(occ, v, t)
+	}
+
+	first := occurrenceBlocks[group.Occurrences[0].ObjectID]
+	if len(group.Occurrences) == 1 {
+		return first, nil
+	}
+
+	reference := strings.Join(first, "\n")
+	for i := 1; i < len(group.Occurrences); i++ {
+		candidate := occurrenceBlocks[group.Occurrences[i].ObjectID]
+		if strings.Join(candidate, "\n") != reference {
+			return nil, occurrenceBlocks
+		}
+	}
+
+	return first, nil
+}
+
+func occurrenceVulnerabilityLines(occ componentOccurrence, v *vulnscan.Result, t translations) []string {
+	if v == nil || v.State == vulnscan.StateNotRequested {
+		return nil
+	}
+
 	matches := v.MatchesByBOMRef[occ.ObjectID]
 	if len(matches) > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnStatusFoundTemplate, len(matches)))
+		lines := make([]string, 0, 8)
+		lines = append(lines, fmt.Sprintf("- %s", fmt.Sprintf(t.vulnStatusFoundTemplate, len(matches))))
 		for i := range matches {
 			m := matches[i]
-			fmt.Fprintf(w, "  - `%s` (%s)", m.VulnerabilityID, strings.ToUpper(normalizeSeverity(m.Severity)))
+			line := fmt.Sprintf("  - `%s` (%s)", m.VulnerabilityID, strings.ToUpper(normalizeSeverity(m.Severity)))
 			if m.ArtifactType != "" {
-				fmt.Fprintf(w, " type=`%s`", m.ArtifactType)
+				line += fmt.Sprintf(" type=`%s`", m.ArtifactType)
 			}
 			if m.Risk != nil {
-				fmt.Fprintf(w, " risk=`%s`", formatNumber(*m.Risk))
+				line += fmt.Sprintf(" risk=`%s`", formatNumber(*m.Risk))
 			}
-			fmt.Fprintf(w, " kev=`%s`", formatKEV(m.KEV != nil && *m.KEV, t))
+			line += fmt.Sprintf(" kev=`%s`", formatKEV(m.KEV != nil && *m.KEV, t))
 			if m.Namespace != "" {
-				fmt.Fprintf(w, " namespace=`%s`", m.Namespace)
+				line += fmt.Sprintf(" namespace=`%s`", m.Namespace)
 			}
 			if m.MatchType != "" {
-				fmt.Fprintf(w, " match=`%s`", m.MatchType)
+				line += fmt.Sprintf(" match=`%s`", m.MatchType)
 			}
 			if m.Matcher != "" {
-				fmt.Fprintf(w, " matcher=`%s`", m.Matcher)
+				line += fmt.Sprintf(" matcher=`%s`", m.Matcher)
 			}
-			fmt.Fprintln(w)
+			lines = append(lines, line)
 			if m.DataSource != "" {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailSourceTemplate, formatVulnerabilityReference(m.DataSource)))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailSourceTemplate, formatVulnerabilityReference(m.DataSource))))
 			}
 			if m.FixState != "" || len(m.FixVersions) > 0 {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailFixTemplate, emptyDash(m.FixState), strings.Join(m.FixVersions, ", ")))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailFixTemplate, emptyDash(m.FixState), strings.Join(m.FixVersions, ", "))))
 			}
 			if m.CVSSVector != "" || m.CVSSVersion != "" || m.CVSSScore != nil {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailCVSSTemplate, emptyDash(m.CVSSVersion), formatRisk(m.CVSSScore), emptyDash(m.CVSSVector)))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailCVSSTemplate, emptyDash(m.CVSSVersion), formatRisk(m.CVSSScore), emptyDash(m.CVSSVector))))
 			} else {
-				fmt.Fprintf(w, "    - %s\n", t.vulnDetailCVSSNone)
+				lines = append(lines, fmt.Sprintf("    - %s", t.vulnDetailCVSSNone))
 			}
 			if strings.TrimSpace(m.Description) != "" {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailDescriptionTemplate, strings.TrimSpace(m.Description)))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailDescriptionTemplate, strings.TrimSpace(m.Description))))
 			} else {
-				fmt.Fprintf(w, "    - %s\n", t.vulnDetailDescriptionNone)
+				lines = append(lines, fmt.Sprintf("    - %s", t.vulnDetailDescriptionNone))
 			}
 			if m.EPSS != nil {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailEPSSTemplate, formatEPSS(m.EPSS, m.EPSSPercentile)))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailEPSSTemplate, formatEPSS(m.EPSS, m.EPSSPercentile))))
 			}
 			for _, u := range m.URLs {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailReferenceTemplate, formatVulnerabilityReference(u)))
+				lines = append(lines, fmt.Sprintf("    - %s", fmt.Sprintf(t.vulnDetailReferenceTemplate, formatVulnerabilityReference(u))))
 			}
 		}
-		return
+		return lines
 	}
 
 	if v.State == vulnscan.StateUnavailable || v.State == vulnscan.StateCompletedWithErrors {
-		fmt.Fprintf(w, "- %s\n", t.vulnStatusNotAssessableUnavailable)
-		return
+		return []string{fmt.Sprintf("- %s", t.vulnStatusNotAssessableUnavailable)}
 	}
 	if occ.PURL == "" && occ.CPE == "" {
-		fmt.Fprintf(w, "- %s\n", t.vulnStatusNotAssessableNoID)
-		return
+		return []string{fmt.Sprintf("- %s", t.vulnStatusNotAssessableNoID)}
 	}
-	fmt.Fprintf(w, "- %s\n", t.vulnStatusNone)
+	return []string{fmt.Sprintf("- %s", t.vulnStatusNone)}
+}
+
+// writeOccurrenceVulnerabilityBlock renders the per-component vulnerability
+// detail block within the component occurrence index section.
+func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *vulnscan.Result, t translations) {
+	for _, line := range occurrenceVulnerabilityLines(occ, v, t) {
+		fmt.Fprintln(w, line)
+	}
 }
 
 // normalizeSeverity lowercases and trims raw, returning "unknown" for empty input.

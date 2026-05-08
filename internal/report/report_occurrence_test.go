@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // TestGenerateHumanComponentIndexUsesFinalBOMRefs verifies that the human
@@ -50,14 +52,14 @@ func TestGenerateHumanComponentIndexUsesFinalBOMRefs(t *testing.T) {
 	if alphaIdx >= zlibIdx {
 		t.Fatalf("package groups are not sorted by delivery path: alpha=%d zlib=%d", alphaIdx, zlibIdx)
 	}
-	if !strings.Contains(output, "##### extract-sbom:AAAA_AAAA") {
-		t.Fatal("nested occurrence heading missing for alpha component")
+	if !strings.Contains(output, "- Component-ID: <a id=\"component-extract-sbom-aaaa_aaaa\"></a>`extract-sbom:AAAA_AAAA`") {
+		t.Fatal("nested occurrence list entry missing for alpha component")
 	}
 
 	for _, fragment := range []string{
 		"Package: `alpha`",
 		"PURL: `pkg:maven/com.acme/alpha@1.0.0`",
-		"Occurrences: 1",
+		"- Component-ID: <a id=\"component-extract-sbom-aaaa_aaaa\"></a>`extract-sbom:AAAA_AAAA`",
 		"Delivery path: `a/path/alpha.jar`",
 		"Evidence path: `a/path/alpha.jar/META-INF/MANIFEST.MF`",
 		"Found by: `java-archive-cataloger`",
@@ -66,6 +68,13 @@ func TestGenerateHumanComponentIndexUsesFinalBOMRefs(t *testing.T) {
 			t.Fatalf("report output missing %q", fragment)
 		}
 	}
+	if strings.Contains(output, "Occurrences: 1") {
+		t.Fatal("occurrence counter line should not be rendered")
+	}
+	if strings.Contains(output, "PURL: `pkg:maven/com.acme/alpha@1.0.0`\n\n- Component-ID") {
+		t.Fatal("component-id entry must directly follow package list without blank line")
+	}
+
 	if strings.Contains(output, "Object ID: `extract-sbom:AAAA_AAAA`") {
 		t.Fatal("object-id line should not be repeated when object id is already the heading")
 	}
@@ -103,10 +112,10 @@ func TestGenerateHumanComponentIndexFiltersAbsPathNames(t *testing.T) {
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "##### extract-sbom:GOOD_COMP") {
+	if !strings.Contains(output, "- Component-ID: <a id=\"component-extract-sbom-good_comp\"></a>`extract-sbom:GOOD_COMP`") {
 		t.Error("properly-identified component missing from report")
 	}
-	if strings.Contains(output, "##### extract-sbom:BAD_COMP") {
+	if strings.Contains(output, "- Component-ID: <a id=\"component-extract-sbom-bad_comp\"></a>`extract-sbom:BAD_COMP`") {
 		t.Error("file-cataloger artifact with absolute-path Name should be filtered from report")
 	}
 	if strings.Contains(output, "/tmp/extract-sbom-zip-12345") {
@@ -151,10 +160,10 @@ func TestGenerateHumanComponentIndexMergesWeakDuplicatePlaceholders(t *testing.T
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "##### extract-sbom:GOOD_JANINO") {
+	if !strings.Contains(output, "- Component-ID: <a id=\"component-extract-sbom-good_janino\"></a>`extract-sbom:GOOD_JANINO`") {
 		t.Fatal("rich janino record missing from component index")
 	}
-	if strings.Contains(output, "##### extract-sbom:WEAK_JANINO") {
+	if strings.Contains(output, "- Component-ID: <a id=\"component-extract-sbom-weak_janino\"></a>`extract-sbom:WEAK_JANINO`") {
 		t.Fatal("weak duplicate placeholder should be merged away")
 	}
 }
@@ -195,5 +204,97 @@ func TestGenerateHumanComponentIndexPrunesAncestorDeliveryPaths(t *testing.T) {
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("report output missing %q", fragment)
 		}
+	}
+}
+
+func TestGenerateHumanComponentIndexRendersPackageLevelVulnerabilityStatus(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:ONE",
+			Name:       "log4net",
+			Version:    "2.0.13.0-.NET 4.5",
+			PackageURL: "pkg:nuget/log4net@2.0.13.0-.NET%204.5",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery/msi/log4net.dll"}},
+		},
+		{
+			BOMRef:     "extract-sbom:TWO",
+			Name:       "log4net",
+			Version:    "2.0.13.0-.NET 4.5",
+			PackageURL: "pkg:nuget/log4net@2.0.13.0-.NET%204.5",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery/zip/log4net.dll"}},
+		},
+	}}
+	data.Vulnerabilities = &vulnscan.Result{
+		State: vulnscan.StateCompleted,
+		MatchesByBOMRef: map[string][]vulnscan.VMatch{
+			"extract-sbom:ONE": {{
+				VulnerabilityID: "GHSA-4f7c-pmjv-c25w",
+				Severity:        "medium",
+			}},
+			"extract-sbom:TWO": {{
+				VulnerabilityID: "GHSA-4f7c-pmjv-c25w",
+				Severity:        "medium",
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "`extract-sbom:ONE`") || !strings.Contains(output, "`extract-sbom:TWO`") {
+		t.Fatalf("expected both occurrence list entries, got: %s", output)
+	}
+	if strings.Count(output, "Vulnerability status: `found` (1)") != 1 {
+		t.Fatalf("expected a single package-level vulnerability status block, got: %s", output)
+	}
+}
+
+func TestGenerateHumanComponentIndexRendersOccurrenceLevelVulnerabilityWhenBlocksDiffer(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:ONE",
+			Name:       "log4net",
+			Version:    "2.0.13.0-.NET 4.5",
+			PackageURL: "pkg:nuget/log4net@2.0.13.0-.NET%204.5",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery/msi/log4net.dll"}},
+		},
+		{
+			BOMRef:     "extract-sbom:TWO",
+			Name:       "log4net",
+			Version:    "2.0.13.0-.NET 4.5",
+			PackageURL: "pkg:nuget/log4net@2.0.13.0-.NET%204.5",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "delivery/zip/log4net.dll"}},
+		},
+	}}
+	data.Vulnerabilities = &vulnscan.Result{
+		State: vulnscan.StateCompleted,
+		MatchesByBOMRef: map[string][]vulnscan.VMatch{
+			"extract-sbom:ONE": {{
+				VulnerabilityID: "GHSA-4f7c-pmjv-c25w",
+				Severity:        "medium",
+			}},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Count(output, "Vulnerability status: `found` (1)") != 1 {
+		t.Fatalf("expected one found status for first occurrence, got: %s", output)
+	}
+	if strings.Count(output, "Vulnerability status: `none`") == 0 {
+		t.Fatalf("expected none status for second occurrence, got: %s", output)
 	}
 }

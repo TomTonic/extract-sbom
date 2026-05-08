@@ -211,6 +211,7 @@ type translations struct {
 	componentIndexWithoutPURLSubsection string
 	occurrencesLabel                    string
 	purlsLabel                          string
+	componentIDLabel                    string
 	suppressedByNoIndexedMatch          string
 	suppressedByAmbiguousIndexedMatch   string
 	suppressedByReplacementNotIndexed   string
@@ -415,6 +416,7 @@ func getTranslations(lang string) translations {
 			componentIndexWithoutPURLSubsection: "Komponenten ohne PURL",
 			occurrencesLabel:                    "Vorkommen",
 			purlsLabel:                          "PURL",
+			componentIDLabel:                    "Komponenten-ID",
 			suppressedByNoIndexedMatch:          "durch Normalisierungsregel entfernt; für diesen Lieferpfad existiert keine überlebende Paketkomponente (siehe [Komponentenindex](#component-occurrence-index))",
 			suppressedByAmbiguousIndexedMatch:   "durch Normalisierungsregel entfernt; mehrere überlebende Paketkomponenten passen zu diesem Lieferpfad, daher erfolgt keine unsichere 1:1-Zuordnung (siehe [Komponentenindex](#component-occurrence-index))",
 			suppressedByReplacementNotIndexed:   "durch Normalisierungsregel ersetzt; Ziel ist ein nicht indizierter Struktur-/Container-Eintrag (siehe [Extraktionsprotokoll](#extraction-log))",
@@ -614,6 +616,7 @@ func getTranslations(lang string) translations {
 			componentIndexWithoutPURLSubsection: "Components without PURL",
 			occurrencesLabel:                    "Occurrences",
 			purlsLabel:                          "PURL",
+			componentIDLabel:                    "Component-ID",
 			suppressedByNoIndexedMatch:          "removed by normalization rule; no surviving package component exists for this delivery path (see [Component Occurrence Index](#component-occurrence-index))",
 			suppressedByAmbiguousIndexedMatch:   "removed by normalization rule; multiple surviving package components match this delivery path, so no unsafe 1:1 assignment is made (see [Component Occurrence Index](#component-occurrence-index))",
 			suppressedByReplacementNotIndexed:   "replaced by normalization rule; target is a non-indexed structural/container entry (see [Extraction Log](#extraction-log))",
