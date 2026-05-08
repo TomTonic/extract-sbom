@@ -13,7 +13,8 @@ import (
 
 // vulnerabilitySummaryRow holds one grype-inspired vulnerability table row.
 type vulnerabilitySummaryRow struct {
-	ComponentID     string
+	PackageAnchorID string
+	PackageKey      string
 	Name            string
 	Installed       string
 	FixedIn         string
@@ -51,12 +52,12 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 
 	rows := buildVulnerabilitySummaryRows(v, occurrences)
 	uniqueVulns := map[string]struct{}{}
-	affectedComponents := map[string]struct{}{}
+	affectedPackages := map[string]struct{}{}
 	for i := range rows {
 		uniqueVulns[rows[i].VulnerabilityID] = struct{}{}
-		affectedComponents[rows[i].ComponentID] = struct{}{}
+		affectedPackages[rows[i].PackageKey] = struct{}{}
 	}
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnFindingsTemplate, len(rows), len(uniqueVulns), len(affectedComponents)))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnFindingsTemplate, len(rows), len(uniqueVulns), len(affectedPackages)))
 	if len(rows) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.vulnNoMatchedFindings)
 		return
@@ -76,10 +77,9 @@ func writeVulnerabilitySummary(w io.Writer, data ReportData, occurrences []compo
 	)
 	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|")
 	for i := range rows {
-		anchor := occurrenceAnchorID(rows[i].ComponentID)
 		name := escapeMarkdownCell(rows[i].Name)
-		if rows[i].ComponentID != "" {
-			name = fmt.Sprintf("[%s](#%s)", name, anchor)
+		if rows[i].PackageAnchorID != "" {
+			name = fmt.Sprintf("[%s](#%s)", name, rows[i].PackageAnchorID)
 		}
 		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			name,
@@ -104,22 +104,39 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 	for i := range occurrences {
 		byID[occurrences[i].ObjectID] = occurrences[i]
 	}
+	packageGroups := buildPackageOccurrenceGroups(occurrences)
+	anchorByOccurrence := map[string]string{}
+	for i := range packageGroups {
+		for j := range packageGroups[i].Occurrences {
+			anchorByOccurrence[packageGroups[i].Occurrences[j].ObjectID] = packageGroups[i].AnchorID
+		}
+	}
 
 	rows := make([]vulnerabilitySummaryRow, 0)
 	seen := map[string]struct{}{}
 	for compID, matches := range v.MatchesByBOMRef {
 		occ := byID[compID]
+		packageName := strings.TrimSpace(occ.PackageName)
+		packageVersion := strings.TrimSpace(occ.Version)
+		packageAnchorID := anchorByOccurrence[compID]
 		for i := range matches {
-			name := strings.TrimSpace(matches[i].ArtifactName)
+			name := packageName
 			if name == "" {
-				name = strings.TrimSpace(occ.PackageName)
+				name = strings.TrimSpace(matches[i].ArtifactName)
 			}
-			installed := strings.TrimSpace(matches[i].ArtifactVersion)
+			if packageName == "" {
+				packageName = name
+			}
+			installed := packageVersion
 			if installed == "" {
-				installed = strings.TrimSpace(occ.Version)
+				installed = strings.TrimSpace(matches[i].ArtifactVersion)
 			}
+			if packageVersion == "" {
+				packageVersion = installed
+			}
+			packageKey := strings.Join([]string{packageName, packageVersion}, "|")
 			key := strings.Join([]string{
-				compID,
+				packageKey,
 				name,
 				installed,
 				strings.TrimSpace(matches[i].VulnerabilityID),
@@ -132,7 +149,8 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 			seen[key] = struct{}{}
 
 			rows = append(rows, vulnerabilitySummaryRow{
-				ComponentID:     compID,
+				PackageAnchorID: packageAnchorID,
+				PackageKey:      packageKey,
 				Name:            name,
 				Installed:       installed,
 				FixedIn:         strings.Join(matches[i].FixVersions, ", "),
@@ -196,7 +214,7 @@ func buildVulnerabilitySummaryRows(v *vulnscan.Result, occurrences []componentOc
 		if rows[i].VulnerabilityID != rows[j].VulnerabilityID {
 			return rows[i].VulnerabilityID < rows[j].VulnerabilityID
 		}
-		return rows[i].ComponentID < rows[j].ComponentID
+		return rows[i].PackageKey < rows[j].PackageKey
 	})
 	return rows
 }

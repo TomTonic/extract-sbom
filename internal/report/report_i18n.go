@@ -209,6 +209,8 @@ type translations struct {
 	noExtensionFilteredFiles            string
 	componentIndexWithPURLSubsection    string
 	componentIndexWithoutPURLSubsection string
+	occurrencesLabel                    string
+	purlsLabel                          string
 	suppressedByNoIndexedMatch          string
 	suppressedByAmbiguousIndexedMatch   string
 	suppressedByReplacementNotIndexed   string
@@ -261,7 +263,7 @@ func getTranslations(lang string) translations {
 			methodOverviewSection:              "Verfahren im Kurzüberblick",
 			appendixSection:                    "Anhang",
 			componentIndexSection:              "Komponentenindex",
-			componentIndexLead:                 "Die Einträge sind nach Lieferpfad sortiert. Die Objekt-ID entspricht der bom-ref im SBOM und der artifact.id in Grype. `Delivery path` zeigt, wo die Komponente in der Lieferdatei vorkommt. `Evidence path` zeigt die konkrete Datei oder Metadatenquelle, auf der die Identifikation beruht. Wenn mehrere Delivery Paths unter einer Objekt-ID stehen, wurden identische PURLs bewusst zusammengeführt und alle konkreten Blattpfade beibehalten.",
+			componentIndexLead:                 "Die Einträge sind nach Paket (Name+Version) gruppiert. Unter jedem Paket werden die konkreten Komponenten-Vorkommen (Objekt-ID = bom-ref im SBOM bzw. artifact.id in Grype) mit ihren Liefer- und Belegpfaden aufgeführt.",
 			noIndexedComponents:                "Keine Komponenten-Vorkommen indexiert.",
 			objectID:                           "Objekt-ID",
 			packageName:                        "Paket",
@@ -411,6 +413,8 @@ func getTranslations(lang string) translations {
 			noExtensionFilteredFiles:            "In diesem Durchlauf wurden keine Dateien durch den Dateiendungsfilter ausgeschlossen.",
 			componentIndexWithPURLSubsection:    "Komponenten mit PURL",
 			componentIndexWithoutPURLSubsection: "Komponenten ohne PURL",
+			occurrencesLabel:                    "Vorkommen",
+			purlsLabel:                          "PURL",
 			suppressedByNoIndexedMatch:          "durch Normalisierungsregel entfernt; für diesen Lieferpfad existiert keine überlebende Paketkomponente (siehe [Komponentenindex](#component-occurrence-index))",
 			suppressedByAmbiguousIndexedMatch:   "durch Normalisierungsregel entfernt; mehrere überlebende Paketkomponenten passen zu diesem Lieferpfad, daher erfolgt keine unsichere 1:1-Zuordnung (siehe [Komponentenindex](#component-occurrence-index))",
 			suppressedByReplacementNotIndexed:   "durch Normalisierungsregel ersetzt; Ziel ist ein nicht indizierter Struktur-/Container-Eintrag (siehe [Extraktionsprotokoll](#extraction-log))",
@@ -458,7 +462,7 @@ func getTranslations(lang string) translations {
 			methodOverviewSection:              "Method At A Glance",
 			appendixSection:                    "Appendix",
 			componentIndexSection:              "Component Occurrence Index",
-			componentIndexLead:                 "Entries are sorted by delivery path. The object ID matches the SBOM bom-ref and Grype artifact.id. `Delivery path` shows where the component occurs in the supplier delivery. `Evidence path` shows the concrete file or metadata source that supported the identification. If several delivery paths appear under one object ID, identical PURLs were intentionally merged and every concrete leaf-most occurrence path was retained.",
+			componentIndexLead:                 "Entries are grouped by package identity (name+version). Under each package, concrete component occurrences are listed (object ID = SBOM bom-ref and Grype artifact.id) with their delivery and evidence paths.",
 			noIndexedComponents:                "No component occurrences indexed.",
 			objectID:                           "Object ID",
 			packageName:                        "Package",
@@ -608,6 +612,8 @@ func getTranslations(lang string) translations {
 			noExtensionFilteredFiles:            "No files were excluded by the extension filter in this run.",
 			componentIndexWithPURLSubsection:    "Components with PURL",
 			componentIndexWithoutPURLSubsection: "Components without PURL",
+			occurrencesLabel:                    "Occurrences",
+			purlsLabel:                          "PURL",
 			suppressedByNoIndexedMatch:          "removed by normalization rule; no surviving package component exists for this delivery path (see [Component Occurrence Index](#component-occurrence-index))",
 			suppressedByAmbiguousIndexedMatch:   "removed by normalization rule; multiple surviving package components match this delivery path, so no unsafe 1:1 assignment is made (see [Component Occurrence Index](#component-occurrence-index))",
 			suppressedByReplacementNotIndexed:   "replaced by normalization rule; target is a non-indexed structural/container entry (see [Extraction Log](#extraction-log))",

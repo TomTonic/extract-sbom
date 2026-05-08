@@ -42,18 +42,22 @@ func TestGenerateHumanComponentIndexUsesFinalBOMRefs(t *testing.T) {
 	}
 	output := buf.String()
 
-	alphaIdx := strings.Index(output, "### extract-sbom:AAAA_AAAA")
-	zlibIdx := strings.Index(output, "### extract-sbom:ZZZZ_ZZZZ")
+	alphaIdx := strings.Index(output, "#### alpha 1.0.0")
+	zlibIdx := strings.Index(output, "#### zlib 1.2.13")
 	if alphaIdx == -1 || zlibIdx == -1 {
-		t.Fatal("component occurrence headings missing from report")
+		t.Fatal("package headings missing from report")
 	}
 	if alphaIdx >= zlibIdx {
-		t.Fatalf("component occurrences are not sorted by delivery path: alpha=%d zlib=%d", alphaIdx, zlibIdx)
+		t.Fatalf("package groups are not sorted by delivery path: alpha=%d zlib=%d", alphaIdx, zlibIdx)
+	}
+	if !strings.Contains(output, "##### extract-sbom:AAAA_AAAA") {
+		t.Fatal("nested occurrence heading missing for alpha component")
 	}
 
 	for _, fragment := range []string{
 		"Package: `alpha`",
 		"PURL: `pkg:maven/com.acme/alpha@1.0.0`",
+		"Occurrences: 1",
 		"Delivery path: `a/path/alpha.jar`",
 		"Evidence path: `a/path/alpha.jar/META-INF/MANIFEST.MF`",
 		"Found by: `java-archive-cataloger`",
@@ -99,10 +103,10 @@ func TestGenerateHumanComponentIndexFiltersAbsPathNames(t *testing.T) {
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "### extract-sbom:GOOD_COMP") {
+	if !strings.Contains(output, "##### extract-sbom:GOOD_COMP") {
 		t.Error("properly-identified component missing from report")
 	}
-	if strings.Contains(output, "### extract-sbom:BAD_COMP") {
+	if strings.Contains(output, "##### extract-sbom:BAD_COMP") {
 		t.Error("file-cataloger artifact with absolute-path Name should be filtered from report")
 	}
 	if strings.Contains(output, "/tmp/extract-sbom-zip-12345") {
@@ -147,10 +151,10 @@ func TestGenerateHumanComponentIndexMergesWeakDuplicatePlaceholders(t *testing.T
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "### extract-sbom:GOOD_JANINO") {
+	if !strings.Contains(output, "##### extract-sbom:GOOD_JANINO") {
 		t.Fatal("rich janino record missing from component index")
 	}
-	if strings.Contains(output, "### extract-sbom:WEAK_JANINO") {
+	if strings.Contains(output, "##### extract-sbom:WEAK_JANINO") {
 		t.Fatal("weak duplicate placeholder should be merged away")
 	}
 }

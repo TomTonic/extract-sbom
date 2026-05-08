@@ -133,6 +133,21 @@ type componentOccurrence struct {
 	FoundBy string
 }
 
+// packageOccurrenceGroup groups multiple occurrences that represent the same
+// software package identity (name+version) in the delivery.
+type packageOccurrenceGroup struct {
+	// AnchorID is the package-level report anchor referenced from summary tables.
+	AnchorID string
+	// PackageName is the normalized package name for this group.
+	PackageName string
+	// Version is the normalized package version shared by grouped occurrences.
+	Version string
+	// PURLs contains distinct non-empty package URLs observed across occurrences.
+	PURLs []string
+	// Occurrences are grouped component occurrences sorted deterministically.
+	Occurrences []componentOccurrence
+}
+
 // componentIndexStats tracks filtering and indexing counters used to explain
 // why certain SBOM components are absent from the occurrence appendix.
 type componentIndexStats struct {

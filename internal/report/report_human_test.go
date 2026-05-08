@@ -90,7 +90,7 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 	checks := []string{
 		"Vulnerability summary (grype-inspired view):",
 		"| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |",
-		"[pkg-a](#component-extract-sbom-aaa)",
+		"[pkg-a](#package-pkg-a-1-0-0)",
 		"HIGH (9.8)",
 		"94.4% (99th)",
 		"| 100.0 | yes |",
