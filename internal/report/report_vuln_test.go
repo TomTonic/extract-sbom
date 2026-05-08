@@ -110,15 +110,49 @@ func TestWriteOccurrenceVulnerabilityBlockGermanDetailsAndStates(t *testing.T) {
 		checks := []string{
 			"Schwachstellenstatus: `found` (1)",
 			"kev=`ja`",
-			"Quelle: https://example.test/source",
+			"Quelle: [https://example.test/source](<https://example.test/source>)",
 			"Behebung: status=`fixed` versionen=`1.0.1`",
 			"Beschreibung: kritischer Fehler",
-			"Referenz: https://example.test/ref",
+			"Referenz: [https://example.test/ref](<https://example.test/ref>)",
 		}
 		for _, c := range checks {
 			if !strings.Contains(out, c) {
 				t.Fatalf("expected output to contain %q, got: %s", c, out)
 			}
+		}
+	})
+
+	t.Run("non-web-reference-stays-plain", func(t *testing.T) {
+		t.Parallel()
+
+		occ := componentOccurrence{ObjectID: "extract-sbom:PLAIN"}
+		v := &vulnscan.Result{
+			State: vulnscan.StateCompleted,
+			MatchesByBOMRef: map[string][]vulnscan.VMatch{
+				"extract-sbom:PLAIN": {{
+					VulnerabilityID: "CVE-2026-0002",
+					Severity:        "low",
+					DataSource:      "advisory-db",
+					URLs:            []string{"ftp://example.test/ref"},
+				}},
+			},
+		}
+
+		var buf bytes.Buffer
+		writeOccurrenceVulnerabilityBlock(&buf, occ, v, getTranslations("de"))
+		out := buf.String()
+
+		if !strings.Contains(out, "Quelle: advisory-db") {
+			t.Fatalf("expected plain non-web source, got: %s", out)
+		}
+		if strings.Contains(out, "Quelle: [advisory-db](") {
+			t.Fatalf("non-web source must not become hyperlink, got: %s", out)
+		}
+		if !strings.Contains(out, "Referenz: ftp://example.test/ref") {
+			t.Fatalf("expected plain non-web reference, got: %s", out)
+		}
+		if strings.Contains(out, "Referenz: [ftp://example.test/ref](") {
+			t.Fatalf("non-web reference must not become hyperlink, got: %s", out)
 		}
 	})
 

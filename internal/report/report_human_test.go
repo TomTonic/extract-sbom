@@ -99,7 +99,8 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 		"kev=`yes`",
 		"CVSS: version=`3.1` score=`9.8` vector=`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`",
 		"Description: Remote code execution in component pkg-a",
-		"Reference: https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+		"Source: [https://example.test/cve-2026-0001](<https://example.test/cve-2026-0001>)",
+		"Reference: [https://nvd.nist.gov/vuln/detail/CVE-2026-0001](<https://nvd.nist.gov/vuln/detail/CVE-2026-0001>)",
 		"Vulnerability status: `none`",
 	}
 	for _, c := range checks {

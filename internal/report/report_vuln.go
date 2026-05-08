@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -230,7 +231,7 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 			}
 			fmt.Fprintln(w)
 			if m.DataSource != "" {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailSourceTemplate, m.DataSource))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailSourceTemplate, formatVulnerabilityReference(m.DataSource)))
 			}
 			if m.FixState != "" || len(m.FixVersions) > 0 {
 				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailFixTemplate, emptyDash(m.FixState), strings.Join(m.FixVersions, ", ")))
@@ -249,7 +250,7 @@ func writeOccurrenceVulnerabilityBlock(w io.Writer, occ componentOccurrence, v *
 				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailEPSSTemplate, formatEPSS(m.EPSS, m.EPSSPercentile)))
 			}
 			for _, u := range m.URLs {
-				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailReferenceTemplate, u))
+				fmt.Fprintf(w, "    - %s\n", fmt.Sprintf(t.vulnDetailReferenceTemplate, formatVulnerabilityReference(u)))
 			}
 		}
 		return
@@ -278,6 +279,34 @@ func normalizeSeverity(raw string) string {
 		}
 		return s
 	}
+}
+
+// formatVulnerabilityReference renders plausible web URLs as Markdown links,
+// while keeping non-web values as plain text.
+func formatVulnerabilityReference(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	if !isPlausibleWebReference(value) {
+		return escapeMarkdownCell(value)
+	}
+	return fmt.Sprintf("[%s](<%s>)", escapeMarkdownCell(value), value)
+}
+
+// isPlausibleWebReference applies lightweight URL validation for report links.
+func isPlausibleWebReference(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	if u.Host == "" || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+	return true
 }
 
 // severityRank returns a numeric sort key for raw severity (0=critical … 5=unknown).
