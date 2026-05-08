@@ -62,7 +62,6 @@ func TestWriteVulnerabilitySummaryGermanTableHeaders(t *testing.T) {
 	out := buf.String()
 	checks := []string{
 		"Schwachstellenanreicherungsstatus: `completed`",
-		"Schwachstellenübersicht (grype-inspirierte Ansicht):",
 		"| Name | Installiert | Behoben in | Schwachstelle | Schweregrad | EPSS | Risiko | KEV |",
 		"HIGH (9.8)",
 		"| 80.0 | ja |",
@@ -71,6 +70,52 @@ func TestWriteVulnerabilitySummaryGermanTableHeaders(t *testing.T) {
 		if !strings.Contains(out, c) {
 			t.Fatalf("expected output to contain %q, got: %s", c, out)
 		}
+	}
+}
+
+func TestWriteVulnerabilitySummaryLinksToPackageAnchorAndDeduplicatesWithinPackage(t *testing.T) {
+	t.Parallel()
+
+	data := ReportData{
+		Vulnerabilities: &vulnscan.Result{
+			State:     vulnscan.StateCompleted,
+			Requested: true,
+			MatchesByBOMRef: map[string][]vulnscan.VMatch{
+				"extract-sbom:ONE": {{
+					VulnerabilityID: "CVE-2026-7777",
+					Severity:        "medium",
+				}},
+				"extract-sbom:TWO": {{
+					VulnerabilityID: "CVE-2026-7777",
+					Severity:        "medium",
+				}},
+			},
+		},
+	}
+	occurrences := []componentOccurrence{
+		{
+			ObjectID:    "extract-sbom:ONE",
+			PackageName: "pkg-a",
+			Version:     "1.0.0",
+			PURL:        "pkg:maven/com.acme/pkg-a@1.0.0",
+		},
+		{
+			ObjectID:    "extract-sbom:TWO",
+			PackageName: "pkg-a",
+			Version:     "1.0.0",
+			PURL:        "pkg:maven/com.acme/pkg-a@1.0.0",
+		},
+	}
+
+	var buf bytes.Buffer
+	writeVulnerabilitySummary(&buf, data, occurrences, getTranslations("en"))
+	out := buf.String()
+
+	if !strings.Contains(out, "[pkg-a](#package-pkg-a-1-0-0)") {
+		t.Fatalf("expected vulnerability summary to link to package anchor, got: %s", out)
+	}
+	if strings.Count(out, "CVE-2026-7777") != 1 {
+		t.Fatalf("expected package-level deduplication for duplicated occurrence matches, got: %s", out)
 	}
 }
 

@@ -749,7 +749,7 @@ func GenerateMachine(data ReportData, w io.Writer) error
 - `report_i18n.go`: localized string catalog and language selection (`en`, `de`).
 - `report_human_main.go`: human Markdown section orchestration, summary/progress sections, and processing-issues appendix.
 - `report_suppression.go`: suppression appendix rendering and replacement-link resolution.
-- `report_occurrence.go`: component occurrence indexing, quality filtering, and deterministic duplicate collapsing.
+- `report_occurrence.go`: package-grouped component occurrence indexing, quality filtering, and deterministic duplicate collapsing.
 - `report_stats_tree.go`: extraction-tree rendering, residual-risk section, and phase statistics collectors.
 
 **Required content (per DESIGN.md §10.4):**
@@ -768,9 +768,9 @@ func GenerateMachine(data ReportData, w io.Writer) error
 - Whether unsafe override was active
 - Vulnerability summary table in the report summary with columns for name,
   installed/fixed versions, vulnerability ID, severity (incl. CVSS score),
-  EPSS, risk, and KEV; rows link to corresponding component sections and are
+  EPSS, risk, and KEV; rows link to corresponding package sections and are
   deterministically ordered with risk context before severity tie-breakers
-- Per-component vulnerability status in the component occurrence index:
+- Per-occurrence vulnerability status in the package-grouped component occurrence index:
   - vulnerabilities found (with full Grype metadata and source references)
   - no vulnerabilities found
   - not assessable (identifier missing or enrichment unavailable)
@@ -913,7 +913,8 @@ func Run(ctx context.Context, sbomPath string, enabled bool) (*Result, error)
 - Invocation model: `grype sbom:<path> -o json` against the already written
   CycloneDX file.
 - Correlation anchor: `artifact.id` from Grype JSON is matched against SBOM
-  `bom-ref` and report component object IDs.
+  `bom-ref` and report occurrence object IDs; summary rows are then aggregated
+  and linked by package identity.
 - If Grype returns matches for unknown IDs, these are retained as report-level
   processing issues and never silently dropped.
 - Coverage status is explicit per indexed component:
@@ -1252,14 +1253,14 @@ delivery without re-extracting it.
 
 ### Phase 6 — Vulnerability Enrichment (`--grype`)
 
-**Goal:** Optional, deterministic report enrichment with per-component
+**Goal:** Optional, deterministic report enrichment with package-grouped
 vulnerability information.
 
 1. `cmd/config`: add `--grype` flag and config plumbing
 2. `vulnscan`: add Grype runner, JSON decoding, BOMRef correlation, and
   severity normalization
-3. `report`: add summary vulnerability table with component links and detailed
-  per-component vulnerability sections
+3. `report`: add summary vulnerability table with package links and detailed
+  per-occurrence vulnerability sections nested under package groups
 4. `report`: add explicit coverage states (`Found`, `None`, `NotAssessable`)
 5. `report`: add Grype runtime metadata section (binary version + DB metadata)
 6. `orchestrator`: invoke vulnscan after SBOM write and before report generation
@@ -1272,7 +1273,7 @@ vulnerability information.
   - `integration/externaltools`: run with a real Grype binary when available
   - deterministic fixture mode: use recorded Grype JSON to validate report
     rendering without network/db dependency
-  - verify all three per-component outcomes are represented in one run
+  - verify all three per-occurrence outcomes are represented in one run
 9. Release tests:
   - `integration/releasetest`: validate release artifact behavior with
     `--grype` enabled and disabled

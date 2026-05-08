@@ -18,8 +18,16 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
+// ToolVersions contains version strings for external tools used during processing.
+// Empty strings indicate tools that were not used or could not be detected.
+type ToolVersions struct {
+	SevenZip string
+	Unshield string
+	Grype    string
+	GrypeDB  string
+}
+
 // InputSummary describes the inspected input artifact.
-//
 // Field constraints:
 //   - All hash fields use lowercase hexadecimal encoding.
 //   - Size is the exact byte count from os.FileInfo and is never negative.
@@ -99,6 +107,9 @@ type ReportData struct { //nolint:revive // stuttering is acceptable for clarity
 	// Suppressions records every component that assembly removed from the SBOM
 	// during normalization or deduplication. The report must document each one.
 	Suppressions []assembly.SuppressionRecord
+	// ToolVersions contains version information for external tools used during
+	// extraction and scanning. Tools that were not used have empty version strings.
+	ToolVersions ToolVersions
 }
 
 // componentOccurrence is one normalized, reportable view of an SBOM component
@@ -131,6 +142,21 @@ type componentOccurrence struct {
 	// FoundBy identifies the cataloger/source module (for example
 	// "java-archive-cataloger"). Empty means unknown.
 	FoundBy string
+}
+
+// packageOccurrenceGroup groups multiple occurrences that represent the same
+// software package identity (name+version) in the delivery.
+type packageOccurrenceGroup struct {
+	// AnchorID is the package-level report anchor referenced from summary tables.
+	AnchorID string
+	// PackageName is the normalized package name for this group.
+	PackageName string
+	// Version is the normalized package version shared by grouped occurrences.
+	Version string
+	// PURLs contains distinct non-empty package URLs observed across occurrences.
+	PURLs []string
+	// Occurrences are grouped component occurrences sorted deterministically.
+	Occurrences []componentOccurrence
 }
 
 // componentIndexStats tracks filtering and indexing counters used to explain
@@ -176,6 +202,9 @@ type extractionStats struct {
 	Total int
 	// Extracted counts nodes with status extract.StatusExtracted.
 	Extracted int
+	// TotalFileEntries is the sum of EntriesCount across all extracted nodes,
+	// representing the total number of files contained in all extracted archives.
+	TotalFileEntries int
 	// SyftNative counts nodes handled directly by Syft-native extraction paths.
 	SyftNative int
 	// Failed counts nodes with terminal extraction failure.
@@ -305,6 +334,9 @@ const (
 	anchorSuppressionFSArtifacts = "suppression-fs-artifacts"
 	anchorSuppressionLowValue    = "suppression-low-value-file-artifacts"
 	anchorScan                   = "scan-results"
-	anchorScanNoPackageIDs       = "scan-tasks-without-package-identities"
+	anchorScanNoPackageIDs       = "content-items-without-package-identities"
 	anchorExtraction             = "extraction-log"
+	anchorSummaryAnalysis        = "analysis-overview"
+	anchorSummaryKeyFindings     = "key-findings"
+	anchorSummaryVuln            = "vulnerability-summary"
 )

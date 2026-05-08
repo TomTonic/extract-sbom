@@ -23,7 +23,7 @@ Expected outputs:
 - `out/vendor-delivery.cdx.json`
 - `out/vendor-delivery.report.md` (or `.report.json` with `--report machine`)
 
-The report now includes a vulnerability summary table and per-component details.
+The report now includes a vulnerability summary table and package-grouped details.
 
 ### Optional: run Grype manually and post-filter with jq
 
@@ -92,8 +92,8 @@ Expected behavior:
 - extract-sbom attempts to run Grype on the generated SBOM and enriches the report.
 - The report contains:
   - a prominent vulnerability summary table with severity (incl. CVSS score), EPSS, risk, and KEV
-  - links from summary rows to component sections
-  - per-component status: vulnerabilities found, none found, or not assessable
+  - links from summary rows to package sections in the Component Occurrence Index
+  - per-occurrence status under each package: vulnerabilities found, none found, or not assessable
   - per-finding details including type, fix data, CVSS version/score/vector, description, and references
   - Grype runtime metadata (binary version and DB metadata)
 - If Grype is missing or fails, SBOM and report are still produced and the
@@ -394,9 +394,9 @@ Output format for the audit report.
 Enables optional report enrichment by invoking Grype on the generated SBOM.
 
 - Scope: report enrichment only; no change to extraction, scan, or SBOM assembly.
-- Correlation: Grype matches are mapped to component object IDs (`bom-ref`).
+- Correlation: Grype matches are mapped to component object IDs (`bom-ref`) and rendered under their package group.
 - Report effect: grype-inspired summary table (`Name`, installed/fixed versions, vulnerability,
-  severity with CVSS score, EPSS, risk, KEV) and detailed per-component findings.
+  severity with CVSS score, EPSS, risk, KEV) and detailed package-grouped findings.
 - Failure handling: if Grype cannot run, report records enrichment as unavailable.
 
 **`--progress quiet|normal|verbose` (default: normal)**

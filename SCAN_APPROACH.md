@@ -59,7 +59,9 @@ resolved from a parent directory result.
 
 **Phase 3 — Optional vulnerability enrichment (`--grype`).** If enabled,
 extract-sbom runs Grype against the generated SBOM and correlates matches to
-component object IDs (`bom-ref`). This phase is report enrichment only: it does
+component object IDs (`bom-ref`). Report rendering is package-first: summary
+rows link to package sections, while detailed findings remain attached to
+concrete occurrences. This phase is report enrichment only: it does
 not change extraction statuses, scan targets, or SBOM component structure.
 
 The mandatory phases are strictly sequential. No extraction happens during
@@ -537,20 +539,19 @@ replacement component.
 
 ### 8.2 Vulnerability Enrichment Rendering (`--grype`)
 
-When `--grype` is enabled, the report adds two vulnerability-focused views that
-remain linked to the same component object IDs used throughout the SBOM and
-occurrence index.
+When `--grype` is enabled, the report adds two vulnerability-focused views:
+a package-level summary and occurrence-level detail blocks in the package index.
 
 **Summary-level vulnerability table (prominent placement).**
 
 - Columns: `Name`, `Installed`, `Fixed In`, `Vulnerability`, `Severity`
   (with CVSS score when available), `EPSS`, `Risk`, `KEV`.
-- `Name` links to the matching component section in the occurrence index.
+- `Name` links to the matching package section in the occurrence index.
 - Rendering remains deterministic. Row order is driven by risk context first
   (`risk`, `KEV`, EPSS percentile/value), then severity rank, then stable
   lexical tie-breakers.
 
-**Per-component vulnerability section.**
+**Per-occurrence vulnerability section (nested under each package).**
 
 Every indexed component gets exactly one explicit vulnerability coverage status:
 

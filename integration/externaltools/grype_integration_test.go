@@ -102,8 +102,6 @@ JSON
 	outHuman := string(rawHuman)
 	for _, want := range []string{
 		"Vulnerability enrichment state: `completed`",
-		"Grype version: `0.111.0`",
-		"Grype DB: schema=`v6.1.4` built=`2026-04-15T11:48:47Z` updated=`2026-05-01T10:00:00Z`",
 		"Vulnerability findings: no matched vulnerabilities",
 	} {
 		if !strings.Contains(outHuman, want) {

@@ -26,6 +26,11 @@ func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
+	data.Vulnerabilities = &vulnscan.Result{
+		State:           vulnscan.StateNotRequested,
+		Requested:       false,
+		MatchesByBOMRef: map[string][]vulnscan.VMatch{},
+	}
 	var buf bytes.Buffer
 
 	if err := GenerateHuman(data, "en", &buf); err != nil {
@@ -34,6 +39,17 @@ func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "Vulnerability enrichment: not requested") {
 		t.Fatal("summary does not contain default vulnerability enrichment state")
+	}
+	for _, unwanted := range []string{
+		"their locations, and any known vulnerability findings",
+		"Vulnerability findings link back to packages via PURL or other identifiers",
+		"Vulnerability scan complete — no matched findings.",
+		"Vulnerability findings: matches=0 unique-vulnerabilities=0 affected-components=0",
+		"Vulnerability findings: no matched vulnerabilities",
+	} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("report unexpectedly contains %q", unwanted)
+		}
 	}
 }
 
@@ -88,9 +104,9 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 	out := buf.String()
 
 	checks := []string{
-		"Vulnerability summary (grype-inspired view):",
+		"### Vulnerability Summary",
 		"| Name | Installed | Fixed In | Vulnerability | Severity | EPSS | Risk | KEV |",
-		"[pkg-a](#component-extract-sbom-aaa)",
+		"[pkg-a](#package-pkg-a-1-0-0)",
 		"HIGH (9.8)",
 		"94.4% (99th)",
 		"| 100.0 | yes |",
@@ -146,6 +162,9 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"# extract-sbom Audit Report",
 		"## Table of Contents",
 		"## Summary",
+		"### Analysis Overview",
+		"### Key Findings",
+		"### Vulnerability Summary",
 		"## Method At A Glance",
 		"## Processing Errors",
 		"## Residual Risk and Limitations",
@@ -159,7 +178,7 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"## Sandbox Configuration",
 		"## Policy Decisions",
 		"## Extraction Log",
-		"## Scan Task Log",
+		"## Package Scan Log",
 		"End of report.",
 	}
 
@@ -315,6 +334,9 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 
 	for _, link := range []string{
 		"- [Summary](#summary)",
+		"  - [Analysis Overview](#analysis-overview)",
+		"  - [Key Findings](#key-findings)",
+		"  - [Vulnerability Summary](#vulnerability-summary)",
 		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
@@ -325,7 +347,7 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 		"- [Configuration](#configuration)",
 		"- [Extension Filter](#extension-filter)",
 		"- [Policy Decisions](#policy-decisions)",
-		"- [Scan Task Log](#scan-results)",
+		"- [Package Scan Log](#scan-results)",
 		"- [Extraction Log](#extraction-log)",
 	} {
 		if !strings.Contains(output, link) {
@@ -347,6 +369,9 @@ func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *te
 
 	for _, anchor := range []string{
 		"summary",
+		"analysis-overview",
+		"key-findings",
+		"vulnerability-summary",
 		"method-at-a-glance",
 		"processing-errors",
 		"residual-risk-and-limitations",
@@ -359,7 +384,7 @@ func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *te
 		"root-sbom-metadata",
 		"sandbox-configuration",
 		"policy-decisions",
-		"scan-tasks-without-package-identities",
+		"content-items-without-package-identities",
 		"extraction-log",
 	} {
 		if strings.Contains(output, "<a id=\""+anchor+"\"></a>") {
@@ -391,7 +416,7 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	riskIdx := strings.Index(output, "## Residual Risk and Limitations")
 	appendixIdx := strings.Index(output, "## Appendix")
 	indexIdx := strings.Index(output, "## Component Occurrence Index")
-	scanIdx := strings.Index(output, "## Scan Task Log")
+	scanIdx := strings.Index(output, "## Package Scan Log")
 	extractionIdx := strings.Index(output, "## Extraction Log")
 
 	if summaryIdx == -1 || methodIdx == -1 || errorsIdx == -1 || riskIdx == -1 || appendixIdx == -1 || indexIdx == -1 || scanIdx == -1 || extractionIdx == -1 {
@@ -457,11 +482,11 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 	if !strings.Contains(output, "2 components found") {
 		t.Error("report does not show component count")
 	}
-	if !strings.Contains(output, "## Scan Task Log") {
-		t.Error("report does not contain Scan Task Log section")
+	if !strings.Contains(output, "## Package Scan Log") {
+		t.Error("report does not contain Package Scan Log section")
 	}
-	if !strings.Contains(output, "This is a per-scan-task execution log") {
-		t.Error("scan task log does not explain its task-level semantics")
+	if !strings.Contains(output, "This is a per-item package scan log") {
+		t.Error("scan log does not explain its item-level semantics")
 	}
 }
 

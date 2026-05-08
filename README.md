@@ -113,8 +113,8 @@ enriches the audit report without changing SBOM structure or extraction/scan dec
 
 - Summary view: grype-inspired vulnerability table with `Name`, installed/fixed versions,
   vulnerability ID, severity (including CVSS score when available), EPSS, risk, and KEV.
-- Detail view: per-component vulnerability status (`found`, `none`, `not-assessable`) in the
-  component occurrence index, including type, fix data, CVSS version/score/vector,
+- Detail view: package-grouped occurrence index with per-occurrence vulnerability status
+  (`found`, `none`, `not-assessable`), including type, fix data, CVSS version/score/vector,
   description, EPSS, and source references when available.
 - Runtime diagnostics: Grype version/database metadata and explicit enrichment state
   (`completed`, `completed-with-errors`, `unavailable`, `not-requested`).
