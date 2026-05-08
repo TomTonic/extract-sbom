@@ -163,3 +163,42 @@ func TestWriteSuppressionReportExplainsMissingSuppressedByLink(t *testing.T) {
 		t.Fatalf("missing italic suppressed-by explanation for unresolved link. want row %q", want)
 	}
 }
+
+func TestWriteSuppressionReportDoesNotLinkToFilteredNonOccurrenceComponents(t *testing.T) {
+	t.Parallel()
+
+	bom := &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef:     "extract-sbom:GOOD_COMP",
+			Type:       cdx.ComponentTypeLibrary,
+			Name:       "good-lib",
+			PackageURL: "pkg:generic/good-lib@1.0.0",
+			Version:    "1.0.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "good/path.dll"}},
+		},
+		{
+			BOMRef:     "extract-sbom:FILTERED_FILE",
+			Type:       cdx.ComponentTypeFile,
+			Name:       "/tmp/extract-sbom-12345/good/path.dll",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "good/path.dll"}},
+		},
+	}}
+
+	suppressions := []assembly.SuppressionRecord{
+		{Reason: assembly.SuppressionFSArtifact, DeliveryPath: "good/path.dll", Component: cdx.Component{Name: "/tmp/extract-sbom-12345/good/path.dll"}},
+	}
+
+	var buf bytes.Buffer
+	writeSuppressionReport(&buf, suppressions, bom, getTranslations("en"))
+	output := buf.String()
+
+	if strings.Contains(output, "#component-extract-sbom-filtered_file") {
+		t.Fatal("suppression report must not link to filtered components that never appear in the occurrence index")
+	}
+	if !strings.Contains(output, "[extract-sbom:GOOD_COMP](#component-extract-sbom-good_comp)") {
+		t.Fatal("suppression report should link to the rendered surviving occurrence")
+	}
+	if strings.Contains(output, "/tmp/extract-sbom-12345/good/path.dll`) | [extract-sbom:FILTERED_FILE](#component-extract-sbom-filtered_file)") {
+		t.Fatal("suppression report linked to a filtered file-cataloger artifact")
+	}
+}

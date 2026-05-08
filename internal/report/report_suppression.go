@@ -39,7 +39,8 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	sortSuppressionRecords(weakDups)
 	sortSuppressionRecords(purlDups)
 
-	resolver := newSuppressionLinkResolver(bom)
+	occurrences, _ := collectComponentOccurrences(bom)
+	resolver := newSuppressionLinkResolver(occurrences)
 
 	// Summary counts.
 	fmt.Fprintf(w, "| %s | %s |\n", t.reasonLabel, t.countLabel)
@@ -51,8 +52,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	fmt.Fprintln(w)
 
 	// FS-cataloger artifacts.
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchorSuppressionFSArtifacts)
-	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonFSArtifact, len(fsArtifacts))
+	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonFSArtifact, len(fsArtifacts)), anchorSuppressionFSArtifacts)
 	fmt.Fprintln(w, t.suppressionOperationalFS)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, t.suppressionOperationalFSFollowUp)
@@ -60,8 +60,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	writeSuppressionReasonTable(w, fsArtifacts, resolver, t)
 
 	// Low-value file artifacts.
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchorSuppressionLowValue)
-	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonLowValueFile, len(lowValue))
+	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonLowValueFile, len(lowValue)), anchorSuppressionLowValue)
 	fmt.Fprintln(w, t.suppressionOperationalLowValue)
 	fmt.Fprintln(w)
 	writeSuppressionReasonTable(w, lowValue, resolver, t)
@@ -132,25 +131,26 @@ type suppressionLinkResolver struct {
 }
 
 // newSuppressionLinkResolver builds the lookup index used by suppression
-// reporting to link removed records to retained components.
-func newSuppressionLinkResolver(bom *cdx.BOM) suppressionLinkResolver {
+// reporting to link removed records only to occurrence entries that are
+// actually rendered in the component index.
+func newSuppressionLinkResolver(occurrences []componentOccurrence) suppressionLinkResolver {
 	resolver := suppressionLinkResolver{byDeliveryPath: map[string][]suppressionLinkCandidate{}}
-	if bom == nil || bom.Components == nil {
+	if len(occurrences) == 0 {
 		return resolver
 	}
 
-	for i := range *bom.Components {
-		comp := (*bom.Components)[i]
-		if comp.BOMRef == "" {
+	for i := range occurrences {
+		occ := occurrences[i]
+		if occ.ObjectID == "" {
 			continue
 		}
 		candidate := suppressionLinkCandidate{
-			BOMRef:  comp.BOMRef,
-			Name:    comp.Name,
-			FoundBy: firstComponentPropertyValue(comp, "syft:package:foundBy"),
-			Score:   suppressionLinkCandidateScore(comp),
+			BOMRef:  occ.ObjectID,
+			Name:    occ.PackageName,
+			FoundBy: occ.FoundBy,
+			Score:   occurrenceQualityScore(occ),
 		}
-		for _, deliveryPath := range componentPropertyValues(comp, "extract-sbom:delivery-path") {
+		for _, deliveryPath := range occ.DeliveryPaths {
 			resolver.byDeliveryPath[deliveryPath] = append(resolver.byDeliveryPath[deliveryPath], candidate)
 		}
 	}
@@ -173,25 +173,6 @@ func newSuppressionLinkResolver(bom *cdx.BOM) suppressionLinkResolver {
 	}
 
 	return resolver
-}
-
-// suppressionLinkCandidateScore ranks candidate replacement components by
-// package-identity strength; keep aligned with occurrenceQualityScore.
-func suppressionLinkCandidateScore(comp cdx.Component) int {
-	score := 0
-	if comp.PackageURL != "" {
-		score += 4
-	}
-	if comp.Version != "" {
-		score += 2
-	}
-	if firstComponentPropertyValue(comp, "syft:package:foundBy") != "" {
-		score += 2
-	}
-	if comp.Type != cdx.ComponentTypeFile {
-		score++
-	}
-	return score
 }
 
 // resolve chooses the best indexed replacement BOMRef for one suppression

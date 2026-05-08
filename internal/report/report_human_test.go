@@ -333,6 +333,44 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 	}
 }
 
+func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+
+	if err := GenerateHuman(data, "en", &buf); err != nil {
+		t.Fatalf("GenerateHuman error: %v", err)
+	}
+	output := buf.String()
+
+	for _, anchor := range []string{
+		"summary",
+		"method-at-a-glance",
+		"processing-errors",
+		"residual-risk-and-limitations",
+		"appendix",
+		"component-occurrence-index",
+		"component-normalization",
+		"input-file",
+		"configuration",
+		"extension-filter",
+		"root-sbom-metadata",
+		"sandbox-configuration",
+		"policy-decisions",
+		"scan-tasks-without-package-identities",
+		"extraction-log",
+	} {
+		if strings.Contains(output, "<a id=\""+anchor+"\"></a>") {
+			t.Fatalf("report should rely on Markdown heading slug for %q", anchor)
+		}
+	}
+
+	if !strings.Contains(output, "<a id=\"scan-results\"></a>") {
+		t.Fatal("report should keep explicit anchor when heading slug differs from link target")
+	}
+}
+
 // TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst verifies that
 // Summary/method/errors/risk appear before the large appendix sections.
 func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {

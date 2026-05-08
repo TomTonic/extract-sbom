@@ -75,9 +75,18 @@ func reportSections(t translations) []reportSection {
 	}
 }
 
+// writeAnchoredHeading writes one Markdown heading and emits a separate HTML
+// anchor only when the requested anchor differs from the heading's natural slug.
+func writeAnchoredHeading(w io.Writer, level int, title, anchor string) {
+	if anchor != "" && anchor != markdownHeadingAnchor(title) {
+		fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchor)
+	}
+	fmt.Fprintf(w, "%s %s\n\n", strings.Repeat("#", level), title)
+}
+
 // writeSectionHeading writes one anchored level-2 section heading.
 func writeSectionHeading(w io.Writer, title, anchor string) {
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n## %s\n\n", anchor, title)
+	writeAnchoredHeading(w, 2, title, anchor)
 }
 
 // writeTableOfContents renders the report TOC from section descriptors.
@@ -99,6 +108,26 @@ func sectionLink(title, anchor string) string {
 // scanApproachLink builds a link to a specific SCAN_APPROACH section.
 func scanApproachLink(label, anchor string) string {
 	return fmt.Sprintf("[%s](%s#%s)", label, scanApproachGitHubURL, anchor)
+}
+
+// markdownHeadingAnchor approximates the auto-generated Markdown heading slug
+// used by Pandoc/GitHub for plain ASCII headings.
+func markdownHeadingAnchor(title string) string {
+	var b strings.Builder
+	prevDash := true
+	for _, r := range strings.ToLower(title) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		case r == ' ' || r == '-':
+			if !prevDash {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // collectSuppressionStats groups suppression records by suppression reason.

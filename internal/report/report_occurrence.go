@@ -15,7 +15,7 @@ import (
 // writeScanNoPackageIdentitiesSubsection writes scan targets where Syft
 // returned no component identities, which is a key coverage signal.
 func writeScanNoPackageIdentitiesSubsection(w io.Writer, scn scanStats, t translations) {
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n### %s\n\n", anchorScanNoPackageIDs, t.scanNoPackageIDsSection)
+	writeAnchoredHeading(w, 3, t.scanNoPackageIDsSection, anchorScanNoPackageIDs)
 	if scn.NoComponentTasks == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noScanNoPackageIDs)
 		return
@@ -109,8 +109,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 	}
 
 	// Write with-PURL subsection.
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchorComponentsWithPURL)
-	fmt.Fprintf(w, "### %s (%d)\n\n", t.componentIndexWithPURLSubsection, idx.IndexedWithPURL)
+	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithPURLSubsection, idx.IndexedWithPURL), anchorComponentsWithPURL)
 	if len(withPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
@@ -120,8 +119,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 	}
 
 	// Write without-PURL subsection.
-	fmt.Fprintf(w, "<a id=\"%s\"></a>\n\n", anchorComponentsWithoutPURL)
-	fmt.Fprintf(w, "### %s (%d)\n\n", t.componentIndexWithoutPURLSubsection, idx.IndexedWithoutPURL)
+	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithoutPURLSubsection, idx.IndexedWithoutPURL), anchorComponentsWithoutPURL)
 	if len(withoutPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
