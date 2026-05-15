@@ -1,0 +1,48 @@
+---
+name: Refresh grype_me Security Badge
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # every day at 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - name: Ensure required secrets is set
+        shell: bash
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GIST_TOKEN" ]]; then
+            echo "Missing required secret: GIST_TOKEN" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository (with tags)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # fetch-depth: 0 (non-default) - fetch full history to ensure tag lookups work correctly
+          fetch-depth: 0
+          # fetch-tags: true (non-default) - need tags to detect latest_release for the badge
+          fetch-tags: true
+
+      - name: grype_me latest_release of GitHub Action
+        id: grype_me_release
+        uses: TomTonic/grype_me@v1 # don't pin, rolling tag changes daily
+        with:
+          scan: 'latest_release'
+          fail-build: false
+          gist-token: ${{ secrets.GIST_TOKEN }}
+          gist-id: a4353e77e0b8762f50931635603edc4e
+          gist-filename: 'release_scan'

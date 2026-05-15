@@ -1,5 +1,10 @@
 # extract-sbom
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/TomTonic/extract-sbom)](https://goreportcard.com/report/github.com/TomTonic/extract-sbom)
+[![Tests](https://github.com/TomTonic/extract-sbom/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/TomTonic/extract-sbom/actions/workflows/tests.yml)
+[![Linter](https://github.com/TomTonic/extract-sbom/actions/workflows/linter.yml/badge.svg)](https://github.com/TomTonic/extract-sbom/actions/workflows/linter.yml)
+[![Vulnerabilities](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/TomTonic/a4353e77e0b8762f50931635603edc4e/raw/release_scan.json)](https://gist.github.com/TomTonic/a4353e77e0b8762f50931635603edc4e#file-release_scan-md)
+
 extract-sbom performs standardized incoming inspection for software deliveries.
 Given one input file, it produces:
 
