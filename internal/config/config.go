@@ -139,6 +139,12 @@ const (
 	ReportMachine
 	// ReportBoth produces both human-readable and machine-readable reports.
 	ReportBoth
+	// ReportHTML produces a self-contained HTML report.
+	ReportHTML
+	// ReportSARIF produces a SARIF 2.1.0 JSON report.
+	ReportSARIF
+	// ReportAll produces human-readable, machine-readable, and HTML reports.
+	ReportAll
 )
 
 // String returns the human-readable name of the report mode.
@@ -150,13 +156,19 @@ func (r ReportMode) String() string {
 		return "machine"
 	case ReportBoth:
 		return "both"
+	case ReportHTML:
+		return "html"
+	case ReportSARIF:
+		return "sarif"
+	case ReportAll:
+		return "all"
 	default:
 		return "unknown"
 	}
 }
 
 // ParseReportMode converts a string to a ReportMode.
-// Valid values are "human", "machine", and "both" (case-insensitive).
+// Valid values are "human", "machine", "both", "html", "sarif", and "all" (case-insensitive).
 // Returns an error for unrecognized values.
 func ParseReportMode(s string) (ReportMode, error) {
 	switch strings.ToLower(s) {
@@ -166,8 +178,14 @@ func ParseReportMode(s string) (ReportMode, error) {
 		return ReportMachine, nil
 	case "both":
 		return ReportBoth, nil
+	case "html":
+		return ReportHTML, nil
+	case "sarif":
+		return ReportSARIF, nil
+	case "all":
+		return ReportAll, nil
 	default:
-		return ReportHuman, fmt.Errorf("unknown report mode: %q (valid: human, machine, both)", s)
+		return ReportHuman, fmt.Errorf("unknown report mode: %q (valid: human, machine, both, html, sarif, all)", s)
 	}
 }
 
@@ -393,8 +411,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("unsupported language: %q (valid: en, de)", c.Language)
 	}
 
-	if c.SBOMFormat != "cyclonedx-json" {
-		return fmt.Errorf("unsupported SBOM format: %q (valid: cyclonedx-json)", c.SBOMFormat)
+	switch c.SBOMFormat {
+	case "cyclonedx-json", "cyclonedx-xml", "spdx-json":
+		// valid
+	default:
+		return fmt.Errorf("unsupported SBOM format: %q (valid: cyclonedx-json, cyclonedx-xml, spdx-json)", c.SBOMFormat)
 	}
 
 	if err := c.RootMetadata.Validate(); err != nil {
