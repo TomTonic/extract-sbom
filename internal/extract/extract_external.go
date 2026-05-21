@@ -23,10 +23,12 @@ var sevenZipCandidates = []string{"7zz", "7za", "7z"}
 
 // lazily captured tool versions — populated on first successful use.
 var (
-	sevenZipVersionOnce  sync.Once
-	sevenZipVersionValue string
-	unshieldVersionOnce  sync.Once
-	unshieldVersionValue string
+	sevenZipVersionOnce    sync.Once
+	sevenZipVersionValue   string
+	unshieldVersionOnce    sync.Once
+	unshieldVersionValue   string
+	unsquashfsVersionOnce  sync.Once
+	unsquashfsVersionValue string
 )
 
 // captureSevenZipVersion runs "binary i" once and stores the first non-empty
@@ -71,6 +73,28 @@ func captureUnshieldVersion() {
 	})
 }
 
+// captureUnsquashfsVersion runs "unsquashfs -version" once and stores the first
+// reported line (for example "unsquashfs version 4.5.1 (2022/03/13)") as the
+// version identifier. The squashfs-tools banner is emitted on stdout by recent
+// releases and on stderr by older ones, so both streams are inspected and the
+// command exit status is ignored.
+func captureUnsquashfsVersion() {
+	unsquashfsVersionOnce.Do(func() {
+		out, err := exec.Command("unsquashfs", "-version").CombinedOutput() //nolint:gosec // fixed binary name
+		if err != nil && len(out) == 0 {
+			return
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			unsquashfsVersionValue = line
+			return
+		}
+	})
+}
+
 // GetUsedSevenZipVersion returns the 7-Zip version string captured on first
 // use, or an empty string if 7-Zip was never invoked during this run.
 func GetUsedSevenZipVersion() string { return sevenZipVersionValue }
@@ -78,6 +102,10 @@ func GetUsedSevenZipVersion() string { return sevenZipVersionValue }
 // GetUsedUnshieldVersion returns the unshield version string captured on first
 // use, or an empty string if unshield was never invoked during this run.
 func GetUsedUnshieldVersion() string { return unshieldVersionValue }
+
+// GetUsedUnsquashfsVersion returns the unsquashfs version string captured on
+// first use, or an empty string if unsquashfs was never invoked during this run.
+func GetUsedUnsquashfsVersion() string { return unsquashfsVersionValue }
 
 // resolve7zBinary returns the first available 7-Zip binary name and true,
 // or ("7zz", false) if none is found (7zz is used as the canonical name in
@@ -299,6 +327,7 @@ func extractSquashfs(ctx context.Context, node *ExtractionNode, filePath string,
 		// Fall back to 7z extraction.
 		return extract7zWithPasswords(ctx, node, filePath, sb, workDir, limits, nil)
 	}
+	captureUnsquashfsVersion()
 
 	outDir, err := os.MkdirTemp(workDir, "extract-sbom-squashfs-*")
 	if err != nil {

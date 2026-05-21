@@ -21,10 +21,11 @@ import (
 // ToolVersions contains version strings for external tools used during processing.
 // Empty strings indicate tools that were not used or could not be detected.
 type ToolVersions struct {
-	SevenZip string
-	Unshield string
-	Grype    string
-	GrypeDB  string
+	SevenZip   string
+	Unshield   string
+	Unsquashfs string
+	Grype      string
+	GrypeDB    string
 }
 
 // InputSummary describes the inspected input artifact.

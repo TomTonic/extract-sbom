@@ -259,8 +259,9 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
 		toolVersions := report.ToolVersions{
-			SevenZip: extract.GetUsedSevenZipVersion(),
-			Unshield: extract.GetUsedUnshieldVersion(),
+			SevenZip:   extract.GetUsedSevenZipVersion(),
+			Unshield:   extract.GetUsedUnshieldVersion(),
+			Unsquashfs: extract.GetUsedUnsquashfsVersion(),
 		}
 		if vulnResult != nil && vulnResult.GrypeVersion != "" {
 			toolVersions.Grype = "grype " + vulnResult.GrypeVersion
