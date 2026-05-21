@@ -8,13 +8,18 @@ import (
 	"time"
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-// htmlReportData is the template data structure for the HTML report.
+// htmlReportData is the template data structure for the HTML report. It bundles
+// the localized label set (M) with the report values. All string fields hold
+// plain text; the html/template engine performs context-aware escaping when
+// the template is executed.
 type htmlReportData struct {
-	Title       string
+	M           htmlMessages
 	Generated   string
 	Generator   string
+	Tools       string
 	InputFile   string
 	InputSize   int64
 	InputSHA256 string
@@ -32,11 +37,17 @@ type htmlReportData struct {
 	VulnCount      int
 	IssueCount     int
 
+	// VulnState is the enrichment outcome classification used to render the
+	// Vulnerabilities summary cell: "not-requested", "unavailable", or
+	// "assessed". See htmlVulnState.
+	VulnState string
+
 	Vulns     []htmlVuln
 	Issues    []htmlIssue
 	ExtrNodes []htmlNode
 }
 
+// htmlVuln is one vulnerability-table row.
 type htmlVuln struct {
 	ID          string
 	Severity    string
@@ -46,11 +57,13 @@ type htmlVuln struct {
 	Description string
 }
 
+// htmlIssue is one processing-issue table row.
 type htmlIssue struct {
 	Stage   string
 	Message string
 }
 
+// htmlNode is one extraction-log table row.
 type htmlNode struct {
 	Depth  int
 	Path   string
@@ -72,7 +85,7 @@ tr:nth-child(even){background:#f9f9f9}
 .badge{display:inline-block;padding:0.15rem 0.4rem;border-radius:3px;font-size:0.8rem;font-weight:bold;color:#fff}
 .critical{background:#c0392b}.high{background:#e67e22}.medium{background:#f1c40f;color:#333}
 .low{background:#2980b9}.negligible{background:#7f8c8d}.unknown-sev{background:#7f8c8d}
-.ok{color:#27ae60;font-weight:bold}.err{color:#c0392b;font-weight:bold}
+.ok{color:#27ae60;font-weight:bold}.err{color:#c0392b;font-weight:bold}.muted{color:#888;font-style:italic}
 details>summary{cursor:pointer;padding:0.3rem 0}
 details summary h2{display:inline;margin:0}
 code{background:#f4f4f4;padding:0.1rem 0.3rem;border-radius:2px;font-size:0.85rem}
@@ -85,41 +98,42 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{.Title}}</title>
+<title>{{.M.ReportTitle}}</title>
 <style>` + htmlReportCSS + `</style>
 </head>
 <body>
-<h1>{{.Title}}</h1>
-<div class="meta">Generated: {{.Generated}} &nbsp;|&nbsp; Generator: {{.Generator}}</div>
+<h1>{{.M.ReportTitle}}</h1>
+<div class="meta">{{.M.GeneratedLabel}}: {{.Generated}} &nbsp;|&nbsp; {{.M.GeneratorLabel}}: {{.Generator}}</div>
 
-<h2>Summary</h2>
+<h2>{{.M.SummaryHeading}}</h2>
 <table>
-<tr><th>Field</th><th>Value</th></tr>
-<tr><td>Input file</td><td>{{.InputFile}}</td></tr>
-<tr><td>Input size</td><td>{{.InputSize}} bytes</td></tr>
-<tr><td>SHA-256</td><td><code>{{.InputSHA256}}</code></td></tr>
-<tr><td>Duration</td><td>{{.Duration}}</td></tr>
-<tr><td>SBOM output</td><td>{{if .SBOMPath}}{{.SBOMPath}}{{else}}&#8212;{{end}}</td></tr>
-<tr><td>Sandbox</td><td>{{.SandboxName}}</td></tr>
-<tr><td>Components found</td><td>{{.ComponentCount}}</td></tr>
-<tr><td>Vulnerabilities</td><td>{{if gt .VulnCount 0}}<span class="badge high">{{.VulnCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
-<tr><td>Processing issues</td><td>{{if gt .IssueCount 0}}<span class="badge err">{{.IssueCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
+<tr><th>{{.M.FieldHeading}}</th><th>{{.M.ValueHeading}}</th></tr>
+<tr><td>{{.M.InputFileLabel}}</td><td>{{.InputFile}}</td></tr>
+<tr><td>{{.M.InputSizeLabel}}</td><td>{{.InputSize}} {{.M.BytesUnit}}</td></tr>
+<tr><td>{{.M.SHA256Label}}</td><td><code>{{.InputSHA256}}</code></td></tr>
+<tr><td>{{.M.DurationLabel}}</td><td>{{.Duration}}</td></tr>
+<tr><td>{{.M.SBOMOutputLabel}}</td><td>{{if .SBOMPath}}{{.SBOMPath}}{{else}}&#8212;{{end}}</td></tr>
+<tr><td>{{.M.SandboxLabel}}</td><td>{{.SandboxName}}</td></tr>
+<tr><td>{{.M.ToolsLabel}}</td><td>{{if .Tools}}{{.Tools}}{{else}}&#8212;{{end}}</td></tr>
+<tr><td>{{.M.ComponentsLabel}}</td><td>{{.ComponentCount}}</td></tr>
+<tr><td>{{.M.VulnsLabel}}</td><td>{{if eq .VulnState "not-requested"}}<span class="muted">{{.M.VulnNotRequested}}</span>{{else if eq .VulnState "unavailable"}}<span class="err">{{.M.VulnUnavailable}}</span>{{else if gt .VulnCount 0}}<span class="badge high">{{.VulnCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
+<tr><td>{{.M.IssuesLabel}}</td><td>{{if gt .IssueCount 0}}<span class="badge err">{{.IssueCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
 </table>
 
-<h2>Extraction Overview</h2>
+<h2>{{.M.ExtractionHeading}}</h2>
 <table>
-<tr><th>Status</th><th>Count</th></tr>
-<tr><td>Extracted</td><td>{{.ExtractionExtracted}}</td></tr>
-<tr><td>Failed</td><td>{{if gt .ExtractionFailed 0}}<span class="err">{{.ExtractionFailed}}</span>{{else}}0{{end}}</td></tr>
-<tr><td>Skipped / tool missing</td><td>{{.ExtractionSkipped}}</td></tr>
-<tr><td>Total nodes</td><td>{{.ExtractionTotal}}</td></tr>
+<tr><th>{{.M.StatusHeading}}</th><th>{{.M.CountHeading}}</th></tr>
+<tr><td>{{.M.ExtractedLabel}}</td><td>{{.ExtractionExtracted}}</td></tr>
+<tr><td>{{.M.FailedLabel}}</td><td>{{if gt .ExtractionFailed 0}}<span class="err">{{.ExtractionFailed}}</span>{{else}}0{{end}}</td></tr>
+<tr><td>{{.M.SkippedLabel}}</td><td>{{.ExtractionSkipped}}</td></tr>
+<tr><td>{{.M.TotalNodesLabel}}</td><td>{{.ExtractionTotal}}</td></tr>
 </table>
 
 {{if .Vulns}}
 <details open>
-<summary><h2>Vulnerability Table ({{len .Vulns}} matches)</h2></summary>
+<summary><h2>{{.M.VulnTableHeading}} ({{len .Vulns}} {{.M.VulnMatchesWord}})</h2></summary>
 <table>
-<tr><th>ID</th><th>Severity</th><th>Package</th><th>Version</th><th>Description</th></tr>
+<tr><th>{{.M.IDHeading}}</th><th>{{.M.SeverityHeading}}</th><th>{{.M.PackageHeading}}</th><th>{{.M.VersionHeading}}</th><th>{{.M.DescriptionHeading}}</th></tr>
 {{range .Vulns}}<tr>
 <td>{{.ID}}</td>
 <td><span class="badge {{.SeverityCSS}}">{{.Severity}}</span></td>
@@ -133,9 +147,9 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 
 {{if .Issues}}
 <details open>
-<summary><h2>Processing Issues ({{len .Issues}})</h2></summary>
+<summary><h2>{{.M.IssuesHeading}} ({{len .Issues}})</h2></summary>
 <table>
-<tr><th>Stage</th><th>Message</th></tr>
+<tr><th>{{.M.StageHeading}}</th><th>{{.M.MessageHeading}}</th></tr>
 {{range .Issues}}<tr><td>{{.Stage}}</td><td>{{.Message}}</td></tr>{{end}}
 </table>
 </details>
@@ -143,9 +157,9 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 
 {{if .ExtrNodes}}
 <details>
-<summary><h2>Extraction Log</h2></summary>
+<summary><h2>{{.M.ExtractionLogHeading}}</h2></summary>
 <table>
-<tr><th>Path</th><th>Format</th><th>Status</th><th>Tool</th><th>Detail</th></tr>
+<tr><th>{{.M.PathHeading}}</th><th>{{.M.FormatHeading}}</th><th>{{.M.StatusHeading}}</th><th>{{.M.ToolHeading}}</th><th>{{.M.DetailHeading}}</th></tr>
 {{range .ExtrNodes}}<tr>
 <td class="d{{.Depth}}">{{.Path}}</td>
 <td>{{.Format}}</td>
@@ -163,9 +177,14 @@ var htmlReportTmpl = template.Must(template.New("html-report").Parse(htmlReportT
 
 // GenerateHTML writes a self-contained HTML audit report to w.
 //
+// String values are passed to the template as plain text; the html/template
+// engine performs context-aware escaping, so no value needs to be escaped by
+// hand before being placed into htmlReportData.
+//
 // Parameters:
 //   - data: the complete processing state snapshot
-//   - language: the output language code ("en" or "de")
+//   - language: the output language code ("en" or "de"); unrecognized values
+//     fall back to English
 //   - w: the writer to write the HTML report to
 //
 // Returns an error if writing fails.
@@ -177,100 +196,30 @@ func GenerateHTML(data ReportData, language string, w io.Writer) error {
 		compCount = len(*data.BOM.Components)
 	}
 
-	// Collect vulnerability matches.
-	var vulns []htmlVuln
-	if data.Vulnerabilities != nil && data.Vulnerabilities.MatchesByBOMRef != nil {
-		// Build a component BOMRef → name+version lookup.
-		bomRefName := make(map[string]string)
-		bomRefVersion := make(map[string]string)
-		if data.BOM != nil && data.BOM.Components != nil {
-			for _, c := range *data.BOM.Components {
-				bomRefName[c.BOMRef] = c.Name
-				bomRefVersion[c.BOMRef] = c.Version
-			}
-		}
-
-		// Flatten and sort vulns for deterministic output.
-		type vulnEntry struct {
-			id     string
-			bomRef string
-			m      interface{ getSeverity() string }
-		}
-		var keys []struct {
-			id     string
-			bomRef string
-		}
-		for bomRef, matches := range data.Vulnerabilities.MatchesByBOMRef {
-			for _, m := range matches {
-				keys = append(keys, struct {
-					id     string
-					bomRef string
-				}{id: m.VulnerabilityID, bomRef: bomRef})
-				_ = vulnEntry{}
-			}
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			if keys[i].id != keys[j].id {
-				return keys[i].id < keys[j].id
-			}
-			return keys[i].bomRef < keys[j].bomRef
-		})
-		seen := make(map[string]bool)
-		for _, k := range keys {
-			dedupeKey := k.id + "|" + k.bomRef
-			if seen[dedupeKey] {
-				continue
-			}
-			seen[dedupeKey] = true
-			for _, m := range data.Vulnerabilities.MatchesByBOMRef[k.bomRef] {
-				if m.VulnerabilityID != k.id {
-					continue
-				}
-				sev := strings.ToLower(m.Severity)
-				desc := m.Description
-				if len([]rune(desc)) > 120 {
-					desc = string([]rune(desc)[:120]) + "…"
-				}
-				vulns = append(vulns, htmlVuln{
-					ID:          template.HTMLEscapeString(m.VulnerabilityID),
-					Severity:    template.HTMLEscapeString(m.Severity),
-					SeverityCSS: severityCSSClass(sev),
-					Package:     template.HTMLEscapeString(bomRefName[k.bomRef]),
-					Version:     template.HTMLEscapeString(bomRefVersion[k.bomRef]),
-					Description: template.HTMLEscapeString(desc),
-				})
-				break
-			}
-		}
-	}
+	vulns := collectHTMLVulns(data)
 
 	// Collect processing issues.
 	var issues []htmlIssue
 	for _, iss := range data.ProcessingIssues {
-		issues = append(issues, htmlIssue{
-			Stage:   template.HTMLEscapeString(iss.Stage),
-			Message: template.HTMLEscapeString(iss.Message),
-		})
+		issues = append(issues, htmlIssue{Stage: iss.Stage, Message: iss.Message})
 	}
 
 	// Collect extraction log nodes (flatten tree).
 	var nodes []htmlNode
 	flattenExtractionNodes(data.Tree, 0, &nodes)
 
-	dur := data.EndTime.Sub(data.StartTime).Round(time.Millisecond).String()
-	genInfo := template.HTMLEscapeString(data.Generator.String())
-
 	td := htmlReportData{
-		Title:               "extract-sbom Audit Report",
+		M:                   htmlMessagesFor(language),
 		Generated:           time.Now().Format("2006-01-02 15:04:05"),
-		Generator:           genInfo,
-		InputFile:           template.HTMLEscapeString(data.Input.Filename),
+		Generator:           data.Generator.String(),
+		Tools:               htmlToolVersions(data.ToolVersions),
+		InputFile:           data.Input.Filename,
 		InputSize:           data.Input.Size,
-		InputSHA256:         template.HTMLEscapeString(data.Input.SHA256),
-		Duration:            template.HTMLEscapeString(dur),
-		SBOMPath:            template.HTMLEscapeString(data.SBOMPath),
-		SandboxName:         template.HTMLEscapeString(data.SandboxInfo.Name),
-		Language:            template.HTMLEscapeString(language),
+		InputSHA256:         data.Input.SHA256,
+		Duration:            data.EndTime.Sub(data.StartTime).Round(time.Millisecond).String(),
+		SBOMPath:            data.SBOMPath,
+		SandboxName:         data.SandboxInfo.Name,
+		Language:            language,
 		ExtractionTotal:     extStats.Total,
 		ExtractionExtracted: extStats.Extracted,
 		ExtractionFailed:    extStats.Failed,
@@ -278,12 +227,117 @@ func GenerateHTML(data ReportData, language string, w io.Writer) error {
 		ComponentCount:      compCount,
 		VulnCount:           len(vulns),
 		IssueCount:          len(issues),
+		VulnState:           htmlVulnState(data.Vulnerabilities),
 		Vulns:               vulns,
 		Issues:              issues,
 		ExtrNodes:           nodes,
 	}
 
 	return htmlReportTmpl.Execute(w, td)
+}
+
+// htmlVulnState classifies the vulnerability-enrichment outcome for the HTML
+// summary. It exists so the report can distinguish "no vulnerabilities found"
+// from "enrichment was not requested" or "Grype was unavailable" — the same
+// audit distinction the Markdown report preserves. A plain "0" would conflate
+// all three. Returns one of "not-requested", "unavailable", or "assessed".
+func htmlVulnState(v *vulnscan.Result) string {
+	if !vulnerabilityRequested(v) {
+		return "not-requested"
+	}
+	if v.State == vulnscan.StateUnavailable {
+		return "unavailable"
+	}
+	return "assessed"
+}
+
+// htmlToolVersions joins the detected external-tool version strings into a
+// single " | "-separated line for the summary table. An empty result means no
+// external tool reported a version during this run.
+func htmlToolVersions(tv ToolVersions) string {
+	var parts []string
+	if tv.Grype != "" {
+		entry := tv.Grype
+		if tv.GrypeDB != "" {
+			entry += " (" + tv.GrypeDB + ")"
+		}
+		parts = append(parts, entry)
+	}
+	if tv.SevenZip != "" {
+		parts = append(parts, tv.SevenZip)
+	}
+	if tv.Unshield != "" {
+		parts = append(parts, tv.Unshield)
+	}
+	if tv.Unsquashfs != "" {
+		parts = append(parts, tv.Unsquashfs)
+	}
+	return strings.Join(parts, " | ")
+}
+
+// collectHTMLVulns flattens the Grype match map into a deterministically sorted,
+// deduplicated slice of HTML vulnerability rows. Each (vulnerability ID, bom-ref)
+// pair is rendered once.
+func collectHTMLVulns(data ReportData) []htmlVuln {
+	if data.Vulnerabilities == nil || len(data.Vulnerabilities.MatchesByBOMRef) == 0 {
+		return nil
+	}
+
+	// Build a component bom-ref → name/version lookup.
+	bomRefName := make(map[string]string)
+	bomRefVersion := make(map[string]string)
+	if data.BOM != nil && data.BOM.Components != nil {
+		comps := *data.BOM.Components
+		for i := range comps {
+			bomRefName[comps[i].BOMRef] = comps[i].Name
+			bomRefVersion[comps[i].BOMRef] = comps[i].Version
+		}
+	}
+
+	// Collect the distinct (id, bom-ref) keys, then sort for stable output.
+	type vulnKey struct{ id, bomRef string }
+	seen := make(map[vulnKey]bool)
+	var keys []vulnKey
+	for bomRef, matches := range data.Vulnerabilities.MatchesByBOMRef {
+		for i := range matches {
+			k := vulnKey{id: matches[i].VulnerabilityID, bomRef: bomRef}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].id != keys[j].id {
+			return keys[i].id < keys[j].id
+		}
+		return keys[i].bomRef < keys[j].bomRef
+	})
+
+	vulns := make([]htmlVuln, 0, len(keys))
+	for _, k := range keys {
+		matches := data.Vulnerabilities.MatchesByBOMRef[k.bomRef]
+		for i := range matches {
+			if matches[i].VulnerabilityID != k.id {
+				continue
+			}
+			desc := matches[i].Description
+			if len([]rune(desc)) > 120 {
+				desc = string([]rune(desc)[:120]) + "…"
+			}
+			vulns = append(vulns, htmlVuln{
+				ID:          matches[i].VulnerabilityID,
+				Severity:    matches[i].Severity,
+				SeverityCSS: severityCSSClass(strings.ToLower(matches[i].Severity)),
+				Package:     bomRefName[k.bomRef],
+				Version:     bomRefVersion[k.bomRef],
+				Description: desc,
+			})
+			break
+		}
+	}
+	return vulns
 }
 
 // severityCSSClass maps a lowercase severity string to a CSS class name.
@@ -315,11 +369,11 @@ func flattenExtractionNodes(node *extract.ExtractionNode, depth int, out *[]html
 	}
 	*out = append(*out, htmlNode{
 		Depth:  d,
-		Path:   template.HTMLEscapeString(node.Path),
-		Status: template.HTMLEscapeString(node.Status.String()),
-		Format: template.HTMLEscapeString(node.Format.Format.String()),
-		Tool:   template.HTMLEscapeString(node.Tool),
-		Detail: template.HTMLEscapeString(node.StatusDetail),
+		Path:   node.Path,
+		Status: node.Status.String(),
+		Format: node.Format.Format.String(),
+		Tool:   node.Tool,
+		Detail: node.StatusDetail,
 	})
 	for _, child := range node.Children {
 		flattenExtractionNodes(child, depth+1, out)

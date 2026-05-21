@@ -96,6 +96,9 @@ func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	if data.ToolVersions.Unshield != "" {
 		toolParts = append(toolParts, data.ToolVersions.Unshield)
 	}
+	if data.ToolVersions.Unsquashfs != "" {
+		toolParts = append(toolParts, data.ToolVersions.Unsquashfs)
+	}
 	if len(toolParts) > 0 {
 		fmt.Fprintf(w, "%s %s\n\n", t.reportHeaderToolsLabel, strings.Join(toolParts, " | "))
 	}
