@@ -1,16 +1,6 @@
-// Package report implements extract-sbom audit report generation.
-//
-// This file holds the localized label set for the self-contained HTML audit
-// report. The Markdown report has its own much larger translation table
-// (report_i18n.go); the HTML report only needs a small, cohesive set of
-// presentation labels, so it carries a dedicated message struct here rather
-// than overloading the Markdown translation type.
-package report
+package html
 
-// htmlMessages holds every human-readable label rendered by the HTML report
-// template. Keeping all strings in one struct lets the template stay free of
-// hard-coded English text and makes the report honor the configured output
-// language ("en" or "de").
+// htmlMessages holds every human-readable label rendered by the HTML report.
 type htmlMessages struct {
 	ReportTitle    string
 	GeneratedLabel string
@@ -57,16 +47,11 @@ type htmlMessages struct {
 	ToolHeading          string
 	DetailHeading        string
 
-	// VulnNotRequested / VulnUnavailable are shown in the summary table in
-	// place of a misleading "0" so a reader can tell a clean result apart from
-	// one where enrichment never ran. See htmlVulnState.
 	VulnNotRequested string
 	VulnUnavailable  string
 }
 
-// htmlMessagesEN is the English label set used for language "en" and as the
-// fallback for any unrecognized language code.
-var htmlMessagesEN = htmlMessages{
+var messagesEN = htmlMessages{
 	ReportTitle:    "extract-sbom Audit Report",
 	GeneratedLabel: "Generated",
 	GeneratorLabel: "Generator",
@@ -116,8 +101,7 @@ var htmlMessagesEN = htmlMessages{
 	VulnUnavailable:  "unavailable",
 }
 
-// htmlMessagesDE is the German label set used for language "de".
-var htmlMessagesDE = htmlMessages{
+var messagesDE = htmlMessages{
 	ReportTitle:    "extract-sbom Audit-Bericht",
 	GeneratedLabel: "Erstellt",
 	GeneratorLabel: "Generator",
@@ -167,15 +151,12 @@ var htmlMessagesDE = htmlMessages{
 	VulnUnavailable:  "nicht verfügbar",
 }
 
-// htmlMessagesFor returns the HTML label set for the given language code.
-// Any value other than "de" (case-insensitively, prefix match) yields the
-// English set, mirroring the Markdown report's English-default behavior.
-func htmlMessagesFor(language string) htmlMessages {
+func messagesFor(language string) htmlMessages {
 	if len(language) >= 2 {
 		switch language[:2] {
 		case "de", "De", "dE", "DE":
-			return htmlMessagesDE
+			return messagesDE
 		}
 	}
-	return htmlMessagesEN
+	return messagesEN
 }

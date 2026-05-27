@@ -1,4 +1,4 @@
-package report
+package html
 
 import (
 	"strings"
@@ -8,7 +8,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-func buildHTMLReportData(data ReportData, language string) htmlReportData {
+func buildReportData(data ReportData, language string) htmlReportData {
 	extStats := collectExtractionStats(data.Tree)
 
 	compCount := 0
@@ -16,7 +16,7 @@ func buildHTMLReportData(data ReportData, language string) htmlReportData {
 		compCount = len(*data.BOM.Components)
 	}
 
-	vulns := collectHTMLVulns(data)
+	vulns := collectVulns(data)
 
 	var issues []htmlIssue
 	for _, iss := range data.ProcessingIssues {
@@ -27,10 +27,10 @@ func buildHTMLReportData(data ReportData, language string) htmlReportData {
 	flattenExtractionNodes(data.Tree, 0, &nodes)
 
 	return htmlReportData{
-		M:                   htmlMessagesFor(language),
+		M:                   messagesFor(language),
 		Generated:           time.Now().Format("2006-01-02 15:04:05"),
 		Generator:           data.Generator.String(),
-		Tools:               htmlToolVersions(data.ToolVersions),
+		Tools:               toolVersions(data.ToolVersions),
 		InputFile:           data.Input.Filename,
 		InputSize:           data.Input.Size,
 		InputSHA256:         data.Input.SHA256,
@@ -45,24 +45,11 @@ func buildHTMLReportData(data ReportData, language string) htmlReportData {
 		ComponentCount:      compCount,
 		VulnCount:           len(vulns),
 		IssueCount:          len(issues),
-		VulnState:           htmlVulnState(data.Vulnerabilities),
+		VulnState:           vulnState(data.Vulnerabilities),
 		Vulns:               vulns,
 		Issues:              issues,
 		ExtrNodes:           nodes,
 	}
-}
-
-type extractionStats struct {
-	Total            int
-	Extracted        int
-	Failed           int
-	Skipped          int
-	ToolMissing      int
-	SecurityBlocked  int
-	Pending          int
-	SyftNative       int
-	Other            int
-	TotalFileEntries int
 }
 
 func collectExtractionStats(node *extract.ExtractionNode) extractionStats {
@@ -104,12 +91,10 @@ func collectExtractionStats(node *extract.ExtractionNode) extractionStats {
 	return stats
 }
 
-// htmlVulnState classifies the vulnerability-enrichment outcome for the HTML
+// vulnState classifies the vulnerability-enrichment outcome for the HTML
 // summary. It exists so the report can distinguish "no vulnerabilities found"
-// from "enrichment was not requested" or "Grype was unavailable" — the same
-// audit distinction the Markdown report preserves. A plain "0" would conflate
-// all three. Returns one of "not-requested", "unavailable", or "assessed".
-func htmlVulnState(v *vulnscan.Result) string {
+// from "enrichment was not requested" or "Grype was unavailable".
+func vulnState(v *vulnscan.Result) string {
 	if v == nil || !v.Requested || v.State == vulnscan.StateNotRequested {
 		return "not-requested"
 	}
@@ -119,10 +104,8 @@ func htmlVulnState(v *vulnscan.Result) string {
 	return "assessed"
 }
 
-// htmlToolVersions joins the detected external-tool version strings into a
-// single " | "-separated line for the summary table. An empty result means no
-// external tool reported a version during this run.
-func htmlToolVersions(tv ToolVersions) string {
+// toolVersions joins detected external-tool version strings into one summary.
+func toolVersions(tv ToolVersions) string {
 	var parts []string
 	if tv.Grype != "" {
 		entry := tv.Grype

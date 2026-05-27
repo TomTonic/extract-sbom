@@ -1,9 +1,17 @@
-package report
+// Package html implements the active self-contained HTML report renderer.
+package html
 
 import (
-	"html/template"
-	"io"
+	htmltmpl "html/template"
+
+	model "github.com/TomTonic/extract-sbom/internal/report/internal/model"
 )
+
+// ToolVersions aliases the shared report tool-version contract from model.
+type ToolVersions = model.ToolVersions
+
+// ReportData aliases the shared report snapshot contract from model.
+type ReportData = model.ReportData
 
 // htmlReportData is the template data structure for the HTML report. It bundles
 // the localized label set (M) with the report values. All string fields hold
@@ -65,6 +73,19 @@ type htmlNode struct {
 	Format string
 	Tool   string
 	Detail string
+}
+
+type extractionStats struct {
+	Total            int
+	Extracted        int
+	Failed           int
+	Skipped          int
+	ToolMissing      int
+	SecurityBlocked  int
+	Pending          int
+	SyftNative       int
+	Other            int
+	TotalFileEntries int
 }
 
 const htmlReportCSS = `
@@ -167,22 +188,4 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 </body>
 </html>`
 
-var htmlReportTmpl = template.Must(template.New("html-report").Parse(htmlReportTemplateText))
-
-// GenerateHTML writes a self-contained HTML audit report to w.
-//
-// String values are passed to the template as plain text; the html/template
-// engine performs context-aware escaping, so no value needs to be escaped by
-// hand before being placed into htmlReportData.
-//
-// Parameters:
-//   - data: the complete processing state snapshot
-//   - language: the output language code ("en" or "de"); unrecognized values
-//     fall back to English
-//   - w: the writer to write the HTML report to
-//
-// Returns an error if writing fails.
-func GenerateHTML(data ReportData, language string, w io.Writer) error {
-	td := buildHTMLReportData(data, language)
-	return htmlReportTmpl.Execute(w, td)
-}
+var reportTemplate = htmltmpl.Must(htmltmpl.New("html-report").Parse(htmlReportTemplateText))
