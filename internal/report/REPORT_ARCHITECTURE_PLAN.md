@@ -167,7 +167,7 @@ Status values:
 
 ### REP-ARCH-007 - Machine/SARIF helper normalization
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Consolidate repeated formatting and ordering helpers used by
   `report_machine.go` and `report_sarif.go` into focused shared helpers.
 - Exit criteria:
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-007 - Machine/SARIF helper normalization`
+`REP-ARCH-008 - Cross-report ordering contract tests`

@@ -318,9 +318,10 @@ func buildMachineVulnerabilities(v *vulnscan.Result) *machineVulnerabilities {
 	if v == nil {
 		return nil
 	}
+	state, requested := normalizedVulnEnrichmentState(v)
 	return &machineVulnerabilities{
-		State:            string(v.State),
-		Requested:        v.Requested,
+		State:            string(state),
+		Requested:        requested,
 		GrypeVersion:     v.GrypeVersion,
 		DBSchemaVersion:  v.DBSchemaVersion,
 		DBBuilt:          v.DBBuilt,

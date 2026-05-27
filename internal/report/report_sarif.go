@@ -278,14 +278,7 @@ func buildSARIFResults(data ReportData) []sarifResult {
 // property bag make that distinction explicit and machine-readable, matching
 // the audit semantics the Markdown report already preserves.
 func buildSARIFEnrichment(v *vulnscan.Result) (sarifInvocation, sarifRunProperties) {
-	state := vulnscan.StateNotRequested
-	requested := false
-	if v != nil {
-		requested = v.Requested
-		if v.State != "" {
-			state = v.State
-		}
-	}
+	state, requested := normalizedVulnEnrichmentState(v)
 
 	var level, message string
 	executionSuccessful := true
