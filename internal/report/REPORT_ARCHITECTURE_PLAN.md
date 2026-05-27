@@ -191,7 +191,7 @@ Status values:
 
 ### REP-ARCH-012 - Move human rendering into a human package
 
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Objective: Consolidate the human renderer into
   `internal/report/internal/human` with package-local files such as
   `render.go`, `template.go`, `sections.go`, and `i18n.go`.
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-012 - Move human rendering into a human package`
+`REP-ARCH-013 - Normalize HTML package structure and naming`

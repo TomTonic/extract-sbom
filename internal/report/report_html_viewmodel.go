@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
@@ -51,13 +52,65 @@ func buildHTMLReportData(data ReportData, language string) htmlReportData {
 	}
 }
 
+type extractionStats struct {
+	Total            int
+	Extracted        int
+	Failed           int
+	Skipped          int
+	ToolMissing      int
+	SecurityBlocked  int
+	Pending          int
+	SyftNative       int
+	Other            int
+	TotalFileEntries int
+}
+
+func collectExtractionStats(node *extract.ExtractionNode) extractionStats {
+	stats := extractionStats{}
+
+	var walk func(n *extract.ExtractionNode)
+	walk = func(n *extract.ExtractionNode) {
+		if n == nil {
+			return
+		}
+
+		stats.Total++
+		switch n.Status {
+		case extract.StatusExtracted:
+			stats.Extracted++
+			stats.TotalFileEntries += n.EntriesCount
+		case extract.StatusSyftNative:
+			stats.SyftNative++
+		case extract.StatusFailed:
+			stats.Failed++
+		case extract.StatusSkipped:
+			stats.Skipped++
+		case extract.StatusToolMissing:
+			stats.ToolMissing++
+		case extract.StatusSecurityBlocked:
+			stats.SecurityBlocked++
+		case extract.StatusPending:
+			stats.Pending++
+		default:
+			stats.Other++
+		}
+
+		for _, child := range n.Children {
+			walk(child)
+		}
+	}
+
+	walk(node)
+	return stats
+}
+
 // htmlVulnState classifies the vulnerability-enrichment outcome for the HTML
 // summary. It exists so the report can distinguish "no vulnerabilities found"
 // from "enrichment was not requested" or "Grype was unavailable" — the same
 // audit distinction the Markdown report preserves. A plain "0" would conflate
 // all three. Returns one of "not-requested", "unavailable", or "assessed".
 func htmlVulnState(v *vulnscan.Result) string {
-	if !vulnerabilityRequested(v) {
+	if v == nil || !v.Requested || v.State == vulnscan.StateNotRequested {
 		return "not-requested"
 	}
 	if v.State == vulnscan.StateUnavailable {
