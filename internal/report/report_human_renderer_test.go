@@ -103,3 +103,64 @@ func TestGenerateHumanWithTemplateDocumentInvalidTemplateReturnsError(t *testing
 		t.Fatal("expected document template parse error")
 	}
 }
+
+func TestGenerateHumanWithOptionsDefaultMatchesGenerateHuman(t *testing.T) {
+	data := makeTestReportData()
+
+	var base bytes.Buffer
+	if err := GenerateHuman(data, "en", &base); err != nil {
+		t.Fatalf("GenerateHuman: %v", err)
+	}
+
+	var viaOpts bytes.Buffer
+	if err := GenerateHumanWithOptions(data, "en", &viaOpts, HumanRenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions: %v", err)
+	}
+
+	baseNormalized := normalizeHumanGeneratedTimestamp(base.String())
+	viaOptsNormalized := normalizeHumanGeneratedTimestamp(viaOpts.String())
+	if baseNormalized != viaOptsNormalized {
+		t.Fatalf("options default changed report body")
+	}
+}
+
+func TestGenerateHumanWithOptionsRejectsUnknownEngine(t *testing.T) {
+	data := makeTestReportData()
+
+	var out bytes.Buffer
+	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{Engine: HumanRenderEngine("unknown")})
+	if err == nil {
+		t.Fatal("expected unsupported-engine error")
+	}
+}
+
+func TestGenerateHumanWithOptionsTemplateWrapper(t *testing.T) {
+	data := makeTestReportData()
+
+	var out bytes.Buffer
+	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{
+		Engine:          HumanRenderEngineTemplateWrapper,
+		WrapperTemplate: "HEAD\n{{.Body}}\nTAIL",
+	})
+	if err != nil {
+		t.Fatalf("GenerateHumanWithOptions: %v", err)
+	}
+
+	s := out.String()
+	if !strings.HasPrefix(s, "HEAD\n") {
+		t.Fatalf("missing wrapper header")
+	}
+	if !strings.HasSuffix(s, "\nTAIL") {
+		t.Fatalf("missing wrapper footer")
+	}
+}
+
+func TestGenerateHumanWithOptionsTemplateDocumentRequiresTemplate(t *testing.T) {
+	data := makeTestReportData()
+
+	var out bytes.Buffer
+	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{Engine: HumanRenderEngineTemplateDocument})
+	if err == nil {
+		t.Fatal("expected missing document template error")
+	}
+}

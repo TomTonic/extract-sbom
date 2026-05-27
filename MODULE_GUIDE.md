@@ -751,6 +751,10 @@ type ReportData struct {
 // GenerateHuman writes a human-readable Markdown report.
 func GenerateHuman(data ReportData, lang string, w io.Writer) error
 
+// GenerateHumanWithOptions writes the human report using the selected
+// renderer backend (writer, template-wrapper, or template-document).
+func GenerateHumanWithOptions(data ReportData, lang string, w io.Writer, opts HumanRenderOptions) error
+
 // GenerateHumanWithTemplate writes the human report using an optional
 // text/template wrapper around the canonical Markdown body.
 func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrapperTemplate string) error
@@ -774,6 +778,7 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 - `report.go`: public API, input summary hashing, machine-report entry wiring, and shared report models.
 - `report_i18n.go`: localized string catalog and language selection (`en`, `de`).
 - `report_human_viewmodel.go`: precomputed human-report view model (aggregated stats, sections, occurrences) reused by renderer backends.
+- `report_human_options.go`: backend selection model (`HumanRenderOptions`, engine constants) and unified dispatcher (`GenerateHumanWithOptions`).
 - `report_human_renderer.go`: human renderer backends (`markdownWriterHumanRenderer` as deterministic default; optional text/template wrapper via `GenerateHumanWithTemplate`; optional section-aware document templating via `GenerateHumanWithTemplateDocument`).
 - `report_human_main.go`: human Markdown section helpers (summary/progress sections, processing-issues appendix, and section-level writers).
 - `report_html.go`: standalone HTML report generator using `html/template`; embedded CSS (~100 lines), severity-colored vulnerability table, collapsible extraction log via `<details>`.
@@ -829,6 +834,8 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   the default for audit stability, while `GenerateHumanWithTemplate` provides
   an optional text/template wrapper for embedding or branded framing without
   changing core report semantics.
+- `GenerateHuman` delegates to `GenerateHumanWithOptions` (zero-value options),
+  so backend selection and validation are centralized in one code path.
 - `GenerateHumanWithTemplateDocument` is optional and receives deterministic,
   pre-rendered section blocks. This allows layout customization (reordering,
   selective section inclusion) without moving report logic into templates.

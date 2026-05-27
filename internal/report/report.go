@@ -62,8 +62,7 @@ func ComputeInputSummary(path string) (InputSummary, error) {
 //
 // Returns an error if writing fails.
 func GenerateHuman(data ReportData, lang string, w io.Writer) error {
-	vm := buildHumanReportViewModel(data, lang)
-	return markdownWriterHumanRenderer{}.Render(w, vm)
+	return GenerateHumanWithOptions(data, lang, w, HumanRenderOptions{})
 }
 
 // generatorGitHubURL returns a GitHub URL for the given generator version string.
