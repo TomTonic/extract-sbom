@@ -185,7 +185,7 @@ Status values:
 
 ### REP-ARCH-009 - Documentation and module guide sync
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Align `MODULE_GUIDE.md` with finalized report module boundaries and
   design decisions after refactoring steps complete.
 - Exit criteria:
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-009 - Documentation and module guide sync`
+`REP-ARCH-010 - Final hardening pass`
