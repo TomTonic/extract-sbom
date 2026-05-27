@@ -180,7 +180,7 @@ Status values:
 
 ### REP-ARCH-011 - Introduce facade and shared model package
 
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Objective: Turn `internal/report` into a thin facade and move shared report
   contracts into `internal/report/internal/model`.
 - Exit criteria:
@@ -191,7 +191,7 @@ Status values:
 
 ### REP-ARCH-012 - Move human rendering into a human package
 
-- Status: `PLANNED`
+- Status: `IN_PROGRESS`
 - Objective: Consolidate the human renderer into
   `internal/report/internal/human` with package-local files such as
   `render.go`, `template.go`, `sections.go`, and `i18n.go`.
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-011 - Introduce facade and shared model package`
+`REP-ARCH-012 - Move human rendering into a human package`

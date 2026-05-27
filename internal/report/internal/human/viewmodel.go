@@ -1,4 +1,4 @@
-package report
+package human
 
 // humanReportViewModel is the precomputed state consumed by human renderers.
 // It separates expensive aggregation from output formatting.

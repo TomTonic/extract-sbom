@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"fmt"
@@ -127,7 +127,6 @@ func anchorSlugPart(value string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func valueOrDash(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return "-"

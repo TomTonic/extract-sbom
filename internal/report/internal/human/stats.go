@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"fmt"
@@ -79,8 +79,6 @@ func formatArchiveMetaForLog(node *extract.ExtractionNode) string {
 
 // writeResidualRisk writes the explicit limitations statement required for
 // auditability when extraction/scan coverage is partial.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn scanStats, idx componentIndexStats, t translations) {
 	fmt.Fprintln(w, t.residualRiskText)
 	fmt.Fprintln(w)
@@ -141,8 +139,6 @@ func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn sc
 
 // configSkipExtensionsDisplay returns a compact one-liner for the configuration
 // table showing the active skip list, capped to keep the table cell readable.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func configSkipExtensionsDisplay(exts []string) string {
 	if len(exts) == 0 {
 		return "(none)"
@@ -158,8 +154,6 @@ func configSkipExtensionsDisplay(exts []string) string {
 }
 
 // samplePaths returns up to three sorted example paths for compact summaries.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func samplePaths(paths []string, noneValue string) string {
 	const maxCount = 3
 

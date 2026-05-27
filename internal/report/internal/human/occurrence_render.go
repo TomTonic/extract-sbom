@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"fmt"
@@ -53,8 +53,6 @@ func uniqueSortedPaths(paths []string) []string {
 
 // writeExtensionFilterSection documents which file extensions were configured
 // to be skipped and which logical paths were affected.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionStats, t translations) {
 	fmt.Fprintln(w, t.extensionFilterLead)
 	fmt.Fprintln(w)
@@ -89,8 +87,6 @@ func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionSta
 
 // writeComponentOccurrenceIndex renders the appendix index grouped by package
 // (name+version) and lists concrete component occurrences underneath.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrence, idx componentIndexStats, v *vulnscan.Result, t translations) {
 	fmt.Fprintf(w, "%s\n\n", t.componentIndexLead)
 
@@ -132,8 +128,6 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 }
 
 // writePackageGroupEntry renders one package group and its nested occurrences.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnscan.Result, t translations) {
 	title := strings.TrimSpace(group.PackageName)
 	if title == "" {
@@ -164,8 +158,6 @@ func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnsc
 
 // writeOccurrenceListEntry renders one normalized occurrence as nested list
 // item inside a package-group entry.
-//
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writeOccurrenceListEntry(w io.Writer, occ componentOccurrence, t translations, vulnLines []string) {
 	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, occurrenceAnchorID(occ.ObjectID), occ.ObjectID)
 	for _, dp := range occ.DeliveryPaths {
@@ -187,7 +179,6 @@ func writeOccurrenceListEntry(w io.Writer, occ componentOccurrence, t translatio
 	writeVulnerabilityLines(w, vulnLines, "  ")
 }
 
-//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 func writeVulnerabilityLines(w io.Writer, lines []string, indent string) {
 	for _, line := range lines {
 		fmt.Fprintf(w, "%s%s\n", indent, line)

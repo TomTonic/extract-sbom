@@ -777,11 +777,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
 - `report.go`, `report_types.go`: public facade API, input summary hashing, and root-level aliases for the shared report contracts.
-- `report_human_options.go`: backend selection model (`HumanRenderOptions`, engine constants) and unified dispatcher (`GenerateHumanWithOptions`).
-- `report_human_viewmodel.go`: deterministic precomputation for human report data and section models.
-- `report_human_renderer.go`: renderer backends only (writer, template-wrapper, template-document orchestration).
-- `report_human_canonical_markdown.go`, `report_human_template_model.go`: canonical markdown body assembly and template document model helpers.
-- `report_human_sections_summary.go`, `report_human_sections_process.go`, `report_human_sections_appendix.go`: split section writers by domain concern.
+- `report_human_options.go`, `report_human_renderer.go`: thin root-facade wrappers that delegate human rendering into the internal human package while keeping orchestrator integration stable.
+- `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, occurrence/vulnerability/suppression helpers, and human-specific i18n).
+- `report_human_compat.go`: temporary root compatibility helpers still used by remaining root-package code during the ongoing package extraction.
 - `report_i18n_core.go`, `report_i18n_human_en.go`, `report_i18n_human_de.go`: compile-time localization catalogs and selector logic.
 - `report_occurrence_collect.go`, `report_occurrence_group.go`, `report_occurrence_render.go`: occurrence extraction, grouping, ordering, dedupe, and rendering.
 - `report_vuln.go`, `report_vuln_format.go`, `report_vuln_enrichment_helpers.go`: vulnerability summary/detail rendering, formatting/reference helpers, and shared enrichment-state normalization.
@@ -830,6 +828,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 - Shared report contracts now live in `internal/report/internal/model`; the
   root `report` package aliases them so orchestrator integration can stay
   stable while implementation moves into subpackages.
+- The active human report execution path now lives in
+  `internal/report/internal/human`; the root package currently retains a small
+  compatibility surface while the remaining domain helpers and tests are moved.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.

@@ -219,6 +219,8 @@ type processingEntry struct {
 }
 
 // reportSection defines one TOC entry and heading anchor in the human report.
+//
+//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 type reportSection struct {
 	// title is the localized section heading text (plain text).
 	title string
@@ -229,6 +231,7 @@ type reportSection struct {
 	level int
 }
 
+//nolint:unused // Retained for legacy root helpers until remaining human tests move.
 const (
 	scanApproachGitHubURL = "https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md"
 
