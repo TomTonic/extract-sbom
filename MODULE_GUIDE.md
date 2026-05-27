@@ -775,17 +775,20 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 **Implementation layout (current):**
 
-- `report.go`: public API, input summary hashing, machine-report entry wiring, and shared report models.
-- `report_i18n.go`: localized string catalog and language selection (`en`, `de`).
-- `report_human_viewmodel.go`: precomputed human-report view model (aggregated stats, sections, occurrences) reused by renderer backends.
+- `report.go`, `report_types.go`: public API, input summary hashing, and report data contracts.
 - `report_human_options.go`: backend selection model (`HumanRenderOptions`, engine constants) and unified dispatcher (`GenerateHumanWithOptions`).
-- `report_human_renderer.go`: human renderer backends (`markdownWriterHumanRenderer` as deterministic default; optional text/template wrapper via `GenerateHumanWithTemplate`; optional section-aware document templating via `GenerateHumanWithTemplateDocument`).
-- `report_human_main.go`: human Markdown section helpers (summary/progress sections, processing-issues appendix, and section-level writers).
-- `report_html.go`: standalone HTML report generator using `html/template`; embedded CSS (~100 lines), severity-colored vulnerability table, collapsible extraction log via `<details>`.
-- `report_sarif.go`: SARIF 2.1.0 JSON generator; one rule per unique CVE, one result per vulnerability match, severity mapped to SARIF levels.
+- `report_human_viewmodel.go`: deterministic precomputation for human report data and section models.
+- `report_human_renderer.go`: renderer backends only (writer, template-wrapper, template-document orchestration).
+- `report_human_canonical_markdown.go`, `report_human_template_model.go`: canonical markdown body assembly and template document model helpers.
+- `report_human_sections_summary.go`, `report_human_sections_process.go`, `report_human_sections_appendix.go`: split section writers by domain concern.
+- `report_i18n_core.go`, `report_i18n_human_en.go`, `report_i18n_human_de.go`: compile-time localization catalogs and selector logic.
+- `report_occurrence_collect.go`, `report_occurrence_group.go`, `report_occurrence_render.go`: occurrence extraction, grouping, ordering, dedupe, and rendering.
+- `report_vuln.go`, `report_vuln_enrichment_helpers.go`: vulnerability summary/detail rendering and shared enrichment-state normalization.
 - `report_suppression.go`: suppression appendix rendering and replacement-link resolution.
-- `report_occurrence.go`: package-grouped component occurrence indexing, quality filtering, and deterministic duplicate collapsing.
 - `report_stats_tree.go`: extraction-tree rendering, residual-risk section, and phase statistics collectors.
+- `report_machine.go`: structured machine JSON report generator.
+- `report_html.go`, `report_html_viewmodel.go`, `report_html_vuln.go`, `report_html_extraction.go`, `report_html_i18n.go`: HTML report orchestration, localized labels, view-model shaping, vulnerability rows, and extraction-log projection.
+- `report_sarif.go`: SARIF 2.1.0 generator with deterministic rule/result ordering and explicit enrichment audit state.
 
 **Required content (per DESIGN.md §10.4):**
 
