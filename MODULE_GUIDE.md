@@ -775,7 +775,8 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 **Implementation layout (current):**
 
-- `report.go`, `report_types.go`: public API, input summary hashing, and report data contracts.
+- `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, and root-level aliases for the shared report contracts.
 - `report_human_options.go`: backend selection model (`HumanRenderOptions`, engine constants) and unified dispatcher (`GenerateHumanWithOptions`).
 - `report_human_viewmodel.go`: deterministic precomputation for human report data and section models.
 - `report_human_renderer.go`: renderer backends only (writer, template-wrapper, template-document orchestration).
@@ -826,6 +827,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   template loading, to keep output deterministic and easy to audit.
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
+- Shared report contracts now live in `internal/report/internal/model`; the
+  root `report` package aliases them so orchestrator integration can stay
+  stable while implementation moves into subpackages.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.
