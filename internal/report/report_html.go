@@ -201,7 +201,7 @@ func GenerateHTML(data ReportData, language string, w io.Writer) error {
 	// Collect processing issues.
 	var issues []htmlIssue
 	for _, iss := range data.ProcessingIssues {
-		issues = append(issues, htmlIssue{Stage: iss.Stage, Message: iss.Message})
+		issues = append(issues, htmlIssue(iss))
 	}
 
 	// Collect extraction log nodes (flatten tree).

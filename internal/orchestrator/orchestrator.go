@@ -393,8 +393,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	switch cfg.ReportMode {
-	case config.ReportSARIF:
+	if cfg.ReportMode == config.ReportSARIF {
 		sarifPath := filepath.Join(cfg.OutputDir, inputBase+".sarif.json")
 		f, ferr := os.Create(sarifPath)
 		if ferr != nil {
