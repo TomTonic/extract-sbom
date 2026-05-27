@@ -183,8 +183,10 @@ func (markdownWriterHumanRenderer) Render(w io.Writer, vm humanReportViewModel) 
 //
 // When wrapperTemplate is empty, "{{.Body}}" is used.
 func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrapperTemplate string) error {
-	vm := buildHumanReportViewModel(data, lang)
-	return templateWrapperHumanRenderer{wrapperTemplate: wrapperTemplate}.Render(w, vm)
+	return GenerateHumanWithOptions(data, lang, w, HumanRenderOptions{
+		Engine:          HumanRenderEngineTemplateWrapper,
+		WrapperTemplate: wrapperTemplate,
+	})
 }
 
 // templateWrapperHumanRenderer wraps the deterministic writer output in a
@@ -265,13 +267,13 @@ func (r templateWrapperHumanRenderer) Render(w io.Writer, vm humanReportViewMode
 // sections or custom framing) while preserving deterministic section content
 // generation from the canonical writer helpers.
 func GenerateHumanWithTemplateDocument(data ReportData, lang string, w io.Writer, documentTemplate string) error {
-	if strings.TrimSpace(documentTemplate) == "" {
-		return fmt.Errorf("report: document template must not be empty")
-	}
+	return GenerateHumanWithOptions(data, lang, w, HumanRenderOptions{
+		Engine:           HumanRenderEngineTemplateDocument,
+		DocumentTemplate: documentTemplate,
+	})
+}
 
-	vm := buildHumanReportViewModel(data, lang)
-	model := buildHumanTemplateDocumentModel(vm)
-
+func executeHumanDocumentTemplate(w io.Writer, model humanTemplateDocumentModel, documentTemplate string) error {
 	tpl, err := texttemplate.New("human-document").Parse(documentTemplate)
 	if err != nil {
 		return fmt.Errorf("report: parse human document template: %w", err)
