@@ -751,6 +751,10 @@ type ReportData struct {
 // GenerateHuman writes a human-readable Markdown report.
 func GenerateHuman(data ReportData, lang string, w io.Writer) error
 
+// GenerateHumanWithTemplate writes the human report using an optional
+// text/template wrapper around the canonical Markdown body.
+func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrapperTemplate string) error
+
 // GenerateHTML writes a self-contained HTML report.
 func GenerateHTML(data ReportData, lang string, w io.Writer) error
 
@@ -765,7 +769,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 - `report.go`: public API, input summary hashing, machine-report entry wiring, and shared report models.
 - `report_i18n.go`: localized string catalog and language selection (`en`, `de`).
-- `report_human_main.go`: human Markdown section orchestration, summary/progress sections, and processing-issues appendix.
+- `report_human_viewmodel.go`: precomputed human-report view model (aggregated stats, sections, occurrences) reused by renderer backends.
+- `report_human_renderer.go`: human renderer backends (`markdownWriterHumanRenderer` as deterministic default; optional text/template wrapper via `GenerateHumanWithTemplate`).
+- `report_human_main.go`: human Markdown section helpers (summary/progress sections, processing-issues appendix, and section-level writers).
 - `report_html.go`: standalone HTML report generator using `html/template`; embedded CSS (~100 lines), severity-colored vulnerability table, collapsible extraction log via `<details>`.
 - `report_sarif.go`: SARIF 2.1.0 JSON generator; one rule per unique CVE, one result per vulnerability match, severity mapped to SARIF levels.
 - `report_suppression.go`: suppression appendix rendering and replacement-link resolution.
@@ -815,10 +821,13 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   not alter component deduplication or dependency relationships.
 - If `--grype` is set, the report renders an explicit enrichment state:
   `completed`, `completed-with-errors`, `unavailable`, or `not-requested`.
-- A full migration to a template engine is intentionally deferred: the current
-  report has high logic density (ordering, conditional sections, and
-  provenance-driven tables), where direct writer functions are simpler and
-  less error-prone for deterministic audit output.
+- Human report rendering is backend-oriented: a deterministic writer backend is
+  the default for audit stability, while `GenerateHumanWithTemplate` provides
+  an optional text/template wrapper for embedding or branded framing without
+  changing core report semantics.
+- Full template-first rendering for the complete human report remains deferred
+  until all high-density logic (ordering, conditional sections, and
+  provenance-driven tables) is isolated into view-model builders.
 
 ---
 
