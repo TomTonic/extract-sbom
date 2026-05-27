@@ -176,7 +176,7 @@ Status values:
 
 ### REP-ARCH-008 - Cross-report ordering contract tests
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Add explicit tests for deterministic ordering invariants shared by
   human/machine/HTML/SARIF outputs.
 - Exit criteria:
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-008 - Cross-report ordering contract tests`
+`REP-ARCH-009 - Documentation and module guide sync`
