@@ -776,11 +776,11 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 **Implementation layout (current):**
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
-- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human/HTML facades delegating into internal report packages.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human/HTML/machine/SARIF facades delegating into internal report packages.
 - `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, occurrence/vulnerability/suppression helpers, and human-specific i18n).
 - `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
-- `report_machine.go`: structured machine JSON report generator.
-- `report_sarif.go`: SARIF 2.1.0 generator with deterministic rule/result ordering and explicit enrichment audit state.
+- `internal/report/internal/machine/*.go`: structured machine JSON report generator, JSON schema projection helpers, and machine-specific tests.
+- `internal/report/internal/sarif/*.go`: SARIF 2.1.0 generator with deterministic rule/result ordering, explicit enrichment audit state, and SARIF-specific tests.
 
 **Required content (per DESIGN.md §10.4):**
 
@@ -829,6 +829,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   `internal/report/internal/html`; the root package keeps only the thin
   orchestrator-facing `GenerateHTML` facade while HTML-specific labels,
   view-model helpers, and tests are package-local.
+- The active machine and SARIF report execution paths now live in
+  `internal/report/internal/machine` and `internal/report/internal/sarif`;
+  the root package keeps only thin `GenerateMachine` and `GenerateSARIF`
+  facades while output-specific helpers and tests live with their renderer.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.

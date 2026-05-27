@@ -211,7 +211,7 @@ Status values:
 
 ### REP-ARCH-014 - Move machine and SARIF generators behind package boundaries
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Move machine and SARIF rendering into dedicated `machine` and
   `sarif` packages.
 - Exit criteria:
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-014 - Move machine and SARIF generators behind package boundaries`
+`REP-ARCH-015 - Rebundle domain helpers by noun, not verb`

@@ -15,6 +15,8 @@ import (
 
 	htmlpkg "github.com/TomTonic/extract-sbom/internal/report/internal/html"
 	humanpkg "github.com/TomTonic/extract-sbom/internal/report/internal/human"
+	machinepkg "github.com/TomTonic/extract-sbom/internal/report/internal/machine"
+	sarifpkg "github.com/TomTonic/extract-sbom/internal/report/internal/sarif"
 )
 
 // ComputeInputSummary computes the file hashes and metadata for the input file.
@@ -113,4 +115,14 @@ func GenerateHumanWithTemplateDocument(data ReportData, lang string, w io.Writer
 // GenerateHTML writes a self-contained HTML audit report to w.
 func GenerateHTML(data ReportData, language string, w io.Writer) error {
 	return htmlpkg.Generate(data, language, w)
+}
+
+// GenerateMachine writes a structured JSON audit report to the writer.
+func GenerateMachine(data ReportData, w io.Writer) error {
+	return machinepkg.Generate(data, w)
+}
+
+// GenerateSARIF writes a SARIF 2.1.0 JSON report to w.
+func GenerateSARIF(data ReportData, w io.Writer) error {
+	return sarifpkg.Generate(data, w)
 }

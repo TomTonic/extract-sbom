@@ -1,4 +1,4 @@
-package report
+package machine
 
 import (
 	"bytes"
@@ -12,20 +12,15 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
-// TestGenerateMachineIncludesProcessingIssues verifies that machine output
-// includes processing issues for downstream automation.
-func TestGenerateMachineIncludesProcessingIssues(t *testing.T) {
+func TestGenerateIncludesProcessingIssues(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
-	data.ProcessingIssues = []ProcessingIssue{{
-		Stage:   "scan",
-		Message: "syft catalog error",
-	}}
+	data.ProcessingIssues = []ProcessingIssue{{Stage: "scan", Message: "syft catalog error"}}
 
 	var buf bytes.Buffer
-	if err := GenerateMachine(data, &buf); err != nil {
-		t.Fatalf("GenerateMachine error: %v", err)
+	if err := Generate(data, &buf); err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
 
 	var parsed map[string]interface{}
@@ -46,9 +41,7 @@ func TestGenerateMachineIncludesProcessingIssues(t *testing.T) {
 	}
 }
 
-// TestGenerateMachineIncludesEvidencePaths verifies that machine-readable scan
-// entries expose evidence paths for downstream automation.
-func TestGenerateMachineIncludesEvidencePaths(t *testing.T) {
+func TestGenerateIncludesEvidencePaths(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
@@ -61,8 +54,8 @@ func TestGenerateMachineIncludesEvidencePaths(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateMachine(data, &buf); err != nil {
-		t.Fatalf("GenerateMachine error: %v", err)
+	if err := Generate(data, &buf); err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
 
 	var report struct {
@@ -82,16 +75,14 @@ func TestGenerateMachineIncludesEvidencePaths(t *testing.T) {
 	}
 }
 
-// TestGenerateMachineProducesValidJSON verifies that the machine-readable
-// report is valid JSON with the expected schema.
-func TestGenerateMachineProducesValidJSON(t *testing.T) {
+func TestGenerateProducesValidJSON(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateMachine(data, &buf); err != nil {
-		t.Fatalf("GenerateMachine error: %v", err)
+	if err := Generate(data, &buf); err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
 
 	var report map[string]interface{}
@@ -102,19 +93,15 @@ func TestGenerateMachineProducesValidJSON(t *testing.T) {
 	if report["schemaVersion"] != "1.0.0" {
 		t.Errorf("schemaVersion = %v, want %q", report["schemaVersion"], "1.0.0")
 	}
-
 	if report["input"] == nil {
 		t.Error("missing 'input' field in JSON report")
 	}
-
 	if report["config"] == nil {
 		t.Error("missing 'config' field in JSON report")
 	}
-
 	if report["extraction"] == nil {
 		t.Error("missing 'extraction' field in JSON report")
 	}
-
 	generator, ok := report["generator"].(map[string]interface{})
 	if !ok {
 		t.Fatal("missing or invalid 'generator' field in JSON report")
@@ -124,16 +111,14 @@ func TestGenerateMachineProducesValidJSON(t *testing.T) {
 	}
 }
 
-// TestGenerateMachineContainsTiming verifies that the machine report
-// includes start/end times and duration.
-func TestGenerateMachineContainsTiming(t *testing.T) {
+func TestGenerateContainsTiming(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateMachine(data, &buf); err != nil {
-		t.Fatalf("GenerateMachine error: %v", err)
+	if err := Generate(data, &buf); err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
 
 	var report map[string]interface{}
@@ -144,24 +129,22 @@ func TestGenerateMachineContainsTiming(t *testing.T) {
 	if report["startTime"] == nil {
 		t.Error("missing startTime in JSON report")
 	}
-
 	if report["endTime"] == nil {
 		t.Error("missing endTime in JSON report")
 	}
-
 	if report["duration"] == nil {
 		t.Error("missing duration in JSON report")
 	}
 }
 
-func TestBuildMachineTreeNilReturnsNil(t *testing.T) {
+func TestBuildTreeNilReturnsNil(t *testing.T) {
 	t.Parallel()
-	if got := buildMachineTree(nil); got != nil {
-		t.Fatal("buildMachineTree(nil) should return nil")
+	if got := buildTree(nil); got != nil {
+		t.Fatal("buildTree(nil) should return nil")
 	}
 }
 
-func TestBuildMachineDecisions(t *testing.T) {
+func TestBuildDecisions(t *testing.T) {
 	t.Parallel()
 
 	decisions := []machineDecision{{NodePath: "root.zip", Action: "continue"}}
@@ -171,7 +154,7 @@ func TestBuildMachineDecisions(t *testing.T) {
 	if decisions[0].NodePath != "root.zip" || decisions[0].Action != "continue" {
 		t.Fatalf("unexpected machine decision: %+v", decisions[0])
 	}
-	if got := buildMachineTree(&extract.ExtractionNode{Path: "root.zip"}); got == nil || got.Path != "root.zip" {
+	if got := buildTree(&extract.ExtractionNode{Path: "root.zip"}); got == nil || got.Path != "root.zip" {
 		t.Fatalf("unexpected machine tree root: %+v", got)
 	}
 }

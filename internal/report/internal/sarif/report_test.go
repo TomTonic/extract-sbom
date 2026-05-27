@@ -1,10 +1,4 @@
-// SARIF report tests validate the SARIF 2.1.0 output consumed by code-scanning
-// platforms: the document must be valid SARIF, must expose one rule and result
-// per vulnerability match, and must record the vulnerability-enrichment outcome
-// so a consumer can tell an empty result set produced by a clean scan apart
-// from one produced because enrichment never ran. These behaviors belong to the
-// report module's SARIF rendering responsibility.
-package report
+package sarif
 
 import (
 	"bytes"
@@ -17,8 +11,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-// sarifTestLog captures the subset of SARIF 2.1.0 fields the tests assert on.
-type sarifTestLog struct {
+type testLog struct {
 	Schema  string `json:"$schema"`
 	Version string `json:"version"`
 	Runs    []struct {
@@ -50,14 +43,13 @@ type sarifTestLog struct {
 	} `json:"runs"`
 }
 
-// renderSARIF renders and parses the SARIF report for the given data.
-func renderSARIF(t *testing.T, data ReportData) sarifTestLog {
+func renderSARIF(t *testing.T, data ReportData) testLog {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := GenerateSARIF(data, &buf); err != nil {
-		t.Fatalf("GenerateSARIF error: %v", err)
+	if err := Generate(data, &buf); err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
-	var log sarifTestLog
+	var log testLog
 	if err := json.Unmarshal(buf.Bytes(), &log); err != nil {
 		t.Fatalf("SARIF output is not valid JSON: %v", err)
 	}
@@ -67,9 +59,7 @@ func renderSARIF(t *testing.T, data ReportData) sarifTestLog {
 	return log
 }
 
-// TestGenerateSARIFProducesValidSARIFDocument verifies the basic SARIF envelope:
-// the schema reference, the 2.1.0 version, and the producing tool name.
-func TestGenerateSARIFProducesValidSARIFDocument(t *testing.T) {
+func TestGenerateProducesValidDocument(t *testing.T) {
 	t.Parallel()
 
 	log := renderSARIF(t, makeTestReportData())
@@ -84,16 +74,11 @@ func TestGenerateSARIFProducesValidSARIFDocument(t *testing.T) {
 	}
 }
 
-// TestGenerateSARIFEmitsRuleAndResultPerMatch verifies that each vulnerability
-// match becomes both a rule descriptor and a result, with the result severity
-// mapped onto the SARIF level.
-func TestGenerateSARIFEmitsRuleAndResultPerMatch(t *testing.T) {
+func TestGenerateEmitsRuleAndResultPerMatch(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
-	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
-		{BOMRef: "ref-a", Name: "libcurl", Version: "8.0.0"},
-	}}
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{{BOMRef: "ref-a", Name: "libcurl", Version: "8.0.0"}}}
 	data.Vulnerabilities = &vulnscan.Result{
 		Requested: true,
 		State:     vulnscan.StateCompleted,
@@ -119,12 +104,7 @@ func TestGenerateSARIFEmitsRuleAndResultPerMatch(t *testing.T) {
 	}
 }
 
-// TestGenerateSARIFRecordsEnrichmentAuditState verifies that the run records
-// the vulnerability-enrichment outcome through the invocation's
-// executionSuccessful flag and the run-level property bag. This is what lets a
-// SARIF consumer distinguish a clean scan from "not requested" or "unavailable"
-// when the results array is empty.
-func TestGenerateSARIFRecordsEnrichmentAuditState(t *testing.T) {
+func TestGenerateRecordsEnrichmentAuditState(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -135,38 +115,10 @@ func TestGenerateSARIFRecordsEnrichmentAuditState(t *testing.T) {
 		wantExecSuccess   bool
 		wantNotifLevelSet string
 	}{
-		{
-			name:              "enrichment not requested",
-			vulns:             nil,
-			wantState:         "not-requested",
-			wantRequested:     false,
-			wantExecSuccess:   true,
-			wantNotifLevelSet: "note",
-		},
-		{
-			name:              "grype unavailable",
-			vulns:             &vulnscan.Result{Requested: true, State: vulnscan.StateUnavailable},
-			wantState:         "unavailable",
-			wantRequested:     true,
-			wantExecSuccess:   false,
-			wantNotifLevelSet: "error",
-		},
-		{
-			name:              "enrichment completed",
-			vulns:             &vulnscan.Result{Requested: true, State: vulnscan.StateCompleted},
-			wantState:         "completed",
-			wantRequested:     true,
-			wantExecSuccess:   true,
-			wantNotifLevelSet: "note",
-		},
-		{
-			name:              "enrichment completed with errors",
-			vulns:             &vulnscan.Result{Requested: true, State: vulnscan.StateCompletedWithErrors},
-			wantState:         "completed-with-errors",
-			wantRequested:     true,
-			wantExecSuccess:   true,
-			wantNotifLevelSet: "warning",
-		},
+		{name: "enrichment not requested", vulns: nil, wantState: "not-requested", wantRequested: false, wantExecSuccess: true, wantNotifLevelSet: "note"},
+		{name: "grype unavailable", vulns: &vulnscan.Result{Requested: true, State: vulnscan.StateUnavailable}, wantState: "unavailable", wantRequested: true, wantExecSuccess: false, wantNotifLevelSet: "error"},
+		{name: "enrichment completed", vulns: &vulnscan.Result{Requested: true, State: vulnscan.StateCompleted}, wantState: "completed", wantRequested: true, wantExecSuccess: true, wantNotifLevelSet: "note"},
+		{name: "enrichment completed with errors", vulns: &vulnscan.Result{Requested: true, State: vulnscan.StateCompletedWithErrors}, wantState: "completed-with-errors", wantRequested: true, wantExecSuccess: true, wantNotifLevelSet: "warning"},
 	}
 
 	for _, tc := range cases {
@@ -177,19 +129,16 @@ func TestGenerateSARIFRecordsEnrichmentAuditState(t *testing.T) {
 			run := renderSARIF(t, data).Runs[0]
 
 			if run.Properties.VulnerabilityEnrichmentState != tc.wantState {
-				t.Errorf("properties.vulnerabilityEnrichmentState = %q, want %q",
-					run.Properties.VulnerabilityEnrichmentState, tc.wantState)
+				t.Errorf("properties.vulnerabilityEnrichmentState = %q, want %q", run.Properties.VulnerabilityEnrichmentState, tc.wantState)
 			}
 			if run.Properties.VulnerabilityEnrichmentRequested != tc.wantRequested {
-				t.Errorf("properties.vulnerabilityEnrichmentRequested = %v, want %v",
-					run.Properties.VulnerabilityEnrichmentRequested, tc.wantRequested)
+				t.Errorf("properties.vulnerabilityEnrichmentRequested = %v, want %v", run.Properties.VulnerabilityEnrichmentRequested, tc.wantRequested)
 			}
 			if len(run.Invocations) != 1 {
 				t.Fatalf("invocations = %d, want 1", len(run.Invocations))
 			}
 			if run.Invocations[0].ExecutionSuccessful != tc.wantExecSuccess {
-				t.Errorf("invocation.executionSuccessful = %v, want %v",
-					run.Invocations[0].ExecutionSuccessful, tc.wantExecSuccess)
+				t.Errorf("invocation.executionSuccessful = %v, want %v", run.Invocations[0].ExecutionSuccessful, tc.wantExecSuccess)
 			}
 			notifs := run.Invocations[0].ToolExecutionNotifications
 			if len(notifs) != 1 {
