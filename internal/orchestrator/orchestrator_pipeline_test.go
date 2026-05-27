@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -167,6 +168,42 @@ func TestRunWithHumanReportMode(t *testing.T) {
 
 	if !filepath.IsAbs(result.ReportPath) || filepath.Ext(result.ReportPath) != ".md" {
 		t.Errorf("report path %q doesn't look like a .md file", result.ReportPath)
+	}
+}
+
+func TestRunWithHumanTemplateWrapperFile(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := createMinimalZIP(t, dir, "delivery.zip")
+	templatePath := filepath.Join(dir, "human-wrapper.tmpl")
+	if err := os.WriteFile(templatePath, []byte("BEGIN\n{{.Body}}\nEND"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = inputPath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+	cfg.ReportMode = config.ReportHuman
+	cfg.HumanRenderEngine = "template-wrapper"
+	cfg.HumanTemplateFile = templatePath
+
+	result := Run(context.Background(), cfg)
+
+	if result.ExitCode == ExitHardSecurity && result.Error != nil {
+		t.Fatalf("pipeline failed: %v", result.Error)
+	}
+
+	reportPath := filepath.Join(dir, "delivery.report.md")
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read human report: %v", err)
+	}
+	body := string(raw)
+	if !strings.HasPrefix(body, "BEGIN\n") {
+		t.Fatalf("expected wrapper prefix in report")
+	}
+	if !strings.HasSuffix(body, "END") {
+		t.Fatalf("expected wrapper suffix in report")
 	}
 }
 

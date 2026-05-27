@@ -65,6 +65,9 @@ func TestDefaultConfigHasSensibleValues(t *testing.T) {
 	if cfg.Language != "en" {
 		t.Errorf("Language = %q, want en", cfg.Language)
 	}
+	if cfg.HumanRenderEngine != "writer" {
+		t.Errorf("HumanRenderEngine = %q, want writer", cfg.HumanRenderEngine)
+	}
 	if cfg.WorkDir != os.TempDir() {
 		t.Errorf("WorkDir = %q, want %q", cfg.WorkDir, os.TempDir())
 	}
@@ -246,6 +249,10 @@ func TestConfigValidateRejectsInvalidConfig(t *testing.T) {
 	if err := os.WriteFile(inputFile, []byte("test"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	templateFile := filepath.Join(tmpDir, "tpl.txt")
+	if err := os.WriteFile(templateFile, []byte("{{.Body}}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name    string
@@ -259,6 +266,16 @@ func TestConfigValidateRejectsInvalidConfig(t *testing.T) {
 		{"input is directory", func(c *Config) { c.InputPath = tmpDir }, true},
 		{"output dir is file", func(c *Config) { c.OutputDir = inputFile }, true},
 		{"unsupported language", func(c *Config) { c.Language = "fr" }, true},
+		{"unsupported human render engine", func(c *Config) { c.HumanRenderEngine = "custom" }, true},
+		{"template document requires template file", func(c *Config) { c.HumanRenderEngine = "template-document" }, true},
+		{"template file requires non-writer engine", func(c *Config) {
+			c.HumanRenderEngine = "writer"
+			c.HumanTemplateFile = templateFile
+		}, true},
+		{"template wrapper with template file accepted", func(c *Config) {
+			c.HumanRenderEngine = "template-wrapper"
+			c.HumanTemplateFile = templateFile
+		}, false},
 		{"missing work dir", func(c *Config) { c.WorkDir = "" }, true},
 		{"nonexistent work dir", func(c *Config) { c.WorkDir = "/nonexistent/work-dir" }, true},
 		{"work dir is file", func(c *Config) { c.WorkDir = inputFile }, true},

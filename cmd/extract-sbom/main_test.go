@@ -142,6 +142,8 @@ func TestRootCmdFlagsExist(t *testing.T) {
 		"mode",
 		"report",
 		"language",
+		"human-render-engine",
+		"human-template-file",
 		"root-manufacturer",
 		"root-name",
 		"root-version",
@@ -310,6 +312,37 @@ func TestLoadConfigParsesGrypeFlag(t *testing.T) {
 	}
 	if !cfg.GrypeEnabled {
 		t.Fatal("GrypeEnabled = false, want true")
+	}
+}
+
+func TestLoadConfigParsesHumanRenderOptions(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tplPath := filepath.Join(dir, "human.tpl")
+	if err := os.WriteFile(tplPath, []byte("{{.Body}}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("human-render-engine", "template-wrapper"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("human-template-file", tplPath); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(cmd, []string{inputPath})
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+	if cfg.HumanRenderEngine != "template-wrapper" {
+		t.Fatalf("HumanRenderEngine = %q, want %q", cfg.HumanRenderEngine, "template-wrapper")
+	}
+	if cfg.HumanTemplateFile != tplPath {
+		t.Fatalf("HumanTemplateFile = %q, want %q", cfg.HumanTemplateFile, tplPath)
 	}
 }
 

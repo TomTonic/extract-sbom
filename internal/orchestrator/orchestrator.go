@@ -291,6 +291,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
+	var humanRenderOptions report.HumanRenderOptions
+	var humanOptionsErr error
+	switch cfg.ReportMode {
+	case config.ReportHuman, config.ReportBoth, config.ReportAll:
+		humanRenderOptions, humanOptionsErr = humanRenderOptionsFromConfig(cfg)
+	}
+
 	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
 	var reportPath string
 	var humanPath string
@@ -306,7 +313,18 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				fatalErr = fmt.Errorf("create report: %w", ferr)
 			}
 		} else {
-			if werr := report.GenerateHuman(buildReportData(), cfg.Language, f); werr != nil {
+			if humanOptionsErr != nil {
+				if cerr := f.Close(); cerr != nil {
+					addIssue("close-report-human", cerr)
+					if fatalErr == nil {
+						fatalErr = fmt.Errorf("close report: %w", cerr)
+					}
+				}
+				addIssue("write-report-human", humanOptionsErr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("write report: %w", humanOptionsErr)
+				}
+			} else if werr := report.GenerateHumanWithOptions(buildReportData(), cfg.Language, f, humanRenderOptions); werr != nil {
 				if cerr := f.Close(); cerr != nil {
 					addIssue("close-report-human", cerr)
 					if fatalErr == nil {
@@ -432,7 +450,18 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				fatalErr = fmt.Errorf("rewrite report: %w", rewriteErr)
 			}
 		} else {
-			if writeErr := report.GenerateHuman(buildReportData(), cfg.Language, f); writeErr != nil {
+			if humanOptionsErr != nil {
+				if closeErr := f.Close(); closeErr != nil {
+					addIssue("rewrite-report-human", closeErr)
+					if fatalErr == nil {
+						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
+					}
+				}
+				addIssue("rewrite-report-human", humanOptionsErr)
+				if fatalErr == nil {
+					fatalErr = fmt.Errorf("rewrite report: %w", humanOptionsErr)
+				}
+			} else if writeErr := report.GenerateHumanWithOptions(buildReportData(), cfg.Language, f, humanRenderOptions); writeErr != nil {
 				if closeErr := f.Close(); closeErr != nil {
 					addIssue("rewrite-report-human", closeErr)
 					if fatalErr == nil {
@@ -488,6 +517,43 @@ func sbomExtension(format string) string {
 	default:
 		return ".cdx.json"
 	}
+}
+
+// humanRenderOptionsFromConfig resolves human report renderer options from
+// runtime configuration, including optional template file loading.
+func humanRenderOptionsFromConfig(cfg config.Config) (report.HumanRenderOptions, error) {
+	engine := strings.TrimSpace(cfg.HumanRenderEngine)
+	if engine == "" || engine == "writer" {
+		return report.HumanRenderOptions{}, nil
+	}
+
+	var opts report.HumanRenderOptions
+	switch engine {
+	case "template-wrapper":
+		opts.Engine = report.HumanRenderEngineTemplateWrapper
+	case "template-document":
+		opts.Engine = report.HumanRenderEngineTemplateDocument
+	default:
+		return report.HumanRenderOptions{}, fmt.Errorf("unsupported human render engine: %q", engine)
+	}
+
+	templateFile := strings.TrimSpace(cfg.HumanTemplateFile)
+	if templateFile == "" {
+		return opts, nil
+	}
+
+	raw, err := os.ReadFile(templateFile)
+	if err != nil {
+		return report.HumanRenderOptions{}, fmt.Errorf("read human template file %q: %w", templateFile, err)
+	}
+
+	tpl := string(raw)
+	if opts.Engine == report.HumanRenderEngineTemplateWrapper {
+		opts.WrapperTemplate = tpl
+	} else {
+		opts.DocumentTemplate = tpl
+	}
+	return opts, nil
 }
 
 // treeHasHardSecurity reports whether any node in the extraction tree ended in

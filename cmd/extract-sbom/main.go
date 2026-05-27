@@ -57,6 +57,8 @@ func rootCmd() *cobra.Command {
 		reportStr    string
 		progress     string
 		language     string
+		humanEngine  string
+		templateFile string
 		mfg          string
 		name         string
 		version      string
@@ -156,6 +158,8 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&reportStr, "report", "human", "Report output mode: human, machine, both, html, sarif, or all")
 	cmd.Flags().StringVar(&progress, "progress", "normal", "Progress output verbosity: quiet, normal, or verbose")
 	cmd.Flags().StringVar(&language, "language", "en", "Report language: en or de")
+	cmd.Flags().StringVar(&humanEngine, "human-render-engine", defaults.HumanRenderEngine, "Human report renderer: writer, template-wrapper, or template-document")
+	cmd.Flags().StringVar(&templateFile, "human-template-file", "", "Path to text/template file for human template renderers")
 	cmd.Flags().StringVar(&mfg, "root-manufacturer", "", "Manufacturer/supplier for the SBOM root component")
 	cmd.Flags().StringVar(&name, "root-name", "", "Software/product name for the SBOM root component")
 	cmd.Flags().StringVar(&version, "root-version", "", "Version for the SBOM root component")
@@ -227,6 +231,8 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	cfg.WorkDir = v.GetString("work-dir")
 	cfg.SBOMFormat = v.GetString("format")
 	cfg.Language = v.GetString("language")
+	cfg.HumanRenderEngine = v.GetString("human-render-engine")
+	cfg.HumanTemplateFile = v.GetString("human-template-file")
 	cfg.GrypeEnabled = v.GetBool("grype")
 	cfg.RootMetadata.Manufacturer = v.GetString("root-manufacturer")
 	cfg.RootMetadata.Name = v.GetString("root-name")

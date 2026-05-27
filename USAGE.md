@@ -517,6 +517,25 @@ For the end-to-end processing model behind these progress messages, see
 Language for human-readable report. German (`de`) translates all narrative
 text; SBOM and machine report remain English.
 
+**`--human-render-engine writer|template-wrapper|template-document` (default: writer)**
+
+Selects the backend for Markdown human-report rendering.
+
+- `writer`: canonical deterministic writer backend (default).
+- `template-wrapper`: wraps canonical Markdown body (`{{.Body}}`) via `text/template`.
+- `template-document`: renders from a caller-provided document template using
+  pre-rendered section blocks.
+
+This option only affects human Markdown reports (`--report human|both|all`).
+
+**`--human-template-file <path>`**
+
+Path to a UTF-8 text/template file used by template renderers.
+
+- Required for `--human-render-engine template-document`.
+- Optional for `template-wrapper` (empty wrapper defaults to `{{.Body}}`).
+- Rejected for `writer` to avoid silently ignored configuration.
+
 ### Root Metadata
 
 Annotates the root component in the SBOM with procurement/supplier context.

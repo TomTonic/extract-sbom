@@ -258,21 +258,23 @@ func DefaultLimits() Limits {
 // Config is the central configuration for an extract-sbom run.
 // It is constructed from CLI flags and passed to all modules.
 type Config struct {
-	InputPath        string
-	OutputDir        string
-	WorkDir          string        // base directory for temporary extraction work
-	SBOMFormat       string        // "cyclonedx-json"
-	PolicyMode       PolicyMode    // Strict | Partial
-	InterpretMode    InterpretMode // Physical | InstallerSemantic
-	ReportMode       ReportMode    // Human | Machine | Both
-	ProgressLevel    ProgressLevel // Quiet | Normal | Verbose
-	Language         string        // "en" | "de"
-	GrypeEnabled     bool          // GrypeEnabled enables optional Grype vulnerability enrichment when true.
-	RootMetadata     RootMetadata
-	Unsafe           bool
-	Limits           Limits
-	ProgressFn       ProgressReporter // optional runtime progress sink
-	ParallelScanners int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
+	InputPath         string
+	OutputDir         string
+	WorkDir           string        // base directory for temporary extraction work
+	SBOMFormat        string        // "cyclonedx-json"
+	PolicyMode        PolicyMode    // Strict | Partial
+	InterpretMode     InterpretMode // Physical | InstallerSemantic
+	ReportMode        ReportMode    // Human | Machine | Both
+	ProgressLevel     ProgressLevel // Quiet | Normal | Verbose
+	Language          string        // "en" | "de"
+	HumanRenderEngine string        // writer | template-wrapper | template-document
+	HumanTemplateFile string        // path to text/template file used by template renderers
+	GrypeEnabled      bool          // GrypeEnabled enables optional Grype vulnerability enrichment when true.
+	RootMetadata      RootMetadata
+	Unsafe            bool
+	Limits            Limits
+	ProgressFn        ProgressReporter // optional runtime progress sink
+	ParallelScanners  int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
 	// Passwords is the ordered list of candidate passwords to try when an
 	// encrypted archive is encountered during extraction. Passwords are tried
 	// in the order given; the first that successfully unlocks the archive is
@@ -321,17 +323,18 @@ func defaultSkipExtensions() []string {
 // InputPath and OutputDir must still be set by the caller.
 func DefaultConfig() Config {
 	return Config{
-		SBOMFormat:       "cyclonedx-json",
-		PolicyMode:       PolicyStrict,
-		InterpretMode:    InterpretInstallerSemantic,
-		ReportMode:       ReportHuman,
-		ProgressLevel:    ProgressNormal,
-		Language:         "en",
-		GrypeEnabled:     false,
-		WorkDir:          os.TempDir(),
-		Limits:           DefaultLimits(),
-		ParallelScanners: defaultParallelScanners(),
-		SkipExtensions:   defaultSkipExtensions(),
+		SBOMFormat:        "cyclonedx-json",
+		PolicyMode:        PolicyStrict,
+		InterpretMode:     InterpretInstallerSemantic,
+		ReportMode:        ReportHuman,
+		ProgressLevel:     ProgressNormal,
+		Language:          "en",
+		HumanRenderEngine: "writer",
+		GrypeEnabled:      false,
+		WorkDir:           os.TempDir(),
+		Limits:            DefaultLimits(),
+		ParallelScanners:  defaultParallelScanners(),
+		SkipExtensions:    defaultSkipExtensions(),
 	}
 }
 
@@ -411,6 +414,22 @@ func (c *Config) Validate() error {
 		// valid
 	default:
 		return fmt.Errorf("unsupported language: %q (valid: en, de)", c.Language)
+	}
+
+	switch c.HumanRenderEngine {
+	case "", "writer", "template-wrapper", "template-document":
+		// valid
+	default:
+		return fmt.Errorf("unsupported human render engine: %q (valid: writer, template-wrapper, template-document)", c.HumanRenderEngine)
+	}
+
+	if c.HumanRenderEngine == "template-document" && strings.TrimSpace(c.HumanTemplateFile) == "" {
+		return fmt.Errorf("human template file is required when human render engine is template-document")
+	}
+	if strings.TrimSpace(c.HumanTemplateFile) != "" {
+		if c.HumanRenderEngine == "" || c.HumanRenderEngine == "writer" {
+			return fmt.Errorf("human template file requires human render engine template-wrapper or template-document")
+		}
 	}
 
 	switch c.SBOMFormat {

@@ -836,6 +836,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   changing core report semantics.
 - `GenerateHuman` delegates to `GenerateHumanWithOptions` (zero-value options),
   so backend selection and validation are centralized in one code path.
+- Runtime selection of the human renderer backend is configurable via
+  `Config.HumanRenderEngine` and `Config.HumanTemplateFile`.
+  The orchestrator resolves these into `HumanRenderOptions` and keeps
+  machine/HTML/SARIF report generation unaffected.
 - `GenerateHumanWithTemplateDocument` is optional and receives deterministic,
   pre-rendered section blocks. This allows layout customization (reordering,
   selective section inclusion) without moving report logic into templates.
