@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 
+	htmlpkg "github.com/TomTonic/extract-sbom/internal/report/internal/html"
 	humanpkg "github.com/TomTonic/extract-sbom/internal/report/internal/human"
 )
 
@@ -107,4 +108,9 @@ func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrappe
 // generation from the canonical writer helpers.
 func GenerateHumanWithTemplateDocument(data ReportData, lang string, w io.Writer, documentTemplate string) error {
 	return humanpkg.GenerateHumanWithTemplateDocument(data, lang, w, documentTemplate)
+}
+
+// GenerateHTML writes a self-contained HTML audit report to w.
+func GenerateHTML(data ReportData, language string, w io.Writer) error {
+	return htmlpkg.Generate(data, language, w)
 }

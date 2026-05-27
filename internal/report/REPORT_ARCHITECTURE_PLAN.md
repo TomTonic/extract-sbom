@@ -201,7 +201,7 @@ Status values:
 
 ### REP-ARCH-013 - Normalize HTML package structure and naming
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Move HTML report code into `internal/report/internal/html` and
   normalize naming so HTML-specific i18n is package-local `i18n.go`, not a
   root-level special case.
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-013 - Normalize HTML package structure and naming`
+`REP-ARCH-014 - Move machine and SARIF generators behind package boundaries`

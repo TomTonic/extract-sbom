@@ -1,4 +1,4 @@
-package report
+package html
 
 import "github.com/TomTonic/extract-sbom/internal/extract"
 

@@ -776,10 +776,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 **Implementation layout (current):**
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
-- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human-render facade delegating into the internal human package.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human/HTML facades delegating into internal report packages.
 - `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, occurrence/vulnerability/suppression helpers, and human-specific i18n).
+- `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
 - `report_machine.go`: structured machine JSON report generator.
-- `report_html.go`, `report_html_viewmodel.go`, `report_html_vuln.go`, `report_html_extraction.go`, `report_html_i18n.go`: HTML report orchestration, localized labels, view-model shaping, vulnerability rows, and extraction-log projection.
 - `report_sarif.go`: SARIF 2.1.0 generator with deterministic rule/result ordering and explicit enrichment audit state.
 
 **Required content (per DESIGN.md §10.4):**
@@ -825,6 +825,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   `internal/report/internal/human`; the root package now keeps only the thin
   orchestrator-facing human facade while human-specific helpers and tests live
   next to the human implementation.
+- The active HTML report execution path now lives in
+  `internal/report/internal/html`; the root package keeps only the thin
+  orchestrator-facing `GenerateHTML` facade while HTML-specific labels,
+  view-model helpers, and tests are package-local.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.
