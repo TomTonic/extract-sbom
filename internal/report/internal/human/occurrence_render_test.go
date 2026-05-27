@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"bytes"
@@ -9,6 +9,28 @@ import (
 
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
+
+func TestUniqueSortedPathsEmpty(t *testing.T) {
+	t.Parallel()
+	if got := uniqueSortedPaths(nil); got != nil {
+		t.Fatalf("uniqueSortedPaths(nil) = %v, want nil", got)
+	}
+}
+
+func TestUniqueSortedPathsDedupsAndSorts(t *testing.T) {
+	t.Parallel()
+	input := []string{"b/path", "a/path", "", "b/path", "c/path", ""}
+	got := uniqueSortedPaths(input)
+	want := []string{"a/path", "b/path", "c/path"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
 
 // TestGenerateHumanComponentIndexUsesFinalBOMRefs verifies that the human
 // report exposes final component occurrence IDs from the assembled SBOM and
@@ -39,8 +61,8 @@ func TestGenerateHumanComponentIndexUsesFinalBOMRefs(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 
@@ -107,8 +129,8 @@ func TestGenerateHumanComponentIndexFiltersAbsPathNames(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 
@@ -155,8 +177,8 @@ func TestGenerateHumanComponentIndexMergesWeakDuplicatePlaceholders(t *testing.T
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 
@@ -189,8 +211,8 @@ func TestGenerateHumanComponentIndexPrunesAncestorDeliveryPaths(t *testing.T) {
 	}}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 
@@ -242,8 +264,8 @@ func TestGenerateHumanComponentIndexRendersPackageLevelVulnerabilityStatus(t *te
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 
@@ -286,8 +308,8 @@ func TestGenerateHumanComponentIndexRendersOccurrenceLevelVulnerabilityWhenBlock
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
-		t.Fatalf("GenerateHuman error: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions error: %v", err)
 	}
 	output := buf.String()
 

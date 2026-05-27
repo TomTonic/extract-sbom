@@ -1,23 +1,17 @@
-package report
+package human
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
 )
-
-func normalizeHumanGeneratedTimestamp(s string) string {
-	tsPattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
-	return tsPattern.ReplaceAllString(s, "<generated-at>")
-}
 
 func TestGenerateHumanWithTemplateIdentityWrapperMatchesDefault(t *testing.T) {
 	data := makeTestReportData()
 
 	var base bytes.Buffer
-	if err := GenerateHuman(data, "en", &base); err != nil {
-		t.Fatalf("GenerateHuman: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &base, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions: %v", err)
 	}
 
 	var wrapped bytes.Buffer
@@ -104,23 +98,23 @@ func TestGenerateHumanWithTemplateDocumentInvalidTemplateReturnsError(t *testing
 	}
 }
 
-func TestGenerateHumanWithOptionsDefaultMatchesGenerateHuman(t *testing.T) {
+func TestGenerateHumanWithOptionsDefaultMatchesWriterEngine(t *testing.T) {
 	data := makeTestReportData()
 
 	var base bytes.Buffer
-	if err := GenerateHuman(data, "en", &base); err != nil {
-		t.Fatalf("GenerateHuman: %v", err)
+	if err := GenerateHumanWithOptions(data, "en", &base, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateHumanWithOptions: %v", err)
 	}
 
-	var viaOpts bytes.Buffer
-	if err := GenerateHumanWithOptions(data, "en", &viaOpts, HumanRenderOptions{}); err != nil {
+	var viaWriter bytes.Buffer
+	if err := GenerateHumanWithOptions(data, "en", &viaWriter, RenderOptions{Engine: RenderEngineWriter}); err != nil {
 		t.Fatalf("GenerateHumanWithOptions: %v", err)
 	}
 
 	baseNormalized := normalizeHumanGeneratedTimestamp(base.String())
-	viaOptsNormalized := normalizeHumanGeneratedTimestamp(viaOpts.String())
-	if baseNormalized != viaOptsNormalized {
-		t.Fatalf("options default changed report body")
+	viaWriterNormalized := normalizeHumanGeneratedTimestamp(viaWriter.String())
+	if baseNormalized != viaWriterNormalized {
+		t.Fatalf("default options changed report body")
 	}
 }
 
@@ -128,7 +122,7 @@ func TestGenerateHumanWithOptionsRejectsUnknownEngine(t *testing.T) {
 	data := makeTestReportData()
 
 	var out bytes.Buffer
-	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{Engine: HumanRenderEngine("unknown")})
+	err := GenerateHumanWithOptions(data, "en", &out, RenderOptions{Engine: RenderEngine("unknown")})
 	if err == nil {
 		t.Fatal("expected unsupported-engine error")
 	}
@@ -138,8 +132,8 @@ func TestGenerateHumanWithOptionsTemplateWrapper(t *testing.T) {
 	data := makeTestReportData()
 
 	var out bytes.Buffer
-	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{
-		Engine:          HumanRenderEngineTemplateWrapper,
+	err := GenerateHumanWithOptions(data, "en", &out, RenderOptions{
+		Engine:          RenderEngineTemplateWrapper,
 		WrapperTemplate: "HEAD\n{{.Body}}\nTAIL",
 	})
 	if err != nil {
@@ -159,7 +153,7 @@ func TestGenerateHumanWithOptionsTemplateDocumentRequiresTemplate(t *testing.T) 
 	data := makeTestReportData()
 
 	var out bytes.Buffer
-	err := GenerateHumanWithOptions(data, "en", &out, HumanRenderOptions{Engine: HumanRenderEngineTemplateDocument})
+	err := GenerateHumanWithOptions(data, "en", &out, RenderOptions{Engine: RenderEngineTemplateDocument})
 	if err == nil {
 		t.Fatal("expected missing document template error")
 	}

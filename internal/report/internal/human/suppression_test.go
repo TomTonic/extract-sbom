@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"bytes"
@@ -9,6 +9,27 @@ import (
 
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 )
+
+func TestSortSuppressionRecords(t *testing.T) {
+	t.Parallel()
+
+	records := []assembly.SuppressionRecord{
+		{DeliveryPath: "z/path", Component: cdx.Component{Name: "zlib"}},
+		{DeliveryPath: "a/path", Component: cdx.Component{Name: "alpha"}},
+		{DeliveryPath: "a/path", Component: cdx.Component{Name: "beta"}},
+	}
+
+	sortSuppressionRecords(records)
+	if records[0].DeliveryPath != "a/path" || records[0].Component.Name != "alpha" {
+		t.Fatalf("first record = %+v, want a/path alpha", records[0])
+	}
+	if records[1].DeliveryPath != "a/path" || records[1].Component.Name != "beta" {
+		t.Fatalf("second record = %+v, want a/path beta", records[1])
+	}
+	if records[2].DeliveryPath != "z/path" {
+		t.Fatalf("third record = %+v, want z/path", records[2])
+	}
+}
 
 func TestWriteSuppressionReportUsesUniformTablesSortedAndLinked(t *testing.T) {
 	t.Parallel()
@@ -139,20 +160,20 @@ func TestWriteSuppressionReportUsesUniformTablesSortedAndLinked(t *testing.T) {
 func TestWriteSuppressionReportExplainsMissingSuppressedByLink(t *testing.T) {
 	t.Parallel()
 
-	bom := &cdx.BOM{Components: &[]cdx.Component{
-		{
-			BOMRef:     "extract-sbom:KNOWN_COMP",
-			Type:       cdx.ComponentTypeLibrary,
-			Name:       "known",
-			PackageURL: "pkg:generic/known@1.0.0",
-			Version:    "1.0.0",
-			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "known/path"}},
-		},
-	}}
+	bom := &cdx.BOM{Components: &[]cdx.Component{{
+		BOMRef:     "extract-sbom:KNOWN_COMP",
+		Type:       cdx.ComponentTypeLibrary,
+		Name:       "known",
+		PackageURL: "pkg:generic/known@1.0.0",
+		Version:    "1.0.0",
+		Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "known/path"}},
+	}}}
 
-	suppressions := []assembly.SuppressionRecord{
-		{Reason: assembly.SuppressionFSArtifact, DeliveryPath: "missing/path", Component: cdx.Component{Name: "supp-missing"}},
-	}
+	suppressions := []assembly.SuppressionRecord{{
+		Reason:       assembly.SuppressionFSArtifact,
+		DeliveryPath: "missing/path",
+		Component:    cdx.Component{Name: "supp-missing"},
+	}}
 
 	var buf bytes.Buffer
 	writeSuppressionReport(&buf, suppressions, bom, getTranslations("en"))
@@ -184,9 +205,11 @@ func TestWriteSuppressionReportDoesNotLinkToFilteredNonOccurrenceComponents(t *t
 		},
 	}}
 
-	suppressions := []assembly.SuppressionRecord{
-		{Reason: assembly.SuppressionFSArtifact, DeliveryPath: "good/path.dll", Component: cdx.Component{Name: "/tmp/extract-sbom-12345/good/path.dll"}},
-	}
+	suppressions := []assembly.SuppressionRecord{{
+		Reason:       assembly.SuppressionFSArtifact,
+		DeliveryPath: "good/path.dll",
+		Component:    cdx.Component{Name: "/tmp/extract-sbom-12345/good/path.dll"},
+	}}
 
 	var buf bytes.Buffer
 	writeSuppressionReport(&buf, suppressions, bom, getTranslations("en"))

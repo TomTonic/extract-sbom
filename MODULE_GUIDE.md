@@ -776,15 +776,8 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 **Implementation layout (current):**
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
-- `report.go`, `report_types.go`: public facade API, input summary hashing, and root-level aliases for the shared report contracts.
-- `report_human_options.go`, `report_human_renderer.go`: thin root-facade wrappers that delegate human rendering into the internal human package while keeping orchestrator integration stable.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human-render facade delegating into the internal human package.
 - `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, occurrence/vulnerability/suppression helpers, and human-specific i18n).
-- `report_human_compat.go`: temporary root compatibility helpers still used by remaining root-package code during the ongoing package extraction.
-- `report_i18n_core.go`, `report_i18n_human_en.go`, `report_i18n_human_de.go`: compile-time localization catalogs and selector logic.
-- `report_occurrence_collect.go`, `report_occurrence_group.go`, `report_occurrence_render.go`: occurrence extraction, grouping, ordering, dedupe, and rendering.
-- `report_vuln.go`, `report_vuln_format.go`, `report_vuln_enrichment_helpers.go`: vulnerability summary/detail rendering, formatting/reference helpers, and shared enrichment-state normalization.
-- `report_suppression.go`: suppression appendix rendering and replacement-link resolution.
-- `report_stats_tree.go`: extraction-tree rendering, residual-risk section, and phase statistics collectors.
 - `report_machine.go`: structured machine JSON report generator.
 - `report_html.go`, `report_html_viewmodel.go`, `report_html_vuln.go`, `report_html_extraction.go`, `report_html_i18n.go`: HTML report orchestration, localized labels, view-model shaping, vulnerability rows, and extraction-log projection.
 - `report_sarif.go`: SARIF 2.1.0 generator with deterministic rule/result ordering and explicit enrichment audit state.
@@ -829,8 +822,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   root `report` package aliases them so orchestrator integration can stay
   stable while implementation moves into subpackages.
 - The active human report execution path now lives in
-  `internal/report/internal/human`; the root package currently retains a small
-  compatibility surface while the remaining domain helpers and tests are moved.
+  `internal/report/internal/human`; the root package now keeps only the thin
+  orchestrator-facing human facade while human-specific helpers and tests live
+  next to the human implementation.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.

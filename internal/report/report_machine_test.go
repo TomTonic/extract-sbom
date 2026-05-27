@@ -8,6 +8,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
@@ -150,5 +151,27 @@ func TestGenerateMachineContainsTiming(t *testing.T) {
 
 	if report["duration"] == nil {
 		t.Error("missing duration in JSON report")
+	}
+}
+
+func TestBuildMachineTreeNilReturnsNil(t *testing.T) {
+	t.Parallel()
+	if got := buildMachineTree(nil); got != nil {
+		t.Fatal("buildMachineTree(nil) should return nil")
+	}
+}
+
+func TestBuildMachineDecisions(t *testing.T) {
+	t.Parallel()
+
+	decisions := []machineDecision{{NodePath: "root.zip", Action: "continue"}}
+	if len(decisions) != 1 {
+		t.Fatal("expected one decision entry")
+	}
+	if decisions[0].NodePath != "root.zip" || decisions[0].Action != "continue" {
+		t.Fatalf("unexpected machine decision: %+v", decisions[0])
+	}
+	if got := buildMachineTree(&extract.ExtractionNode{Path: "root.zip"}); got == nil || got.Path != "root.zip" {
+		t.Fatalf("unexpected machine tree root: %+v", got)
 	}
 }

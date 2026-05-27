@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	humanpkg "github.com/TomTonic/extract-sbom/internal/report/internal/human"
 )
 
 // ComputeInputSummary computes the file hashes and metadata for the input file.
@@ -61,4 +63,48 @@ func ComputeInputSummary(path string) (InputSummary, error) {
 // Returns an error if writing fails.
 func GenerateHuman(data ReportData, lang string, w io.Writer) error {
 	return GenerateHumanWithOptions(data, lang, w, HumanRenderOptions{})
+}
+
+// HumanRenderEngine selects the backend used for human Markdown rendering.
+type HumanRenderEngine = humanpkg.RenderEngine
+
+const (
+	// HumanRenderEngineWriter uses the canonical deterministic writer backend.
+	HumanRenderEngineWriter HumanRenderEngine = humanpkg.RenderEngineWriter
+	// HumanRenderEngineTemplateWrapper wraps the canonical report body via a
+	// text/template wrapper.
+	HumanRenderEngineTemplateWrapper HumanRenderEngine = humanpkg.RenderEngineTemplateWrapper
+	// HumanRenderEngineTemplateDocument renders from a caller-supplied
+	// document template with pre-rendered section blocks.
+	HumanRenderEngineTemplateDocument HumanRenderEngine = humanpkg.RenderEngineTemplateDocument
+)
+
+// HumanRenderOptions configures optional human report rendering backends.
+//
+// Zero value means deterministic default writer rendering.
+type HumanRenderOptions = humanpkg.RenderOptions
+
+// GenerateHumanWithOptions writes the human report using the selected rendering
+// backend. Unknown engine values return an error.
+func GenerateHumanWithOptions(data ReportData, lang string, w io.Writer, opts HumanRenderOptions) error {
+	return humanpkg.GenerateHumanWithOptions(data, lang, w, opts)
+}
+
+// GenerateHumanWithTemplate writes the human report through an optional
+// text/template wrapper. The wrapper receives one field, Body, containing the
+// complete deterministic Markdown report produced by the default writer engine.
+//
+// When wrapperTemplate is empty, "{{.Body}}" is used.
+func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrapperTemplate string) error {
+	return humanpkg.GenerateHumanWithTemplate(data, lang, w, wrapperTemplate)
+}
+
+// GenerateHumanWithTemplateDocument renders the human report using a
+// caller-provided text/template fed with pre-rendered Markdown section blocks.
+//
+// This optional API enables structural customization (for example reordered
+// sections or custom framing) while preserving deterministic section content
+// generation from the canonical writer helpers.
+func GenerateHumanWithTemplateDocument(data ReportData, lang string, w io.Writer, documentTemplate string) error {
+	return humanpkg.GenerateHumanWithTemplateDocument(data, lang, w, documentTemplate)
 }

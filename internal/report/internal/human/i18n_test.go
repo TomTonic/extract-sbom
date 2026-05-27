@@ -1,7 +1,4 @@
-// Translation parity tests: Verify that the EN and DE translation bundles
-// have identical non-empty coverage across all fields. A missing or empty
-// translation would produce blank report sections at runtime.
-package report
+package human
 
 import (
 	"reflect"
@@ -38,9 +35,7 @@ func TestTranslationBundlesHaveNoEmptyFields(t *testing.T) {
 }
 
 // TestTranslationBundlesHaveSameFields verifies that EN and DE bundles
-// are structurally identical — every field that is non-empty in EN must
-// also be non-empty in DE and vice versa. This catches asymmetric
-// additions where a new field is populated in one language but not the other.
+// are structurally identical.
 func TestTranslationBundlesHaveSameFields(t *testing.T) {
 	t.Parallel()
 
