@@ -156,7 +156,7 @@ Status values:
 
 ### REP-ARCH-006 - HTML generator domain extraction
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Split `report_html.go` into:
   - template/view model builder
   - vulnerability table formatter
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-006 - HTML generator domain extraction`
+`REP-ARCH-007 - Machine/SARIF helper normalization`
