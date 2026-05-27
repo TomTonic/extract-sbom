@@ -335,6 +335,8 @@ func DefaultConfig() Config {
 	}
 }
 
+// defaultParallelScanners chooses a bounded worker default derived from
+// GOMAXPROCS so scanning remains parallel without oversubscribing hosts.
 func defaultParallelScanners() int {
 	workers := runtime.GOMAXPROCS(0)
 	if workers < 1 {
@@ -451,6 +453,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// validateWritableDir verifies write/delete permissions by creating and
+// removing a temporary probe directory under dir.
 func validateWritableDir(dir string, probePattern string) error {
 	probeDir, err := os.MkdirTemp(dir, probePattern)
 	if err != nil {

@@ -490,6 +490,8 @@ func sbomExtension(format string) string {
 	}
 }
 
+// treeHasHardSecurity reports whether any node in the extraction tree ended in
+// a hard security block state.
 func treeHasHardSecurity(node *extract.ExtractionNode) bool {
 	if node == nil {
 		return false
@@ -505,6 +507,8 @@ func treeHasHardSecurity(node *extract.ExtractionNode) bool {
 	return false
 }
 
+// treeHasIncomplete reports whether extraction contains failed, skipped, or
+// tool-missing nodes that indicate incomplete analysis.
 func treeHasIncomplete(node *extract.ExtractionNode) bool {
 	if node == nil {
 		return false
@@ -521,6 +525,7 @@ func treeHasIncomplete(node *extract.ExtractionNode) bool {
 	return false
 }
 
+// hasScanFailures reports whether any scan task returned an execution error.
 func hasScanFailures(scans []scan.ScanResult) bool {
 	for _, scanResult := range scans {
 		if scanResult.Error != nil {
