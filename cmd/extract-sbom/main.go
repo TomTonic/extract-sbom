@@ -33,12 +33,17 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/orchestrator"
 )
 
+// main executes the CLI command and maps setup/validation failures to exit 2.
 func main() {
 	if err := rootCmd().Execute(); err != nil {
 		os.Exit(2)
 	}
 }
 
+// rootCmd builds the top-level Cobra command and wires all runtime flags.
+//
+// The command delegates configuration resolution to loadConfig and then invokes
+// the orchestrator pipeline with progress/report output suitable for CLI use.
 func rootCmd() *cobra.Command {
 	bi := buildinfo.Read()
 
@@ -172,6 +177,10 @@ Configuration can be set via:
 	return cmd
 }
 
+// loadConfig resolves the effective runtime configuration from flags,
+// environment variables, optional YAML config, and built-in defaults.
+//
+// Precedence is: CLI flags > environment > config file > defaults.
 func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	v := viper.New()
 	v.SetConfigName(".extract-sbom")
@@ -329,6 +338,10 @@ const (
 	maxPasswordCount     = 10_000
 )
 
+// loadPasswordFile returns all usable passwords from path in file order.
+//
+// Empty lines and comment lines ('#') are skipped. Size and line-count limits
+// are enforced to prevent unbounded extraction retry amplification.
 func loadPasswordFile(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
