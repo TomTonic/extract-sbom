@@ -123,7 +123,7 @@ Status values:
 
 ### REP-ARCH-003 - Human section writer split
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Break `report_human_main.go` into section-domain files:
   - `report_human_sections_summary.go`
   - `report_human_sections_process.go`
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-003 - Human section writer split`
+`REP-ARCH-004 - i18n catalog modularization`
