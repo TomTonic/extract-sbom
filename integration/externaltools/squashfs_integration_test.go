@@ -103,10 +103,11 @@ case "$outarg" in
   -o*) outdir="${outarg#-o}" ;;
   *) exit 42 ;;
 esac
-mkdir -p "$outdir"
+/bin/mkdir -p "$outdir"
 printf 'payload' > "$outdir/extracted.bin"
 `)
-	prependPath(t, binDir)
+	// Keep PATH hermetic so a host-installed unsquashfs cannot be discovered.
+	t.Setenv("PATH", binDir)
 
 	input := createSquashfsInput(t, dir)
 	cfg := baseConfig(input, dir)
