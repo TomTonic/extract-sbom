@@ -134,7 +134,7 @@ Status values:
 
 ### REP-ARCH-004 - i18n catalog modularization
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Split `report_i18n.go` by domain while preserving key coverage and
   lookup behavior:
   - `report_i18n_core.go`
@@ -220,4 +220,4 @@ For every future refactoring PR/commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-004 - i18n catalog modularization`
+`REP-ARCH-005 - Human renderer backend hard boundaries`
