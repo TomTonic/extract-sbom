@@ -1,8 +1,6 @@
 package json
 
 import (
-	"sort"
-
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
@@ -145,9 +143,9 @@ func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, i
 				groupRefs = append(groupRefs, componentID)
 			}
 		}
-		groupRefs = dedupeSortedStrings(sortedStrings(groupRefs))
+		groupRefs = domain.SortedUniqueStrings(groupRefs)
 		rows = append(rows, projectionRowV2{
-			SourceRefs: fallbackSourceRefs(groupRefs),
+			SourceRefs: domain.NormalizeProjectionRefs(groupRefs),
 			Data: map[string]any{
 				"kind":            "package-group",
 				"anchorId":        groups[i].AnchorID,
@@ -221,7 +219,7 @@ func buildMarkdownProjectionRows(entities entitiesV2, extractionRows, vulnerabil
 	anchorRows := make([]projectionRowV2, 0)
 
 	for _, section := range sections {
-		refs := preferredOrFallback(section.refs, fallback)
+		refs := domain.PreferredRefs(section.refs, fallback)
 		if len(refs) == 0 {
 			continue
 		}
@@ -270,16 +268,16 @@ func buildHTMLProjectionRows(data ReportData, entities entitiesV2, extractionRow
 	tableModels := make([]projectionRowV2, 0, 3)
 
 	summaryCards = append(summaryCards,
-		projectionRowV2{SourceRefs: preferredOrFallback(collectComponentIDs(entities.Components), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "components", "count": len(entities.Components)}},
-		projectionRowV2{SourceRefs: preferredOrFallback(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "vulnerabilities", "count": len(entities.Vulnerabilities), "state": vulnerabilityStateValue(data.Vulnerabilities)}},
-		projectionRowV2{SourceRefs: preferredOrFallback(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "issues", "count": len(entities.Issues)}},
-		projectionRowV2{SourceRefs: preferredOrFallback(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "extraction", "count": len(extractionRows)}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectComponentIDs(entities.Components), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "components", "count": len(entities.Components)}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "vulnerabilities", "count": len(entities.Vulnerabilities), "state": vulnerabilityStateValue(data.Vulnerabilities)}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "issues", "count": len(entities.Issues)}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "extraction", "count": len(extractionRows)}},
 	)
 
 	tableModels = append(tableModels,
-		projectionRowV2{SourceRefs: preferredOrFallback(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "vulnerabilities", "rowCount": len(vulnerabilityRows), "columns": []string{"vulnerabilityId", "severity", "packageName", "installed"}}},
-		projectionRowV2{SourceRefs: preferredOrFallback(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "issues", "rowCount": len(issueRows), "columns": []string{"stage", "message"}}},
-		projectionRowV2{SourceRefs: preferredOrFallback(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "extraction-log", "rowCount": len(extractionRows), "columns": []string{"path", "format", "status", "tool", "detail"}}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "vulnerabilities", "rowCount": len(vulnerabilityRows), "columns": []string{"vulnerabilityId", "severity", "packageName", "installed"}}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "issues", "rowCount": len(issueRows), "columns": []string{"stage", "message"}}},
+		projectionRowV2{SourceRefs: domain.PreferredRefs(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "extraction-log", "rowCount": len(extractionRows), "columns": []string{"path", "format", "status", "tool", "detail"}}},
 	)
 
 	return summaryCards, tableModels
@@ -310,36 +308,14 @@ func sourceRefsOrNil(ref string) []string {
 }
 
 // preferredOrFallback returns refs when present, otherwise fallback.
-func preferredOrFallback(refs []string, fallback []string) []string {
-	if len(refs) > 0 {
-		return refs
-	}
-	return fallback
-}
-
-// fallbackSourceRefs keeps schema-valid empty refs when no entity refs are available.
-func fallbackSourceRefs(refs []string) []string {
-	if len(refs) > 0 {
-		return refs
-	}
-	return []string{}
-}
-
 // firstProjectionSourceRef picks a stable fallback ID for projection rows.
 func firstProjectionSourceRef(entities entitiesV2) []string {
-	if ids := collectNodeIDs(entities.Nodes); len(ids) > 0 {
-		return ids[:1]
-	}
-	if ids := collectComponentIDs(entities.Components); len(ids) > 0 {
-		return ids[:1]
-	}
-	if ids := collectIssueIDs(entities.Issues); len(ids) > 0 {
-		return ids[:1]
-	}
-	if ids := collectScanTaskIDs(entities.ScanTasks); len(ids) > 0 {
-		return ids[:1]
-	}
-	return nil
+	return domain.FirstNonEmptyRefs(
+		collectNodeIDs(entities.Nodes),
+		collectComponentIDs(entities.Components),
+		collectIssueIDs(entities.Issues),
+		collectScanTaskIDs(entities.ScanTasks),
+	)
 }
 
 // collectNodeIDs extracts node entity IDs in order.
@@ -392,28 +368,6 @@ func collectIssueIDs(in []issueEntityV2) []string {
 	out := make([]string, 0, len(in))
 	for i := range in {
 		out = append(out, in[i].ID)
-	}
-	return out
-}
-
-// sortedStrings returns a sorted copy of the input slice.
-func sortedStrings(in []string) []string {
-	out := append([]string(nil), in...)
-	sort.Strings(out)
-	return out
-}
-
-// dedupeSortedStrings compacts adjacent duplicate values in a sorted string slice.
-func dedupeSortedStrings(in []string) []string {
-	if len(in) < 2 {
-		return in
-	}
-	out := in[:1]
-	for i := 1; i < len(in); i++ {
-		if in[i] == in[i-1] {
-			continue
-		}
-		out = append(out, in[i])
 	}
 	return out
 }
