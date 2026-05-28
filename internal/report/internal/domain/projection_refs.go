@@ -51,3 +51,20 @@ func SortedUniqueStrings(in []string) []string {
 	}
 	return out[:writeIdx]
 }
+
+// SortedUniqueNonEmptyStrings returns sorted unique values while skipping empty strings.
+func SortedUniqueNonEmptyStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+
+	filtered := make([]string, 0, len(in))
+	for i := range in {
+		if in[i] == "" {
+			continue
+		}
+		filtered = append(filtered, in[i])
+	}
+
+	return SortedUniqueStrings(filtered)
+}

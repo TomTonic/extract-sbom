@@ -307,7 +307,6 @@ func sourceRefsOrNil(ref string) []string {
 	return []string{ref}
 }
 
-// preferredOrFallback returns refs when present, otherwise fallback.
 // firstProjectionSourceRef picks a stable fallback ID for projection rows.
 func firstProjectionSourceRef(entities entitiesV2) []string {
 	return domain.FirstNonEmptyRefs(

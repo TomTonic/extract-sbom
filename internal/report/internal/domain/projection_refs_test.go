@@ -49,3 +49,19 @@ func TestSortedUniqueStrings(t *testing.T) {
 		t.Fatalf("SortedUniqueStrings modified input: %v", in)
 	}
 }
+
+func TestSortedUniqueNonEmptyStrings(t *testing.T) {
+	t.Parallel()
+
+	in := []string{"b", "", "a", "b", "", "c", "a"}
+	if got := SortedUniqueNonEmptyStrings(in); !reflect.DeepEqual(got, []string{"a", "b", "c"}) {
+		t.Fatalf("SortedUniqueNonEmptyStrings = %v, want [a b c]", got)
+	}
+	if !reflect.DeepEqual(in, []string{"b", "", "a", "b", "", "c", "a"}) {
+		t.Fatalf("SortedUniqueNonEmptyStrings modified input: %v", in)
+	}
+
+	if got := SortedUniqueNonEmptyStrings([]string{"", ""}); got != nil {
+		t.Fatalf("SortedUniqueNonEmptyStrings empty-only = %v, want nil", got)
+	}
+}
