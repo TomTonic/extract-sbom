@@ -33,23 +33,7 @@ func writeScanNoPackageIdentitiesSubsection(w io.Writer, scn scanStats, t transl
 
 // uniqueSortedPaths removes empty/duplicate paths and returns a sorted copy.
 func uniqueSortedPaths(paths []string) []string {
-	if len(paths) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(paths))
-	unique := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		unique = append(unique, p)
-	}
-	sort.Strings(unique)
-	return unique
+	return domain.SortedUniqueNonEmptyStrings(paths)
 }
 
 // writeExtensionFilterSection documents which file extensions were configured

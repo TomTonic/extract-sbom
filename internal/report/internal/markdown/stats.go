@@ -160,20 +160,7 @@ func samplePaths(paths []string, noneValue string) string {
 		return noneValue
 	}
 
-	unique := make([]string, 0, len(paths))
-	seen := make(map[string]struct{}, len(paths))
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if _, ok := seen[p]; ok {
-			continue
-		}
-		seen[p] = struct{}{}
-		unique = append(unique, p)
-	}
-
-	sort.Strings(unique)
+	unique := domain.SortedUniqueNonEmptyStrings(paths)
 	if len(unique) <= maxCount {
 		return strings.Join(unique, "; ")
 	}
