@@ -15,10 +15,12 @@ import (
 )
 
 // entityIndexV2 stores lookup maps used while building cross-referenced entities.
+// bomRefConflicts accumulates diagnostic messages when multiple components share the same BOMRef.
 type entityIndexV2 struct {
 	nodeByPath      map[string]string
 	componentByRef  map[string]string
 	componentByName map[string]string
+	bomRefConflicts []string
 }
 
 // buildEntitiesV2 normalizes raw ReportData into canonical entity collections.
@@ -109,6 +111,10 @@ func appendComponentEntity(component cdx.Component, out *[]componentEntityV2, in
 	*out = append(*out, entity)
 
 	if component.BOMRef != "" {
+		if _, exists := index.componentByRef[component.BOMRef]; exists {
+			index.bomRefConflicts = append(index.bomRefConflicts,
+				fmt.Sprintf("duplicate BOMRef %q: component %q@%q overwrites index entry", component.BOMRef, component.Name, component.Version))
+		}
 		index.componentByRef[component.BOMRef] = id
 	}
 	nameKey := componentNameKey(component.Name, component.Version)
