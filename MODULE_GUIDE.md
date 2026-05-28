@@ -812,8 +812,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
 - Shared report contracts now live in `internal/report/internal/model`; the
-  root `report` package aliases them so orchestrator integration can stay
-  stable while implementation moves into subpackages.
+  root `report` package re-exports only the minimal contracts needed by the
+  orchestrator so implementation can keep moving into subpackages without
+  widening the facade again.
 - The active human report execution path now lives in
   `internal/report/internal/human`; the root package now keeps only the thin
   orchestrator-facing human facade while human-specific helpers and tests live

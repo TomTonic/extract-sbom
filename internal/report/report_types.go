@@ -1,8 +1,8 @@
 // Package report implements extract-sbom audit report generation.
 //
-// This file defines report-internal helper types and canonical anchor
-// constants. Root report contract types are aliased from the internal model
-// package so the root package can act as a thin facade.
+// This file defines the minimal root report contract surface. The shared
+// contracts remain in the internal model package so the root package can act
+// as a thin facade.
 package report
 
 import model "github.com/TomTonic/extract-sbom/internal/report/internal/model"

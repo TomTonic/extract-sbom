@@ -250,7 +250,7 @@ Status values:
 
 ### REP-ARCH-018 - Documentation sync and final cleanup
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Sync `MODULE_GUIDE.md`, remove stale comments/history references,
   and perform a final cleanup once the package consolidation is complete.
 - Exit criteria:
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-018 - Documentation sync and final cleanup`
+`All consolidation steps complete`
