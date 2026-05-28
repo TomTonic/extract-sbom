@@ -530,9 +530,9 @@ func humanRenderOptionsFromConfig(cfg config.Config) (report.HumanRenderOptions,
 	var opts report.HumanRenderOptions
 	switch engine {
 	case "template-wrapper":
-		opts.Engine = report.HumanRenderEngineTemplateWrapper
+		opts.Engine = "template-wrapper"
 	case "template-document":
-		opts.Engine = report.HumanRenderEngineTemplateDocument
+		opts.Engine = "template-document"
 	default:
 		return report.HumanRenderOptions{}, fmt.Errorf("unsupported human render engine: %q", engine)
 	}
@@ -548,7 +548,7 @@ func humanRenderOptionsFromConfig(cfg config.Config) (report.HumanRenderOptions,
 	}
 
 	tpl := string(raw)
-	if opts.Engine == report.HumanRenderEngineTemplateWrapper {
+	if opts.Engine == "template-wrapper" {
 		opts.WrapperTemplate = tpl
 	} else {
 		opts.DocumentTemplate = tpl
