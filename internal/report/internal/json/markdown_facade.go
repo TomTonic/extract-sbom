@@ -2,6 +2,7 @@ package json
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -92,10 +93,17 @@ func NormalizeSeverity(raw string) string {
 }
 
 // ReportDataFromV2 reconstructs the shared report snapshot from the canonical JSON model.
-func ReportDataFromV2(report ReportV2) ReportData {
+//
+// The second return value lists any fields that could not be parsed exactly;
+// defaults are substituted and callers may log or surface the warnings for diagnostics.
+func ReportDataFromV2(report ReportV2) (ReportData, []string) {
+	var warnings []string
+
 	limits := config.DefaultLimits()
 	if parsedTimeout, err := time.ParseDuration(report.Config.Limits.Timeout); err == nil {
 		limits.Timeout = parsedTimeout
+	} else if report.Config.Limits.Timeout != "" {
+		warnings = append(warnings, fmt.Sprintf("config.limits.timeout %q could not be parsed, using default: %v", report.Config.Limits.Timeout, err))
 	}
 	limits.MaxDepth = report.Config.Limits.MaxDepth
 	limits.MaxFiles = report.Config.Limits.MaxFiles
@@ -106,18 +114,22 @@ func ReportDataFromV2(report ReportV2) ReportData {
 	policyMode, err := config.ParsePolicyMode(report.Config.PolicyMode)
 	if err != nil {
 		policyMode = config.PolicyPartial
+		warnings = append(warnings, fmt.Sprintf("config.policyMode %q not recognized, using default: %v", report.Config.PolicyMode, err))
 	}
 	interpretMode, err := config.ParseInterpretMode(report.Config.InterpretMode)
 	if err != nil {
 		interpretMode = config.InterpretPhysical
+		warnings = append(warnings, fmt.Sprintf("config.interpretMode %q not recognized, using default: %v", report.Config.InterpretMode, err))
 	}
 	reportSelection, err := config.ParseReportSelection(report.Config.ReportSelection)
 	if err != nil {
 		reportSelection = config.ReportMarkdown
+		warnings = append(warnings, fmt.Sprintf("config.reportSelection %q not recognized, using default: %v", report.Config.ReportSelection, err))
 	}
 	progressLevel, err := config.ParseProgressLevel(report.Config.ProgressLevel)
 	if err != nil {
 		progressLevel = config.ProgressNormal
+		warnings = append(warnings, fmt.Sprintf("config.progressLevel %q not recognized, using default: %v", report.Config.ProgressLevel, err))
 	}
 
 	scans := make([]scan.ScanResult, 0, len(report.Raw.ScansRaw))
@@ -134,7 +146,13 @@ func ReportDataFromV2(report ReportV2) ReportData {
 	}
 
 	startTime := parseRFC3339OrZero(report.Run.StartTime)
+	if startTime.IsZero() && report.Run.StartTime != "" {
+		warnings = append(warnings, fmt.Sprintf("run.startTime %q could not be parsed as RFC3339, using zero time", report.Run.StartTime))
+	}
 	endTime := parseRFC3339OrZero(report.Run.EndTime)
+	if endTime.IsZero() && report.Run.EndTime != "" {
+		warnings = append(warnings, fmt.Sprintf("run.endTime %q could not be parsed as RFC3339, using zero time", report.Run.EndTime))
+	}
 
 	return ReportData{
 		Input: InputSummary{
@@ -193,7 +211,7 @@ func ReportDataFromV2(report ReportV2) ReportData {
 			Grype:      report.Runtime.ToolVersions.Grype,
 			GrypeDB:    report.Runtime.ToolVersions.GrypeDB,
 		},
-	}
+	}, warnings
 }
 
 func parseRFC3339OrZero(value string) time.Time {

@@ -54,7 +54,8 @@ type markdownReportViewModel struct {
 // once so different renderer backends can reuse the same snapshot.
 func buildMarkdownReportViewModel(data ReportData, lang string) markdownReportViewModel {
 	report := reportjson.BuildV2Report(data)
-	sourceData := reportjson.ReportDataFromV2(report)
+	// ReportData was just serialized in the same process; parse errors cannot occur.
+	sourceData, _ := reportjson.ReportDataFromV2(report)
 	occurrences, indexStats := reportjson.CollectComponentOccurrences(sourceData.BOM)
 	t := getTranslations(lang)
 	return markdownReportViewModel{

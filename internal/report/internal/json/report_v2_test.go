@@ -312,3 +312,58 @@ func TestGenerateV2FlagsDanglingVulnerabilityComponentRef(t *testing.T) {
 		t.Fatal("expected non-empty integrity.validationErrors")
 	}
 }
+
+// TestReportDataFromV2RoundTrip validates that serializing ReportData to a V2 report,
+// reconstructing ReportData via ReportDataFromV2, and regenerating the report produces
+// an identical payload. This ensures ReportDataFromV2 preserves all fields faithfully.
+func TestReportDataFromV2RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+
+	report1 := BuildV2Report(data)
+	data2, warnings := ReportDataFromV2(report1)
+	if len(warnings) > 0 {
+		t.Errorf("unexpected warnings from ReportDataFromV2 on well-formed input: %v", warnings)
+	}
+
+	report2 := BuildV2Report(data2)
+
+	b1, err := json.Marshal(report1)
+	if err != nil {
+		t.Fatalf("marshal report1: %v", err)
+	}
+	b2, err := json.Marshal(report2)
+	if err != nil {
+		t.Fatalf("marshal report2: %v", err)
+	}
+
+	// generatedAt reflects the wall-clock moment of generation and is intentionally
+	// non-reproducible; strip it before comparing the two passes.
+	var m1, m2 map[string]any
+	if err = json.Unmarshal(b1, &m1); err != nil {
+		t.Fatalf("unmarshal report1: %v", err)
+	}
+	if err = json.Unmarshal(b2, &m2); err != nil {
+		t.Fatalf("unmarshal report2: %v", err)
+	}
+	if s, ok := m1["schema"].(map[string]any); ok {
+		delete(s, "generatedAt")
+	}
+	if s, ok := m2["schema"].(map[string]any); ok {
+		delete(s, "generatedAt")
+	}
+
+	c1, err := json.Marshal(m1)
+	if err != nil {
+		t.Fatalf("re-marshal m1: %v", err)
+	}
+	c2, err := json.Marshal(m2)
+	if err != nil {
+		t.Fatalf("re-marshal m2: %v", err)
+	}
+
+	if string(c1) != string(c2) {
+		t.Fatalf("round-trip mismatch:\nfirst pass:  %s\nsecond pass: %s", c1, c2)
+	}
+}

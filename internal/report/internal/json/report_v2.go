@@ -50,7 +50,7 @@ func buildJSONReportV2Skeleton(data ReportData, generatedAt time.Time) ReportV2 
 
 	entities, index := buildEntitiesV2(data)
 	projections := buildProjectionsV2(data, entities, index)
-	integrity := buildIntegrityV2(entities, projections)
+	integrity := buildIntegrityV2(entities, projections, index.bomRefConflicts)
 
 	return ReportV2{
 		Schema: reportSchemaV2{
@@ -182,6 +182,8 @@ func stableID(prefix string, parts ...string) string {
 }
 
 // copyPolicyDecisions clones decisions so report output cannot mutate caller state.
+// policy.Decision contains only value-type fields (strings and int-based Action),
+// so a shallow slice copy produces a fully independent snapshot.
 func copyPolicyDecisions(in []policy.Decision) []policy.Decision {
 	out := make([]policy.Decision, len(in))
 	copy(out, in)
@@ -189,6 +191,7 @@ func copyPolicyDecisions(in []policy.Decision) []policy.Decision {
 }
 
 // copyProcessingIssues clones processing issues for raw report snapshots.
+// ProcessingIssue contains only value-type fields; shallow copy is safe.
 func copyProcessingIssues(in []ProcessingIssue) []ProcessingIssue {
 	out := make([]ProcessingIssue, len(in))
 	copy(out, in)
@@ -196,6 +199,10 @@ func copyProcessingIssues(in []ProcessingIssue) []ProcessingIssue {
 }
 
 // copySuppressions clones suppression records for raw report snapshots.
+// SuppressionRecord embeds a cdx.Component which may contain pointer fields;
+// however, the raw snapshot is treated as immutable after assembly, so shared
+// pointer targets are safe in practice. Callers must not mutate the originals
+// after this function is called.
 func copySuppressions(in []assembly.SuppressionRecord) []assembly.SuppressionRecord {
 	out := make([]assembly.SuppressionRecord, len(in))
 	copy(out, in)

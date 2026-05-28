@@ -3,7 +3,10 @@ package json
 import "fmt"
 
 // buildIntegrityV2 validates entity and projection references and computes integrity metrics.
-func buildIntegrityV2(entities entitiesV2, projections projectionsV2) integrityV2 {
+//
+// entityConflicts carries structural warnings detected during entity building
+// (e.g. duplicate BOMRefs) that are surfaced alongside dangling-reference errors.
+func buildIntegrityV2(entities entitiesV2, projections projectionsV2, entityConflicts []string) integrityV2 {
 	allEntityIDs := map[string]struct{}{}
 	nodeIDs := map[string]struct{}{}
 	componentIDs := map[string]struct{}{}
@@ -36,6 +39,7 @@ func buildIntegrityV2(entities entitiesV2, projections projectionsV2) integrityV
 	}
 
 	validationErrors := make([]string, 0)
+	validationErrors = append(validationErrors, entityConflicts...)
 	dangling := 0
 
 	addMissing := func(msg string) {
