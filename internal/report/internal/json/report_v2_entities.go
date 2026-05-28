@@ -9,6 +9,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
@@ -166,7 +167,7 @@ func buildScanTaskEntities(scans []scan.ScanResult, index entityIndexV2, out *[]
 			ID:           stableID("scan", scans[i].NodePath, fmt.Sprintf("%d", i)),
 			NodePath:     scans[i].NodePath,
 			NodeID:       index.nodeByPath[scans[i].NodePath],
-			ComponentIDs: dedupeSortedStrings(componentIDs),
+			ComponentIDs: domain.SortedUniqueStrings(componentIDs),
 		}
 		if scans[i].Error != nil {
 			item.Error = scans[i].Error.Error()
