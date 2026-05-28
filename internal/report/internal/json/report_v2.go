@@ -143,10 +143,7 @@ func buildJSONReportV2Skeleton(data ReportData, generatedAt time.Time) ReportV2 
 		Integrity:   integrity,
 		Compatibility: compatibilityV2{
 			LegacyAliasesUsed: legacyAliasesV2{},
-			MigrationHints: []string{
-				"slice-2: entities and integrity are populated from ReportData",
-				"slice-3: projections are populated with renderer-oriented views",
-			},
+			MigrationHints:    []string{},
 		},
 	}
 }

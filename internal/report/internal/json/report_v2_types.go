@@ -282,6 +282,5 @@ type compatibilityV2 struct {
 }
 
 type legacyAliasesV2 struct {
-	ReportSelectionAlias string   `json:"reportSelectionAlias,omitempty"`
-	DeprecatedFlagsUsed  []string `json:"deprecatedFlagsUsed,omitempty"`
+	DeprecatedFlagsUsed []string `json:"deprecatedFlagsUsed,omitempty"`
 }

@@ -101,6 +101,17 @@ Effective runtime configuration snapshot (fully expanded values):
   - version
   - deliveryDate
   - properties
+- limits
+  - maxDepth
+  - maxFiles
+  - maxTotalSize
+  - maxEntrySize
+  - maxRatio
+  - timeout
+- passwords
+  - count
+  - sensitiveRedacted
+- properties
 
 ### 6) runtime
 
@@ -186,7 +197,6 @@ Prepared rendering models:
 ### 11) compatibility
 
 - legacyAliasesUsed
-  - reportSelectionAlias: human | machine optional
   - deprecatedFlagsUsed: array
 - migrationHints
 

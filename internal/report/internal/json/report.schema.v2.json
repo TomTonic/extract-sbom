@@ -65,7 +65,58 @@
     },
     "config": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": false,
+      "properties": {
+        "sbomFormat": { "type": "string" },
+        "policyMode": { "type": "string" },
+        "interpretMode": { "type": "string" },
+        "reportSelection": { "type": "string" },
+        "progressLevel": { "type": "string" },
+        "language": { "type": "string" },
+        "markdownRenderEngine": { "type": "string" },
+        "markdownTemplateFile": { "type": "string" },
+        "grypeEnabled": { "type": "boolean" },
+        "unsafe": { "type": "boolean" },
+        "parallelScanners": { "type": "integer", "minimum": 1 },
+        "skipExtensions": { "type": "array", "items": { "type": "string" } },
+        "rootMetadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "manufacturer": { "type": "string" },
+            "name": { "type": "string" },
+            "version": { "type": "string" },
+            "deliveryDate": { "type": "string" },
+            "properties": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxDepth", "maxFiles", "maxTotalSize", "maxEntrySize", "maxRatio", "timeout"],
+          "properties": {
+            "maxDepth": { "type": "integer", "minimum": 0 },
+            "maxFiles": { "type": "integer", "minimum": 0 },
+            "maxTotalSize": { "type": "integer", "minimum": 0 },
+            "maxEntrySize": { "type": "integer", "minimum": 0 },
+            "maxRatio": { "type": "integer", "minimum": 0 },
+            "timeout": { "type": "string" }
+          }
+        },
+        "passwords": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count", "sensitiveRedacted"],
+          "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "sensitiveRedacted": { "type": "boolean" }
+          }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
     },
     "runtime": {
       "type": "object",
@@ -251,7 +302,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "reportSelectionAlias": { "enum": ["human", "machine"] },
             "deprecatedFlagsUsed": {
               "type": "array",
               "items": { "type": "string" }
