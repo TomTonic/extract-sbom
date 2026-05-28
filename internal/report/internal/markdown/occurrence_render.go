@@ -160,7 +160,7 @@ func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnsc
 // writeOccurrenceListEntry renders one normalized occurrence as nested list
 // item inside a package-group entry.
 func writeOccurrenceListEntry(w io.Writer, occ componentOccurrence, t translations, vulnLines []string) {
-	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, occurrenceAnchorID(occ.ObjectID), occ.ObjectID)
+	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, domain.OccurrenceAnchorID(occ.ObjectID), occ.ObjectID)
 	for _, dp := range occ.DeliveryPaths {
 		fmt.Fprintf(w, "  - %s: `%s`\n", t.deliveryPath, dp)
 	}

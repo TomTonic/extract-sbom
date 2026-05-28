@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
@@ -215,7 +214,7 @@ func suppressedByCell(record assembly.SuppressionRecord, resolver suppressionLin
 		}
 		return fmt.Sprintf("*%s*", escapeMarkdownCell(reason))
 	}
-	return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(bomRef), occurrenceAnchorID(bomRef))
+	return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(bomRef), domain.OccurrenceAnchorID(bomRef))
 }
 
 // sortSuppressionRecords enforces deterministic ordering in suppression tables.
@@ -232,22 +231,4 @@ func sortSuppressionRecords(records []assembly.SuppressionRecord) {
 		}
 		return records[i].Component.BOMRef < records[j].Component.BOMRef
 	})
-}
-
-// occurrenceAnchorID converts a BOMRef to a stable Markdown anchor id.
-func occurrenceAnchorID(objectID string) string {
-	if objectID == "" {
-		return "component-occurrence"
-	}
-
-	var b strings.Builder
-	b.WriteString("component-")
-	for _, r := range strings.ToLower(objectID) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			b.WriteRune(r)
-			continue
-		}
-		b.WriteByte('-')
-	}
-	return strings.TrimRight(b.String(), "-")
 }

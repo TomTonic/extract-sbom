@@ -2,7 +2,6 @@ package json
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
@@ -168,7 +167,7 @@ func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, i
 				Data: map[string]any{
 					"kind":            "occurrence",
 					"packageAnchorId": groups[i].AnchorID,
-					"anchorId":        occurrenceAnchorID(groups[i].Occurrences[j].ObjectID),
+					"anchorId":        domain.OccurrenceAnchorID(groups[i].Occurrences[j].ObjectID),
 					"objectId":        groups[i].Occurrences[j].ObjectID,
 					"deliveryPaths":   groups[i].Occurrences[j].DeliveryPaths,
 					"evidencePaths":   groups[i].Occurrences[j].EvidencePaths,
@@ -402,24 +401,6 @@ func sortedStrings(in []string) []string {
 	out := append([]string(nil), in...)
 	sort.Strings(out)
 	return out
-}
-
-// occurrenceAnchorID converts a component object ID to a deterministic anchor ID.
-func occurrenceAnchorID(objectID string) string {
-	if objectID == "" {
-		return "component-occurrence"
-	}
-
-	var b strings.Builder
-	b.WriteString("component-")
-	for _, r := range strings.ToLower(objectID) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			b.WriteRune(r)
-			continue
-		}
-		b.WriteByte('-')
-	}
-	return strings.TrimRight(b.String(), "-")
 }
 
 // dedupeSortedStrings compacts adjacent duplicate values in a sorted string slice.
