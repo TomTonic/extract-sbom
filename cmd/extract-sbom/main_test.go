@@ -346,6 +346,37 @@ func TestLoadConfigParsesHumanRenderOptions(t *testing.T) {
 	}
 }
 
+func TestLoadConfigParsesDeprecatedHumanRenderFlags(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "delivery.zip")
+	if err := os.WriteFile(inputPath, []byte("PK\x03\x04fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tplPath := filepath.Join(dir, "legacy-human.tpl")
+	if err := os.WriteFile(tplPath, []byte("{{.Body}}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := rootCmd()
+	if err := cmd.Flags().Set("human-render-engine", "template-wrapper"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("human-template-file", tplPath); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(cmd, []string{inputPath})
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+	if cfg.MarkdownRenderEngine != "template-wrapper" {
+		t.Fatalf("MarkdownRenderEngine = %q, want %q", cfg.MarkdownRenderEngine, "template-wrapper")
+	}
+	if cfg.MarkdownTemplateFile != tplPath {
+		t.Fatalf("MarkdownTemplateFile = %q, want %q", cfg.MarkdownTemplateFile, tplPath)
+	}
+}
+
 func TestLoadConfigRejectsInvalidMode(t *testing.T) {
 	dir := t.TempDir()
 	inputPath := filepath.Join(dir, "delivery.zip")
