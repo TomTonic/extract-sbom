@@ -9,6 +9,7 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
 	"github.com/TomTonic/extract-sbom/internal/assembly"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 )
 
 // writeSuppressionReport renders normalization/suppression evidence grouped by
@@ -39,7 +40,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	sortSuppressionRecords(weakDups)
 	sortSuppressionRecords(purlDups)
 
-	occurrences, _ := collectComponentOccurrences(bom)
+	occurrences, _ := domain.CollectComponentOccurrences(bom)
 	resolver := newSuppressionLinkResolver(occurrences)
 
 	// Summary counts.
@@ -148,7 +149,7 @@ func newSuppressionLinkResolver(occurrences []componentOccurrence) suppressionLi
 			BOMRef:  occ.ObjectID,
 			Name:    occ.PackageName,
 			FoundBy: occ.FoundBy,
-			Score:   occurrenceQualityScore(occ),
+			Score:   domain.OccurrenceQualityScore(occ),
 		}
 		for _, deliveryPath := range occ.DeliveryPaths {
 			resolver.byDeliveryPath[deliveryPath] = append(resolver.byDeliveryPath[deliveryPath], candidate)

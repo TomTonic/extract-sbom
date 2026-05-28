@@ -776,8 +776,9 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 **Implementation layout (current):**
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
+- `internal/report/internal/domain/*.go`: report-domain aggregation logic grouped by noun (occurrence collection/grouping, vulnerability counters, suppression reason stats, and extraction/scan/policy statistics) shared by report renderers.
 - `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human/HTML/machine/SARIF facades delegating into internal report packages.
-- `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, occurrence/vulnerability/suppression helpers, and human-specific i18n).
+- `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, remaining human-specific occurrence/vulnerability/suppression presentation logic, and human-specific i18n).
 - `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
 - `internal/report/internal/machine/*.go`: structured machine JSON report generator, JSON schema projection helpers, and machine-specific tests.
 - `internal/report/internal/sarif/*.go`: SARIF 2.1.0 generator with deterministic rule/result ordering, explicit enrichment audit state, and SARIF-specific tests.
@@ -833,6 +834,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   `internal/report/internal/machine` and `internal/report/internal/sarif`;
   the root package keeps only thin `GenerateMachine` and `GenerateSARIF`
   facades while output-specific helpers and tests live with their renderer.
+- Report-domain aggregation now lives in
+  `internal/report/internal/domain`; occurrence collection/grouping,
+  vulnerability counters, suppression reason stats, and extraction/scan/policy
+  aggregations are shared domain helpers consumed by renderers.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
   and included in both human and machine reports.
 - The report distinguishes explicit root metadata input from derived defaults.

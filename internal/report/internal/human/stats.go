@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
-	"github.com/TomTonic/extract-sbom/internal/policy"
-	"github.com/TomTonic/extract-sbom/internal/scan"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 )
 
 // writeExtractionTree renders the extraction tree as an indented Markdown list
@@ -104,7 +103,7 @@ func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn sc
 			fmt.Sprintf(t.residualRiskNoComponentTasks, scn.NoComponentTasks, scn.Successful, samplePaths(scn.NoComponentPaths, t.noneValue)),
 			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs))
 	}
-	suppression := collectSuppressionStats(data.Suppressions)
+	suppression := domain.CollectSuppressionStats(data.Suppressions)
 	fileArtifactCount := suppression.FSArtifacts + suppression.LowValueFiles
 	if fileArtifactCount > 0 {
 		links := make([]string, 0, 2)
@@ -179,91 +178,4 @@ func samplePaths(paths []string, noneValue string) string {
 		return strings.Join(unique, "; ")
 	}
 	return strings.Join(unique[:maxCount], "; ") + fmt.Sprintf(" (+%d more)", len(unique)-maxCount)
-}
-
-// collectExtractionStats walks the extraction tree and aggregates status and
-// path counters used by summary and residual-risk sections.
-func collectExtractionStats(node *extract.ExtractionNode) extractionStats {
-	stats := extractionStats{}
-
-	var walk func(n *extract.ExtractionNode)
-	walk = func(n *extract.ExtractionNode) {
-		if n == nil {
-			return
-		}
-
-		stats.Total++
-		switch n.Status {
-		case extract.StatusExtracted:
-			stats.Extracted++
-			stats.TotalFileEntries += n.EntriesCount
-		case extract.StatusSyftNative:
-			stats.SyftNative++
-		case extract.StatusFailed:
-			stats.Failed++
-			stats.FailedPaths = append(stats.FailedPaths, n.Path)
-		case extract.StatusSkipped:
-			stats.Skipped++
-		case extract.StatusToolMissing:
-			stats.ToolMissing++
-			stats.ToolMissingPaths = append(stats.ToolMissingPaths, n.Path)
-		case extract.StatusSecurityBlocked:
-			stats.SecurityBlocked++
-			stats.SecurityBlockedPaths = append(stats.SecurityBlockedPaths, n.Path)
-		case extract.StatusPending:
-			stats.Pending++
-		default:
-			stats.Other++
-		}
-
-		// Aggregate extension-filtered files recorded at each node.
-		stats.ExtensionFiltered += len(n.ExtensionFilteredPaths)
-		stats.ExtensionFilteredPaths = append(stats.ExtensionFilteredPaths, n.ExtensionFilteredPaths...)
-
-		for _, child := range n.Children {
-			walk(child)
-		}
-	}
-
-	walk(node)
-	return stats
-}
-
-// collectScanStats aggregates scan success/error counters and coverage hints.
-func collectScanStats(scans []scan.ScanResult) scanStats {
-	stats := scanStats{Total: len(scans)}
-	for _, sr := range scans {
-		if sr.Error != nil {
-			stats.Errors++
-			stats.ErrorPaths = append(stats.ErrorPaths, sr.NodePath)
-			continue
-		}
-		stats.Successful++
-		componentCount := 0
-		if sr.BOM != nil && sr.BOM.Components != nil {
-			componentCount = len(*sr.BOM.Components)
-			stats.TotalComponents += componentCount
-		}
-		if componentCount == 0 {
-			stats.NoComponentTasks++
-			stats.NoComponentPaths = append(stats.NoComponentPaths, sr.NodePath)
-		}
-	}
-	return stats
-}
-
-// collectPolicyStats aggregates policy-action counters for summary reporting.
-func collectPolicyStats(decisions []policy.Decision) policyStats {
-	stats := policyStats{Total: len(decisions)}
-	for _, d := range decisions {
-		switch d.Action {
-		case policy.ActionContinue:
-			stats.Continue++
-		case policy.ActionSkip:
-			stats.Skip++
-		case policy.ActionAbort:
-			stats.Abort++
-		}
-	}
-	return stats
 }

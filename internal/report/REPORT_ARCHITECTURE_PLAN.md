@@ -220,7 +220,7 @@ Status values:
 
 ### REP-ARCH-015 - Rebundle domain helpers by noun, not verb
 
-- Status: `PLANNED`
+- Status: `DONE`
 - Objective: Replace the current verb/helper split with domain-centered files in
   `internal/report/internal/domain`.
 - Exit criteria:

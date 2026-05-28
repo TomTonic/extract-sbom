@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/TomTonic/extract-sbom/internal/assembly"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 )
 
 func TestCollectSuppressionStats(t *testing.T) {
@@ -19,7 +20,7 @@ func TestCollectSuppressionStats(t *testing.T) {
 		{Reason: assembly.SuppressionPURLDuplicate},
 	}
 
-	stats := collectSuppressionStats(records)
+	stats := domain.CollectSuppressionStats(records)
 	if stats.FSArtifacts != 2 {
 		t.Errorf("FSArtifacts = %d, want 2", stats.FSArtifacts)
 	}
@@ -36,7 +37,7 @@ func TestCollectSuppressionStats(t *testing.T) {
 
 func TestCollectSuppressionStatsEmpty(t *testing.T) {
 	t.Parallel()
-	stats := collectSuppressionStats(nil)
+	stats := domain.CollectSuppressionStats(nil)
 	if stats.FSArtifacts != 0 || stats.LowValueFiles != 0 || stats.WeakDuplicate != 0 || stats.PURLDuplicate != 0 {
 		t.Fatal("empty input should produce zero stats")
 	}

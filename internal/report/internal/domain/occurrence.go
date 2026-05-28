@@ -1,6 +1,8 @@
-package human
+// Package domain holds report-domain aggregation logic shared by renderers.
+package domain
 
 import (
+	"fmt"
 	"path"
 	"sort"
 	"strings"
@@ -8,15 +10,54 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// collectComponentOccurrences extracts reportable component occurrences from
+// ComponentOccurrence is one normalized, reportable view of an SBOM component.
+type ComponentOccurrence struct {
+	ObjectID       string
+	ComponentType  cdx.ComponentType
+	PackageName    string
+	Version        string
+	PURL           string
+	CPE            string
+	DeliveryPaths  []string
+	EvidencePaths  []string
+	EvidenceSource string
+	FoundBy        string
+}
+
+// PackageOccurrenceGroup groups multiple occurrences that represent one package.
+type PackageOccurrenceGroup struct {
+	AnchorID    string
+	PackageName string
+	Version     string
+	PURLs       []string
+	Occurrences []ComponentOccurrence
+}
+
+// ComponentIndexStats tracks filtering and indexing counters.
+type ComponentIndexStats struct {
+	TotalComponents               int
+	MissingDeliveryPath           int
+	FilteredContainerNodes        int
+	FilteredAbsolutePathNames     int
+	FilteredLowValueFileArtifacts int
+	DuplicateMerged               int
+	IndexedComponents             int
+	IndexedWithPURL               int
+	IndexedWithoutPURL            int
+	IndexedWithEvidencePath       int
+	IndexedWithEvidenceSourceOnly int
+	IndexedWithoutEvidence        int
+}
+
+// CollectComponentOccurrences extracts reportable component occurrences from
 // the final BOM, applies quality filters, and computes index statistics.
-func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, componentIndexStats) {
-	stats := componentIndexStats{}
+func CollectComponentOccurrences(bom *cdx.BOM) ([]ComponentOccurrence, ComponentIndexStats) {
+	stats := ComponentIndexStats{}
 	if bom == nil || bom.Components == nil {
 		return nil, stats
 	}
 
-	occurrences := make([]componentOccurrence, 0, len(*bom.Components))
+	occurrences := make([]ComponentOccurrence, 0, len(*bom.Components))
 	for i := range *bom.Components {
 		comp := (*bom.Components)[i]
 		stats.TotalComponents++
@@ -40,7 +81,7 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 			continue
 		}
 
-		occurrences = append(occurrences, componentOccurrence{
+		occurrences = append(occurrences, ComponentOccurrence{
 			ObjectID:       comp.BOMRef,
 			ComponentType:  comp.Type,
 			PackageName:    comp.Name,
@@ -80,8 +121,98 @@ func collectComponentOccurrences(bom *cdx.BOM) ([]componentOccurrence, component
 	return occurrences, stats
 }
 
-// compareOccurrence defines deterministic ordering for occurrence output.
-func compareOccurrence(a, b componentOccurrence) int {
+// BuildPackageOccurrenceGroups groups occurrences by package name/version and
+// assigns deterministic package-level anchors.
+func BuildPackageOccurrenceGroups(occurrences []ComponentOccurrence) []PackageOccurrenceGroup {
+	if len(occurrences) == 0 {
+		return nil
+	}
+
+	type groupKey struct {
+		name    string
+		version string
+	}
+
+	byKey := make(map[groupKey][]ComponentOccurrence)
+	order := make([]groupKey, 0)
+	for i := range occurrences {
+		key := groupKey{name: occurrences[i].PackageName, version: occurrences[i].Version}
+		if _, ok := byKey[key]; !ok {
+			order = append(order, key)
+		}
+		byKey[key] = append(byKey[key], occurrences[i])
+	}
+
+	groups := make([]PackageOccurrenceGroup, 0, len(order))
+	for _, key := range order {
+		groupOccurrences := append([]ComponentOccurrence(nil), byKey[key]...)
+		sort.Slice(groupOccurrences, func(i, j int) bool {
+			return compareOccurrence(groupOccurrences[i], groupOccurrences[j]) < 0
+		})
+		groups = append(groups, PackageOccurrenceGroup{
+			PackageName: key.name,
+			Version:     key.version,
+			PURLs:       collectDistinctPURLs(groupOccurrences),
+			Occurrences: groupOccurrences,
+		})
+	}
+
+	sort.Slice(groups, func(i, j int) bool {
+		leftPrimary := ComponentOccurrence{}
+		if len(groups[i].Occurrences) > 0 {
+			leftPrimary = groups[i].Occurrences[0]
+		}
+		rightPrimary := ComponentOccurrence{}
+		if len(groups[j].Occurrences) > 0 {
+			rightPrimary = groups[j].Occurrences[0]
+		}
+		if cmp := compareOccurrence(leftPrimary, rightPrimary); cmp != 0 {
+			return cmp < 0
+		}
+		if groups[i].PackageName != groups[j].PackageName {
+			return groups[i].PackageName < groups[j].PackageName
+		}
+		if groups[i].Version != groups[j].Version {
+			return groups[i].Version < groups[j].Version
+		}
+		return strings.Join(groups[i].PURLs, "|") < strings.Join(groups[j].PURLs, "|")
+	})
+
+	usedAnchors := make(map[string]int)
+	for i := range groups {
+		base := packageAnchorBase(groups[i].PackageName, groups[i].Version)
+		count := usedAnchors[base]
+		usedAnchors[base] = count + 1
+		if count == 0 {
+			groups[i].AnchorID = base
+			continue
+		}
+		groups[i].AnchorID = fmt.Sprintf("%s-%d", base, count+1)
+	}
+
+	return groups
+}
+
+// OccurrenceQualityScore ranks evidence strength; this ranking should stay
+// aligned with suppression link resolution.
+func OccurrenceQualityScore(occ ComponentOccurrence) int {
+	score := 0
+	if occ.PURL != "" {
+		score += 4
+	}
+	if occ.FoundBy != "" {
+		score += 3
+	}
+	if occ.Version != "" {
+		score += 2
+	}
+	if occ.PackageName != "" && !strings.Contains(occ.PackageName, "/") {
+		score++
+	}
+	return score
+}
+
+func compareOccurrence(a, b ComponentOccurrence) int {
 	aPrimary := firstString(a.DeliveryPaths)
 	bPrimary := firstString(b.DeliveryPaths)
 	if aPrimary != bPrimary {
@@ -131,14 +262,12 @@ func compareOccurrence(a, b componentOccurrence) int {
 	return 0
 }
 
-// mergeDuplicateOccurrences groups occurrences by logical locus and retains
-// the strongest representative when duplicates are safely collapsible.
-func mergeDuplicateOccurrences(occurrences []componentOccurrence, stats *componentIndexStats) []componentOccurrence {
+func mergeDuplicateOccurrences(occurrences []ComponentOccurrence, stats *ComponentIndexStats) []ComponentOccurrence {
 	if len(occurrences) < 2 {
 		return occurrences
 	}
 
-	groups := make(map[string][]componentOccurrence)
+	groups := make(map[string][]ComponentOccurrence)
 	keys := make([]string, 0)
 	for i := range occurrences {
 		occ := occurrences[i]
@@ -150,7 +279,7 @@ func mergeDuplicateOccurrences(occurrences []componentOccurrence, stats *compone
 	}
 	sort.Strings(keys)
 
-	merged := make([]componentOccurrence, 0, len(occurrences))
+	merged := make([]ComponentOccurrence, 0, len(occurrences))
 	for _, key := range keys {
 		group := groups[key]
 		if len(group) == 1 {
@@ -171,8 +300,7 @@ func mergeDuplicateOccurrences(occurrences []componentOccurrence, stats *compone
 	return merged
 }
 
-// occurrenceLocusKey builds the grouping key used for duplicate detection.
-func occurrenceLocusKey(occ componentOccurrence) string {
+func occurrenceLocusKey(occ ComponentOccurrence) string {
 	dp := append([]string(nil), occ.DeliveryPaths...)
 	sort.Strings(dp)
 	evidence := append([]string(nil), occ.EvidencePaths...)
@@ -180,12 +308,11 @@ func occurrenceLocusKey(occ componentOccurrence) string {
 	return strings.Join(dp, "\x1e") + "\x00" + strings.Join(evidence, "\x1f")
 }
 
-// pickBestOccurrence selects the highest-quality representative in a group.
-func pickBestOccurrence(group []componentOccurrence) componentOccurrence {
+func pickBestOccurrence(group []ComponentOccurrence) ComponentOccurrence {
 	best := group[0]
-	bestScore := occurrenceQualityScore(best)
+	bestScore := OccurrenceQualityScore(best)
 	for i := 1; i < len(group); i++ {
-		score := occurrenceQualityScore(group[i])
+		score := OccurrenceQualityScore(group[i])
 		if score > bestScore || (score == bestScore && compareOccurrence(group[i], best) < 0) {
 			best = group[i]
 			bestScore = score
@@ -194,29 +321,8 @@ func pickBestOccurrence(group []componentOccurrence) componentOccurrence {
 	return best
 }
 
-// occurrenceQualityScore ranks evidence strength; this ranking should stay
-// aligned with suppressionLinkCandidateScore.
-func occurrenceQualityScore(occ componentOccurrence) int {
-	score := 0
-	if occ.PURL != "" {
-		score += 4
-	}
-	if occ.FoundBy != "" {
-		score += 3
-	}
-	if occ.Version != "" {
-		score += 2
-	}
-	if occ.PackageName != "" && !strings.Contains(occ.PackageName, "/") {
-		score++
-	}
-	return score
-}
-
-// shouldCollapseDuplicateGroup decides whether lower-value duplicates can be
-// dropped without losing meaningful provenance.
-func shouldCollapseDuplicateGroup(group []componentOccurrence, best componentOccurrence) bool {
-	if occurrenceQualityScore(best) < 4 {
+func shouldCollapseDuplicateGroup(group []ComponentOccurrence, best ComponentOccurrence) bool {
+	if OccurrenceQualityScore(best) < 4 {
 		return false
 	}
 
@@ -233,9 +339,7 @@ func shouldCollapseDuplicateGroup(group []componentOccurrence, best componentOcc
 	return true
 }
 
-// isWeakArtifactOccurrence classifies minimal file-artifact records that can
-// be collapsed when a stronger package-level record exists for the same locus.
-func isWeakArtifactOccurrence(occ componentOccurrence) bool {
+func isWeakArtifactOccurrence(occ ComponentOccurrence) bool {
 	if occ.PURL != "" || occ.FoundBy != "" || occ.Version != "" {
 		return false
 	}
@@ -251,8 +355,6 @@ func isWeakArtifactOccurrence(occ componentOccurrence) bool {
 	return strings.EqualFold(occ.PackageName, base) || strings.EqualFold(occ.PackageName, baseNoExt)
 }
 
-// isLowValueFileArtifact returns true for file components that carry no package
-// identity metadata and add little audit value.
 func isLowValueFileArtifact(comp cdx.Component, foundBy string) bool {
 	if comp.Type != cdx.ComponentTypeFile {
 		return false
@@ -260,8 +362,6 @@ func isLowValueFileArtifact(comp cdx.Component, foundBy string) bool {
 	return comp.PackageURL == "" && comp.Version == "" && foundBy == ""
 }
 
-// componentPropertyValues collects unique property values for one key and
-// normalizes logical path properties to leaf-most entries.
 func componentPropertyValues(comp cdx.Component, name string) []string {
 	if comp.Properties == nil {
 		return nil
@@ -285,8 +385,6 @@ func componentPropertyValues(comp cdx.Component, name string) []string {
 	return values
 }
 
-// leafMostLogicalPaths removes ancestor paths when a deeper descendant path is
-// also present, preserving the most specific provenance pointers.
 func leafMostLogicalPaths(values []string) []string {
 	if len(values) < 2 {
 		return values
@@ -320,8 +418,6 @@ func leafMostLogicalPaths(values []string) []string {
 	return kept
 }
 
-// isAncestorLogicalPath reports whether ancestor is a proper logical-path
-// ancestor of descendant.
 func isAncestorLogicalPath(ancestor, descendant string) bool {
 	ancestor = strings.TrimSuffix(path.Clean(ancestor), "/")
 	descendant = path.Clean(descendant)
@@ -331,8 +427,6 @@ func isAncestorLogicalPath(ancestor, descendant string) bool {
 	return strings.HasPrefix(descendant, ancestor+"/")
 }
 
-// firstComponentPropertyValue returns the first normalized value for a BOM
-// property key.
 func firstComponentPropertyValue(comp cdx.Component, name string) string {
 	values := componentPropertyValues(comp, name)
 	if len(values) == 0 {
@@ -341,10 +435,58 @@ func firstComponentPropertyValue(comp cdx.Component, name string) string {
 	return values[0]
 }
 
-// firstString returns the first element or an empty string.
 func firstString(values []string) string {
 	if len(values) == 0 {
 		return ""
 	}
 	return values[0]
+}
+
+func collectDistinctPURLs(occurrences []ComponentOccurrence) []string {
+	if len(occurrences) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(occurrences))
+	purls := make([]string, 0, len(occurrences))
+	for i := range occurrences {
+		if occurrences[i].PURL == "" {
+			continue
+		}
+		if _, ok := seen[occurrences[i].PURL]; ok {
+			continue
+		}
+		seen[occurrences[i].PURL] = struct{}{}
+		purls = append(purls, occurrences[i].PURL)
+	}
+	sort.Strings(purls)
+	return purls
+}
+
+func packageAnchorBase(name string, version string) string {
+	base := "package"
+	if slug := anchorSlugPart(name); slug != "" {
+		base += "-" + slug
+	}
+	if slug := anchorSlugPart(version); slug != "" {
+		base += "-" + slug
+	}
+	return strings.TrimRight(base, "-")
+}
+
+func anchorSlugPart(value string) string {
+	var b strings.Builder
+	prevDash := true
+	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
@@ -94,7 +95,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 		fmt.Fprintf(w, "- %s\n", t.noIndexedComponents)
 		return
 	}
-	groups := buildPackageOccurrenceGroups(occurrences)
+	groups := domain.BuildPackageOccurrenceGroups(occurrences)
 
 	// Split package groups into with-PURL and without-PURL sections.
 	var withPURL, withoutPURL []packageOccurrenceGroup
@@ -183,4 +184,11 @@ func writeVulnerabilityLines(w io.Writer, lines []string, indent string) {
 	for _, line := range lines {
 		fmt.Fprintf(w, "%s%s\n", indent, line)
 	}
+}
+
+func valueOrDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "-"
+	}
+	return value
 }

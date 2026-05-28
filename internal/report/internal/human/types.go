@@ -2,8 +2,7 @@
 package human
 
 import (
-	cdx "github.com/CycloneDX/cyclonedx-go"
-
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	model "github.com/TomTonic/extract-sbom/internal/report/internal/model"
 )
 
@@ -22,90 +21,23 @@ type ProcessingIssue = model.ProcessingIssue
 // ReportData aliases the shared report snapshot contract from model.
 type ReportData = model.ReportData
 
-// componentOccurrence is one normalized, reportable view of an SBOM component.
-type componentOccurrence struct {
-	ObjectID       string
-	ComponentType  cdx.ComponentType
-	PackageName    string
-	Version        string
-	PURL           string
-	CPE            string
-	DeliveryPaths  []string
-	EvidencePaths  []string
-	EvidenceSource string
-	FoundBy        string
-}
+// componentOccurrence aliases the report-domain occurrence view.
+type componentOccurrence = domain.ComponentOccurrence
 
-// packageOccurrenceGroup groups multiple occurrences that represent one package.
-type packageOccurrenceGroup struct {
-	AnchorID    string
-	PackageName string
-	Version     string
-	PURLs       []string
-	Occurrences []componentOccurrence
-}
+// packageOccurrenceGroup aliases the report-domain occurrence grouping view.
+type packageOccurrenceGroup = domain.PackageOccurrenceGroup
 
-// componentIndexStats tracks filtering and indexing counters.
-type componentIndexStats struct {
-	TotalComponents               int
-	MissingDeliveryPath           int
-	FilteredContainerNodes        int
-	FilteredAbsolutePathNames     int
-	FilteredLowValueFileArtifacts int
-	DuplicateMerged               int
-	IndexedComponents             int
-	IndexedWithPURL               int
-	IndexedWithoutPURL            int
-	IndexedWithEvidencePath       int
-	IndexedWithEvidenceSourceOnly int
-	IndexedWithoutEvidence        int
-}
+// componentIndexStats aliases the occurrence indexing statistics view.
+type componentIndexStats = domain.ComponentIndexStats
 
-// extractionStats summarizes extraction outcomes and relevant paths.
-type extractionStats struct {
-	Total                  int
-	Extracted              int
-	TotalFileEntries       int
-	SyftNative             int
-	Failed                 int
-	Skipped                int
-	ToolMissing            int
-	SecurityBlocked        int
-	Pending                int
-	Other                  int
-	ExtensionFiltered      int
-	ExtensionFilteredPaths []string
-	FailedPaths            []string
-	ToolMissingPaths       []string
-	SecurityBlockedPaths   []string
-}
+// extractionStats aliases extraction aggregation counters.
+type extractionStats = domain.ExtractionStats
 
-// scanStats summarizes per-node scan outcomes and coverage gaps.
-type scanStats struct {
-	Total            int
-	Successful       int
-	Errors           int
-	TotalComponents  int
-	NoComponentTasks int
-	ErrorPaths       []string
-	NoComponentPaths []string
-}
+// scanStats aliases scan aggregation counters.
+type scanStats = domain.ScanStats
 
-// suppressionStats groups suppression records by reason.
-type suppressionStats struct {
-	FSArtifacts   int
-	LowValueFiles int
-	WeakDuplicate int
-	PURLDuplicate int
-}
-
-// policyStats aggregates policy decisions for summary reporting.
-type policyStats struct {
-	Total    int
-	Continue int
-	Skip     int
-	Abort    int
-}
+// policyStats aliases policy aggregation counters.
+type policyStats = domain.PolicyStats
 
 // processingEntry is a flattened log row for the processing-issues table.
 type processingEntry struct {

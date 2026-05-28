@@ -5,8 +5,6 @@ import (
 	"io"
 	"sort"
 	"strings"
-
-	"github.com/TomTonic/extract-sbom/internal/assembly"
 )
 
 // writeRootMetadata writes the root-component metadata table and marks whether
@@ -128,22 +126,4 @@ func markdownHeadingAnchor(title string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
-}
-
-// collectSuppressionStats groups suppression records by suppression reason.
-func collectSuppressionStats(suppressions []assembly.SuppressionRecord) suppressionStats {
-	stats := suppressionStats{}
-	for i := range suppressions {
-		switch suppressions[i].Reason {
-		case assembly.SuppressionFSArtifact:
-			stats.FSArtifacts++
-		case assembly.SuppressionLowValueFile:
-			stats.LowValueFiles++
-		case assembly.SuppressionWeakDuplicate:
-			stats.WeakDuplicate++
-		case assembly.SuppressionPURLDuplicate:
-			stats.PURLDuplicate++
-		}
-	}
-	return stats
 }

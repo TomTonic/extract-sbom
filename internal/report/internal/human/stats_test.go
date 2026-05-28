@@ -10,6 +10,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/identify"
 	"github.com/TomTonic/extract-sbom/internal/policy"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
@@ -83,7 +84,7 @@ func TestCollectExtractionStats(t *testing.T) {
 		},
 	}
 
-	stats := collectExtractionStats(tree)
+	stats := domain.CollectExtractionStats(tree)
 	if stats.Total != 8 {
 		t.Errorf("Total = %d, want 8", stats.Total)
 	}
@@ -115,7 +116,7 @@ func TestCollectExtractionStats(t *testing.T) {
 
 func TestCollectExtractionStatsNilTree(t *testing.T) {
 	t.Parallel()
-	stats := collectExtractionStats(nil)
+	stats := domain.CollectExtractionStats(nil)
 	if stats.Total != 0 {
 		t.Errorf("Total = %d, want 0", stats.Total)
 	}
@@ -181,7 +182,7 @@ func TestCollectScanStats(t *testing.T) {
 		{NodePath: "empty.jar", BOM: &cdx.BOM{}},
 		{NodePath: "err.jar", Error: &testError{msg: "fail"}},
 	}
-	stats := collectScanStats(scans)
+	stats := domain.CollectScanStats(scans)
 	if stats.Total != 3 {
 		t.Errorf("Total = %d, want 3", stats.Total)
 	}
@@ -202,12 +203,12 @@ func TestCollectScanStats(t *testing.T) {
 func TestCollectPolicyStats(t *testing.T) {
 	t.Parallel()
 
-	stats := collectPolicyStats(nil)
+	stats := domain.CollectPolicyStats(nil)
 	if stats.Total != 0 {
 		t.Errorf("Total = %d, want 0", stats.Total)
 	}
 
-	withDecisions := collectPolicyStats([]policy.Decision{{Action: policy.ActionContinue}, {Action: policy.ActionSkip}, {Action: policy.ActionAbort}})
+	withDecisions := domain.CollectPolicyStats([]policy.Decision{{Action: policy.ActionContinue}, {Action: policy.ActionSkip}, {Action: policy.ActionAbort}})
 	if withDecisions.Total != 3 || withDecisions.Continue != 1 || withDecisions.Skip != 1 || withDecisions.Abort != 1 {
 		t.Fatalf("unexpected policy stats: %+v", withDecisions)
 	}
