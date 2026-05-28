@@ -769,7 +769,7 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
 - `internal/report/internal/domain/*.go`: report-domain aggregation logic grouped by noun (occurrence collection/grouping, vulnerability counters, suppression reason stats, and extraction/scan/policy statistics) shared by report renderers.
-- `report.go`, `report_types.go`: public facade API, input summary hashing, root-level aliases for shared report contracts, and the thin human/HTML/machine/SARIF facades delegating into internal report packages.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, a minimal orchestrator-facing type surface (`InputSummary`, `ProcessingIssue`, `ReportData`), and thin human/HTML/machine/SARIF facades delegating into internal report packages.
 - `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, remaining human-specific occurrence/vulnerability/suppression presentation logic, and human-specific i18n).
 - `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
 - `internal/report/internal/machine/*.go`: structured machine JSON report generator, JSON schema projection helpers, and machine-specific tests.

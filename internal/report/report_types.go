@@ -7,14 +7,8 @@ package report
 
 import model "github.com/TomTonic/extract-sbom/internal/report/internal/model"
 
-// ToolVersions aliases the shared report tool-version contract from model.
-type ToolVersions = model.ToolVersions
-
 // InputSummary aliases the shared input summary contract from model.
 type InputSummary = model.InputSummary
-
-// SandboxSummary aliases the shared sandbox summary contract from model.
-type SandboxSummary = model.SandboxSummary
 
 // ProcessingIssue aliases the shared processing-issue contract from model.
 type ProcessingIssue = model.ProcessingIssue

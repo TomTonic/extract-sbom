@@ -102,16 +102,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/8: resolving sandbox")
 	sb, resolveErr := sandbox.Resolve(cfg)
 	addIssue("sandbox-resolve", resolveErr)
-	sandboxInfo := report.SandboxSummary{
-		UnsafeOvr: cfg.Unsafe,
-		Name:      sb.Name(),
-		Available: sb.Available(),
-	}
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] sandbox: %s (available=%t)", sandboxInfo.Name, sandboxInfo.Available)
+	sandboxName := sb.Name()
+	sandboxAvailable := sb.Available()
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] sandbox: %s (available=%t)", sandboxName, sandboxAvailable)
 
 	// Check external tool availability early so users don't wait minutes
 	// before discovering that MSI/CAB/7z extraction will fail.
-	if !sb.Available() {
+	if !sandboxAvailable {
 		cfg.EmitProgress(config.ProgressNormal,
 			"[extract-sbom] WARNING: sandbox unavailable and --unsafe not set. "+
 				"Extraction of MSI, CAB, 7z, ISO, and InstallShield formats will be skipped. "+
@@ -258,37 +255,36 @@ func Run(ctx context.Context, cfg config.Config) Result {
 	endTime := time.Now()
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
-		toolVersions := report.ToolVersions{
-			SevenZip:   extract.GetUsedSevenZipVersion(),
-			Unshield:   extract.GetUsedUnshieldVersion(),
-			Unsquashfs: extract.GetUsedUnsquashfsVersion(),
-		}
+		rd := report.ReportData{}
+		rd.Input = inputSummary
+		rd.Generator = generatorInfo
+		rd.Config = cfg
+		rd.Tree = tree
+		rd.Scans = scans
+		rd.Vulnerabilities = vulnResult
+		rd.PolicyDecisions = policyEngine.Decisions()
+		rd.SandboxInfo.UnsafeOvr = cfg.Unsafe
+		rd.SandboxInfo.Name = sandboxName
+		rd.SandboxInfo.Available = sandboxAvailable
+		rd.ProcessingIssues = processingIssues
+		rd.StartTime = startTime
+		rd.EndTime = endTime
+		rd.BOM = assembledBOM
+		rd.SBOMPath = sbomPath
+		rd.Suppressions = suppressions
+		rd.ToolVersions.SevenZip = extract.GetUsedSevenZipVersion()
+		rd.ToolVersions.Unshield = extract.GetUsedUnshieldVersion()
+		rd.ToolVersions.Unsquashfs = extract.GetUsedUnsquashfsVersion()
 		if vulnResult != nil && vulnResult.GrypeVersion != "" {
-			toolVersions.Grype = "grype " + vulnResult.GrypeVersion
+			rd.ToolVersions.Grype = "grype " + vulnResult.GrypeVersion
 			if vulnResult.DBSchemaVersion != "" {
-				toolVersions.GrypeDB = "db: " + vulnResult.DBSchemaVersion
+				rd.ToolVersions.GrypeDB = "db: " + vulnResult.DBSchemaVersion
 				if vulnResult.DBBuilt != "" {
-					toolVersions.GrypeDB += ", built " + vulnResult.DBBuilt
+					rd.ToolVersions.GrypeDB += ", built " + vulnResult.DBBuilt
 				}
 			}
 		}
-		return report.ReportData{
-			Input:            inputSummary,
-			Generator:        generatorInfo,
-			Config:           cfg,
-			Tree:             tree,
-			Scans:            scans,
-			Vulnerabilities:  vulnResult,
-			PolicyDecisions:  policyEngine.Decisions(),
-			SandboxInfo:      sandboxInfo,
-			ProcessingIssues: processingIssues,
-			StartTime:        startTime,
-			EndTime:          endTime,
-			BOM:              assembledBOM,
-			SBOMPath:         sbomPath,
-			Suppressions:     suppressions,
-			ToolVersions:     toolVersions,
-		}
+		return rd
 	}
 
 	var humanRenderConfig humanRenderConfig

@@ -13,7 +13,7 @@ import (
 
 // makeTestReportData creates a minimal ReportData suitable for testing.
 func makeTestReportData() ReportData {
-	return ReportData{
+	data := ReportData{
 		Input: InputSummary{
 			Filename: "test.zip",
 			Size:     1024,
@@ -34,13 +34,12 @@ func makeTestReportData() ReportData {
 		},
 		Scans:           []scan.ScanResult{},
 		PolicyDecisions: []policy.Decision{},
-		SandboxInfo: SandboxSummary{
-			Name:      "passthrough",
-			Available: true,
-			UnsafeOvr: false,
-		},
-		StartTime: time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
-		EndTime:   time.Date(2025, 1, 15, 10, 0, 5, 0, time.UTC),
-		SBOMPath:  "/output/test.cdx.json",
+		StartTime:       time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
+		EndTime:         time.Date(2025, 1, 15, 10, 0, 5, 0, time.UTC),
+		SBOMPath:        "/output/test.cdx.json",
 	}
+	data.SandboxInfo.Name = "passthrough"
+	data.SandboxInfo.Available = true
+	data.SandboxInfo.UnsafeOvr = false
+	return data
 }

@@ -230,7 +230,7 @@ Status values:
 
 ### REP-ARCH-016 - Collapse the exported API surface
 
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Objective: Reduce the root package API to the minimum surface the orchestrator
   actually needs.
 - Exit criteria:
@@ -275,4 +275,4 @@ For every future refactoring commit in `internal/report`, include:
 
 ## Current Next Step
 
-`REP-ARCH-016 - Collapse the exported API surface`
+`REP-ARCH-017 - Re-align test ownership and names`
