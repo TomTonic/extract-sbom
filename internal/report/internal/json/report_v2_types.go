@@ -5,7 +5,6 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
-	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // ReportV2 is the top-level canonical JSON report payload for schema 2.0.0.
@@ -140,6 +139,63 @@ type warningV2 struct {
 	RelatedNodeID string `json:"relatedNodeId,omitempty"`
 }
 
+// vulnerabilityStateV2 records the overall outcome of vulnerability enrichment for this run.
+// The values mirror vulnscan.State but are owned by the report schema; the mapping in
+// toVulnerabilityResultV2 / fromVulnerabilityResultV2 decouples the two layers.
+type vulnerabilityStateV2 string
+
+// vulnerabilityCoverageV2 records the per-component coverage result from the vulnerability scan.
+// The values mirror vulnscan.CoverageState and are converted at the report boundary.
+type vulnerabilityCoverageV2 string
+
+// vulnerabilityMatchV2 is one normalized vulnerability match keyed by SBOM bom-ref.
+// It captures all fields emitted by Grype at schema 2.0.0; future Grype schema changes
+// only require updating the conversion functions, not the report schema.
+type vulnerabilityMatchV2 struct {
+	VulnerabilityID string   `json:"vulnerabilityId"`
+	Severity        string   `json:"severity"`
+	CVSSScore       *float64 `json:"cvssScore,omitempty"`
+	CVSSVersion     string   `json:"cvssVersion,omitempty"`
+	CVSSVector      string   `json:"cvssVector,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	Namespace       string   `json:"namespace,omitempty"`
+	DataSource      string   `json:"dataSource,omitempty"`
+	URLs            []string `json:"urls,omitempty"`
+	FixState        string   `json:"fixState,omitempty"`
+	FixVersions     []string `json:"fixVersions,omitempty"`
+	Matcher         string   `json:"matcher,omitempty"`
+	MatchType       string   `json:"matchType,omitempty"`
+	ArtifactName    string   `json:"artifactName,omitempty"`
+	ArtifactVersion string   `json:"artifactVersion,omitempty"`
+	ArtifactType    string   `json:"artifactType,omitempty"`
+	ArtifactPURL    string   `json:"artifactPurl,omitempty"`
+	EPSS            *float64 `json:"epss,omitempty"`
+	EPSSPercentile  *float64 `json:"epssPercentile,omitempty"`
+	Risk            *float64 `json:"risk,omitempty"`
+	KEV             *bool    `json:"kev,omitempty"`
+}
+
+// vulnerabilityIssueV2 captures a non-fatal enrichment diagnostic for report transparency.
+type vulnerabilityIssueV2 struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// vulnerabilityResultV2 is the canonical snapshot of vulnerability enrichment output.
+// It is a schema-stable copy of vulnscan.Result; changes to the external scan package
+// are isolated to the conversion functions toVulnerabilityResultV2 / fromVulnerabilityResultV2.
+type vulnerabilityResultV2 struct {
+	State            vulnerabilityStateV2               `json:"state"`
+	Requested        bool                               `json:"requested"`
+	GrypeVersion     string                             `json:"grypeVersion,omitempty"`
+	DBSchemaVersion  string                             `json:"dbSchemaVersion,omitempty"`
+	DBBuilt          string                             `json:"dbBuilt,omitempty"`
+	DBUpdated        string                             `json:"dbUpdated,omitempty"`
+	MatchesByBOMRef  map[string][]vulnerabilityMatchV2  `json:"matchesByBomRef,omitempty"`
+	CoverageByBOMRef map[string]vulnerabilityCoverageV2 `json:"coverageByBomRef,omitempty"`
+	Errors           []vulnerabilityIssueV2             `json:"errors,omitempty"`
+}
+
 // rawV2 is a near-1:1 snapshot of the orchestrator's output at the end of each pipeline stage.
 // It is intended as a complete audit log; downstream consumers should prefer the normalized
 // entities and projections sections for rendering.
@@ -147,7 +203,7 @@ type rawV2 struct {
 	ExtractionTreeRaw   *extract.ExtractionNode      `json:"extractionTreeRaw"`
 	ScansRaw            []rawScanV2                  `json:"scansRaw"`
 	BOMRaw              *cdx.BOM                     `json:"bomRaw"`
-	VulnerabilitiesRaw  *vulnscan.Result             `json:"vulnerabilitiesRaw"`
+	VulnerabilitiesRaw  *vulnerabilityResultV2       `json:"vulnerabilitiesRaw"`
 	PolicyDecisionsRaw  []policy.Decision            `json:"policyDecisionsRaw"`
 	ProcessingIssuesRaw []ProcessingIssue            `json:"processingIssuesRaw"`
 	SuppressionsRaw     []assembly.SuppressionRecord `json:"suppressionsRaw"`

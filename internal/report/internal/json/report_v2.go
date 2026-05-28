@@ -12,6 +12,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/policy"
 	"github.com/TomTonic/extract-sbom/internal/scan"
+	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 const (
@@ -130,7 +131,7 @@ func buildJSONReportV2Skeleton(data ReportData, generatedAt time.Time) ReportV2 
 			ExtractionTreeRaw:   data.Tree,
 			ScansRaw:            rawScans,
 			BOMRaw:              data.BOM,
-			VulnerabilitiesRaw:  data.Vulnerabilities,
+			VulnerabilitiesRaw:  toVulnerabilityResultV2(data.Vulnerabilities),
 			PolicyDecisionsRaw:  copyPolicyDecisions(data.PolicyDecisions),
 			ProcessingIssuesRaw: copyProcessingIssues(data.ProcessingIssues),
 			SuppressionsRaw:     copySuppressions(data.Suppressions),
@@ -206,5 +207,67 @@ func copyProcessingIssues(in []ProcessingIssue) []ProcessingIssue {
 func copySuppressions(in []assembly.SuppressionRecord) []assembly.SuppressionRecord {
 	out := make([]assembly.SuppressionRecord, len(in))
 	copy(out, in)
+	return out
+}
+
+// toVulnerabilityResultV2 converts a vulnscan.Result into the canonical report snapshot.
+//
+// This is the single coupling point between the json package and vulnscan struct layout.
+// All downstream report logic operates on the canonical vulnerabilityResultV2 type;
+// changes to vulnscan.VMatch only require updating this function and its inverse.
+func toVulnerabilityResultV2(v *vulnscan.Result) *vulnerabilityResultV2 {
+	if v == nil {
+		return nil
+	}
+	out := &vulnerabilityResultV2{
+		State:           vulnerabilityStateV2(v.State),
+		Requested:       v.Requested,
+		GrypeVersion:    v.GrypeVersion,
+		DBSchemaVersion: v.DBSchemaVersion,
+		DBBuilt:         v.DBBuilt,
+		DBUpdated:       v.DBUpdated,
+	}
+	if len(v.MatchesByBOMRef) > 0 {
+		out.MatchesByBOMRef = make(map[string][]vulnerabilityMatchV2, len(v.MatchesByBOMRef))
+		for ref, matches := range v.MatchesByBOMRef {
+			canon := make([]vulnerabilityMatchV2, len(matches))
+			for i := range matches {
+				m := &matches[i]
+				canon[i] = vulnerabilityMatchV2{
+					VulnerabilityID: m.VulnerabilityID,
+					Severity:        m.Severity,
+					CVSSScore:       m.CVSSScore,
+					CVSSVersion:     m.CVSSVersion,
+					CVSSVector:      m.CVSSVector,
+					Description:     m.Description,
+					Namespace:       m.Namespace,
+					DataSource:      m.DataSource,
+					URLs:            append([]string(nil), m.URLs...),
+					FixState:        m.FixState,
+					FixVersions:     append([]string(nil), m.FixVersions...),
+					Matcher:         m.Matcher,
+					MatchType:       m.MatchType,
+					ArtifactName:    m.ArtifactName,
+					ArtifactVersion: m.ArtifactVersion,
+					ArtifactType:    m.ArtifactType,
+					ArtifactPURL:    m.ArtifactPURL,
+					EPSS:            m.EPSS,
+					EPSSPercentile:  m.EPSSPercentile,
+					Risk:            m.Risk,
+					KEV:             m.KEV,
+				}
+			}
+			out.MatchesByBOMRef[ref] = canon
+		}
+	}
+	if len(v.CoverageByBOMRef) > 0 {
+		out.CoverageByBOMRef = make(map[string]vulnerabilityCoverageV2, len(v.CoverageByBOMRef))
+		for ref, cov := range v.CoverageByBOMRef {
+			out.CoverageByBOMRef[ref] = vulnerabilityCoverageV2(cov)
+		}
+	}
+	for _, e := range v.Errors {
+		out.Errors = append(out.Errors, vulnerabilityIssueV2{Code: e.Code, Message: e.Message})
+	}
 	return out
 }
