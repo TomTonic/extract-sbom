@@ -86,6 +86,11 @@ func SortedUniqueNonEmptyStrings(in []string) []string {
 	return domain.SortedUniqueNonEmptyStrings(in)
 }
 
+// NormalizeSeverity canonicalizes vulnerability severity strings.
+func NormalizeSeverity(raw string) string {
+	return domain.NormalizeSeverity(raw)
+}
+
 // ReportDataFromV2 reconstructs the shared report snapshot from the canonical JSON model.
 func ReportDataFromV2(report ReportV2) ReportData {
 	limits := config.DefaultLimits()

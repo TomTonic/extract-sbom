@@ -81,11 +81,6 @@ func writeProcessingIssues(w io.Writer, data ReportData, ext extractionStats, sc
 	}
 }
 
-// collectProcessingEntries is a compatibility wrapper used by markdown tests.
-func collectProcessingEntries(data ReportData) []processingEntry {
-	return reportjson.CollectMarkdownProcessingEntries(data)
-}
-
 // escapeMarkdownCell sanitizes table-cell content for Markdown output.
 func escapeMarkdownCell(value string) string {
 	value = strings.ReplaceAll(value, "|", "\\|")

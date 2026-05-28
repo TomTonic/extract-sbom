@@ -39,9 +39,6 @@ type scanStats = reportjson.ScanStats
 // policyStats aliases policy aggregation counters.
 type policyStats = reportjson.PolicyStats
 
-// processingEntry aliases JSON-owned processing row projection.
-type processingEntry = reportjson.MarkdownProcessingEntry
-
 // reportSection defines one TOC entry and heading anchor in the markdown report.
 type reportSection struct {
 	title  string

@@ -3,8 +3,9 @@ package markdown
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
+
+	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
 
 // writeRootMetadata writes the root-component metadata table and marks whether
@@ -12,36 +13,24 @@ import (
 func writeRootMetadata(w io.Writer, data ReportData, t translations) {
 	fmt.Fprintf(w, "| %s | %s | %s |\n", t.field, t.value, t.source)
 	fmt.Fprintf(w, "|---|---|---|\n")
-
-	rm := data.Config.RootMetadata
-
-	nameSource := t.derived
-	if rm.Name != "" {
-		nameSource = t.suppliedBy
-	}
-	name := rm.Name
-	if name == "" {
-		name = data.Input.Filename
-	}
-	fmt.Fprintf(w, "| %s | %s | %s |\n", t.nameLabel, name, nameSource)
-
-	if rm.Manufacturer != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.manufacturerLabel, rm.Manufacturer, t.suppliedBy)
-	}
-	if rm.Version != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.version, rm.Version, t.suppliedBy)
-	}
-	if rm.DeliveryDate != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.deliveryDateLabel, rm.DeliveryDate, t.suppliedBy)
-	}
-
-	propertyKeys := make([]string, 0, len(rm.Properties))
-	for key := range rm.Properties {
-		propertyKeys = append(propertyKeys, key)
-	}
-	sort.Strings(propertyKeys)
-	for _, key := range propertyKeys {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", key, rm.Properties[key], t.suppliedBy)
+	rows := reportjson.BuildMarkdownRootMetadataRows(data)
+	for i := range rows {
+		sourceLabel := t.suppliedBy
+		if rows[i].SourceCode == reportjson.MarkdownRootMetadataSourceDerived {
+			sourceLabel = t.derived
+		}
+		fieldLabel := rows[i].FieldKey
+		switch rows[i].FieldKey {
+		case "name":
+			fieldLabel = t.nameLabel
+		case "manufacturer":
+			fieldLabel = t.manufacturerLabel
+		case "version":
+			fieldLabel = t.version
+		case "deliveryDate":
+			fieldLabel = t.deliveryDateLabel
+		}
+		fmt.Fprintf(w, "| %s | %s | %s |\n", fieldLabel, rows[i].FieldValue, sourceLabel)
 	}
 	fmt.Fprintln(w)
 }

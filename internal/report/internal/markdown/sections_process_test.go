@@ -6,6 +6,7 @@ import (
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/identify"
+	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
@@ -25,7 +26,7 @@ func TestCollectProcessingEntriesFromTree(t *testing.T) {
 	data.ProcessingIssues = []ProcessingIssue{{Stage: "assembly", Message: "merge error"}}
 	data.Scans = []scan.ScanResult{{NodePath: "root.zip", Error: fmt.Errorf("syft failed")}}
 
-	entries := collectProcessingEntries(data)
+	entries := reportjson.CollectMarkdownProcessingEntries(data)
 	if len(entries) != 5 {
 		t.Fatalf("got %d entries, want 5", len(entries))
 	}
@@ -55,7 +56,7 @@ func TestCollectProcessingEntriesToolMissingFallbackDetail(t *testing.T) {
 		Children: []*extract.ExtractionNode{{Path: "a.msi", Status: extract.StatusToolMissing}},
 	}
 
-	entries := collectProcessingEntries(data)
+	entries := reportjson.CollectMarkdownProcessingEntries(data)
 	found := false
 	for _, e := range entries {
 		if e.Location == "a.msi" {
@@ -94,7 +95,7 @@ func TestCollectProcessingEntriesIncludesArchiveMetadataContext(t *testing.T) {
 		}},
 	}
 
-	entries := collectProcessingEntries(data)
+	entries := reportjson.CollectMarkdownProcessingEntries(data)
 	if len(entries) == 0 {
 		t.Fatal("expected extraction entry")
 	}
