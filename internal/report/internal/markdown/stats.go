@@ -3,7 +3,6 @@ package markdown
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -83,86 +82,55 @@ func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn sc
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "- %s\n", t.residualRiskProfileLead)
 	fmt.Fprintf(w, "- %s\n", t.residualRiskAbsenceHint)
-	if idx.IndexedComponents > 0 {
-		// PURL coverage with links to the two component index subsections.
-		purlLine := fmt.Sprintf(t.residualRiskPURLCoverage, idx.IndexedWithPURL, idx.IndexedComponents, idx.IndexedWithoutPURL)
-		// Replace plain number references with hyperlinked equivalents.
-		withPURLLink := fmt.Sprintf("[%d](%s)", idx.IndexedWithPURL, "#"+anchorComponentsWithPURL)
-		withoutPURLLink := fmt.Sprintf("[%d](%s)", idx.IndexedWithoutPURL, "#"+anchorComponentsWithoutPURL)
-		purlLine = strings.Replace(purlLine, fmt.Sprintf("%d of %d indexed", idx.IndexedWithPURL, idx.IndexedComponents),
-			fmt.Sprintf("%s of %d indexed", withPURLLink, idx.IndexedComponents), 1)
-		purlLine = strings.Replace(purlLine, fmt.Sprintf("%d indexed occurrences do not", idx.IndexedWithoutPURL),
-			fmt.Sprintf("%s indexed occurrences do not", withoutPURLLink), 1)
-		purlLine = strings.Replace(purlLine, fmt.Sprintf("%d indexierte Vorkommen haben keine PURL", idx.IndexedWithoutPURL),
-			fmt.Sprintf("%s indexierte Vorkommen haben keine PURL", withoutPURLLink), 1)
-		fmt.Fprintf(w, "- %s\n", purlLine)
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage, idx.IndexedWithEvidencePath, idx.IndexedWithEvidenceSourceOnly, idx.IndexedWithoutEvidence))
+	model := reportjson.BuildMarkdownResidualRiskModel(data, ext, scn, idx, reportjson.MarkdownResidualRiskTemplates{
+		ResidualRiskPURLCoverage:         t.residualRiskPURLCoverage,
+		ResidualRiskEvidenceCoverage:     t.residualRiskEvidenceCoverage,
+		ResidualRiskNoComponentTasks:     t.residualRiskNoComponentTasks,
+		ResidualRiskFileArtifactCoverage: t.residualRiskFileArtifactCoverage,
+		ResidualRiskExtensionFilter:      t.residualRiskExtensionFilter,
+		ResidualRiskExtractionGap:        t.residualRiskExtractionGap,
+		ResidualRiskToolGap:              t.residualRiskToolGap,
+		ResidualRiskScanGap:              t.residualRiskScanGap,
+		ResidualRiskMoreDetails:          t.residualRiskMoreDetails,
+		NoneValue:                        t.noneValue,
+	}, reportjson.MarkdownResidualRiskLinks{
+		ScanNoPackageIdentitiesLink:     sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
+		SuppressionFSArtifactsLink:      sectionLink(t.suppressionReasonFSArtifact, anchorSuppressionFSArtifacts),
+		SuppressionLowValueLink:         sectionLink(t.suppressionReasonLowValueFile, anchorSuppressionLowValue),
+		ExtensionFilterLink:             sectionLink(t.extensionFilterSection, anchorExtensionFilter),
+		PackageDetectionReliabilityLink: scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability"),
+		ComponentsWithPURLAnchorID:      anchorComponentsWithPURL,
+		ComponentsWithoutPURLAnchorID:   anchorComponentsWithoutPURL,
+	})
+	if model.PURLLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.PURLLine)
 	}
-	if scn.Successful > 0 {
-		fmt.Fprintf(w, "- %s %s\n",
-			fmt.Sprintf(t.residualRiskNoComponentTasks, scn.NoComponentTasks, scn.Successful, samplePaths(scn.NoComponentPaths, t.noneValue)),
-			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs))
+	if model.EvidenceLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.EvidenceLine)
 	}
-	suppression := reportjson.CollectSuppressionStats(data.Suppressions)
-	fileArtifactCount := suppression.FSArtifacts + suppression.LowValueFiles
-	if fileArtifactCount > 0 {
-		links := make([]string, 0, 2)
-		if suppression.FSArtifacts > 0 {
-			links = append(links, sectionLink(t.suppressionReasonFSArtifact, anchorSuppressionFSArtifacts))
-		}
-		if suppression.LowValueFiles > 0 {
-			links = append(links, sectionLink(t.suppressionReasonLowValueFile, anchorSuppressionLowValue))
-		}
-		fmt.Fprintf(w, "- %s %s\n",
-			fmt.Sprintf(t.residualRiskFileArtifactCoverage, fileArtifactCount),
-			strings.Join(links, ", "))
+	if model.NoComponentLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.NoComponentLine)
 	}
-	if ext.ExtensionFiltered > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(
-			t.residualRiskExtensionFilter,
-			ext.ExtensionFiltered,
-			sectionLink(t.extensionFilterSection, anchorExtensionFilter),
-		))
+	if model.FileArtifactLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.FileArtifactLine)
 	}
-	if ext.Failed > 0 || ext.SecurityBlocked > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap, ext.Failed+ext.SecurityBlocked, samplePaths(append(append([]string{}, ext.FailedPaths...), ext.SecurityBlockedPaths...), t.noneValue)))
+	if model.ExtensionLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.ExtensionLine)
 	}
-	if ext.ToolMissing > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap, ext.ToolMissing, samplePaths(ext.ToolMissingPaths, t.noneValue)))
+	if model.ExtractionGapLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.ExtractionGapLine)
 	}
-	if scn.Errors > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap, scn.Errors, samplePaths(scn.ErrorPaths, t.noneValue)))
+	if model.ToolGapLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.ToolGapLine)
 	}
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
+	if model.ScanGapLine != "" {
+		fmt.Fprintf(w, "- %s\n", model.ScanGapLine)
+	}
+	fmt.Fprintf(w, "- %s\n", model.MoreDetailsLine)
 }
 
 // configSkipExtensionsDisplay returns a compact one-liner for the configuration
 // table showing the active skip list, capped to keep the table cell readable.
 func configSkipExtensionsDisplay(exts []string) string {
-	if len(exts) == 0 {
-		return "(none)"
-	}
-	sorted := make([]string, len(exts))
-	copy(sorted, exts)
-	sort.Strings(sorted)
-	const maxShow = 200
-	if len(sorted) <= maxShow {
-		return strings.Join(sorted, " ")
-	}
-	return strings.Join(sorted[:maxShow], " ") + fmt.Sprintf(" (+%d more)", len(sorted)-maxShow)
-}
-
-// samplePaths returns up to three sorted example paths for compact summaries.
-func samplePaths(paths []string, noneValue string) string {
-	const maxCount = 3
-
-	if len(paths) == 0 {
-		return noneValue
-	}
-
-	unique := reportjson.SortedUniqueNonEmptyStrings(paths)
-	if len(unique) <= maxCount {
-		return strings.Join(unique, "; ")
-	}
-	return strings.Join(unique[:maxCount], "; ") + fmt.Sprintf(" (+%d more)", len(unique)-maxCount)
+	return reportjson.FormatMarkdownConfigSkipExtensions(exts)
 }
