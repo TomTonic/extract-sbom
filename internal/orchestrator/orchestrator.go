@@ -287,85 +287,85 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		return rd
 	}
 
-	var humanRenderConfig humanRenderConfig
-	var humanOptionsErr error
-	switch cfg.ReportMode {
-	case config.ReportHuman, config.ReportBoth, config.ReportAll:
-		humanRenderConfig, humanOptionsErr = humanRenderOptionsFromConfig(cfg)
+	var markdownRenderConfig markdownRenderConfig
+	var markdownOptionsErr error
+	switch cfg.ReportSelection {
+	case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
+		markdownRenderConfig, markdownOptionsErr = markdownRenderOptionsFromConfig(cfg)
 	}
 
 	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
 	var reportPath string
-	var humanPath string
-	humanIssueCount := -1
+	var markdownPath string
+	markdownIssueCount := -1
 
-	switch cfg.ReportMode {
-	case config.ReportHuman, config.ReportBoth, config.ReportAll:
-		humanPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
-		f, ferr := os.Create(humanPath)
+	switch cfg.ReportSelection {
+	case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
+		markdownPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
+		f, ferr := os.Create(markdownPath)
 		if ferr != nil {
-			addIssue("create-report-human", ferr)
+			addIssue("create-report-markdown", ferr)
 			if fatalErr == nil {
 				fatalErr = fmt.Errorf("create report: %w", ferr)
 			}
 		} else {
-			if humanOptionsErr != nil {
+			if markdownOptionsErr != nil {
 				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-human", cerr)
+					addIssue("close-report-markdown", cerr)
 					if fatalErr == nil {
 						fatalErr = fmt.Errorf("close report: %w", cerr)
 					}
 				}
-				addIssue("write-report-human", humanOptionsErr)
+				addIssue("write-report-markdown", markdownOptionsErr)
 				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write report: %w", humanOptionsErr)
+					fatalErr = fmt.Errorf("write report: %w", markdownOptionsErr)
 				}
-			} else if werr := report.GenerateHumanWithEngine(buildReportData(), cfg.Language, f, humanRenderConfig.Engine, humanRenderConfig.Template); werr != nil {
+			} else if werr := report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, f, markdownRenderConfig.Engine, markdownRenderConfig.Template); werr != nil {
 				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-human", cerr)
+					addIssue("close-report-markdown", cerr)
 					if fatalErr == nil {
 						fatalErr = fmt.Errorf("close report: %w", cerr)
 					}
 				}
-				addIssue("write-report-human", werr)
+				addIssue("write-report-markdown", werr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("write report: %w", werr)
 				}
 			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-human", cerr)
+				addIssue("close-report-markdown", cerr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("close report: %w", cerr)
 				}
 			} else {
-				reportPath = humanPath
-				humanIssueCount = len(issues)
+				reportPath = markdownPath
+				markdownIssueCount = len(issues)
 			}
 		}
 	}
 
-	switch cfg.ReportMode {
-	case config.ReportMachine, config.ReportBoth, config.ReportAll:
+	switch cfg.ReportSelection {
+	case config.ReportJSON, config.ReportBoth, config.ReportAll:
 		jsonPath := filepath.Join(cfg.OutputDir, inputBase+".report.json")
 		f, ferr := os.Create(jsonPath)
 		if ferr != nil {
-			addIssue("create-report-machine", ferr)
+			addIssue("create-report-json", ferr)
 			if fatalErr == nil {
 				fatalErr = fmt.Errorf("create JSON report: %w", ferr)
 			}
 		} else {
-			if werr := report.GenerateMachine(buildReportData(), f); werr != nil {
+			if werr := report.GenerateJSON(buildReportData(), f); werr != nil {
 				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-machine", cerr)
+					addIssue("close-report-json", cerr)
 					if fatalErr == nil {
 						fatalErr = fmt.Errorf("close JSON report: %w", cerr)
 					}
 				}
-				addIssue("write-report-machine", werr)
+				addIssue("write-report-json", werr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("write JSON report: %w", werr)
 				}
 			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-machine", cerr)
+				addIssue("close-report-json", cerr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("close JSON report: %w", cerr)
 				}
@@ -375,7 +375,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	switch cfg.ReportMode {
+	switch cfg.ReportSelection {
 	case config.ReportHTML, config.ReportAll:
 		htmlPath := filepath.Join(cfg.OutputDir, inputBase+".report.html")
 		f, ferr := os.Create(htmlPath)
@@ -407,7 +407,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	if cfg.ReportMode == config.ReportSARIF {
+	if cfg.ReportSelection == config.ReportSARIF {
 		sarifPath := filepath.Join(cfg.OutputDir, inputBase+".sarif.json")
 		f, ferr := os.Create(sarifPath)
 		if ferr != nil {
@@ -438,38 +438,38 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	if humanIssueCount >= 0 && len(issues) > humanIssueCount {
-		f, rewriteErr := os.Create(humanPath)
+	if markdownIssueCount >= 0 && len(issues) > markdownIssueCount {
+		f, rewriteErr := os.Create(markdownPath)
 		if rewriteErr != nil {
-			addIssue("rewrite-report-human", rewriteErr)
+			addIssue("rewrite-report-markdown", rewriteErr)
 			if fatalErr == nil {
 				fatalErr = fmt.Errorf("rewrite report: %w", rewriteErr)
 			}
 		} else {
-			if humanOptionsErr != nil {
+			if markdownOptionsErr != nil {
 				if closeErr := f.Close(); closeErr != nil {
-					addIssue("rewrite-report-human", closeErr)
+					addIssue("rewrite-report-markdown", closeErr)
 					if fatalErr == nil {
 						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
 					}
 				}
-				addIssue("rewrite-report-human", humanOptionsErr)
+				addIssue("rewrite-report-markdown", markdownOptionsErr)
 				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", humanOptionsErr)
+					fatalErr = fmt.Errorf("rewrite report: %w", markdownOptionsErr)
 				}
-			} else if writeErr := report.GenerateHumanWithEngine(buildReportData(), cfg.Language, f, humanRenderConfig.Engine, humanRenderConfig.Template); writeErr != nil {
+			} else if writeErr := report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, f, markdownRenderConfig.Engine, markdownRenderConfig.Template); writeErr != nil {
 				if closeErr := f.Close(); closeErr != nil {
-					addIssue("rewrite-report-human", closeErr)
+					addIssue("rewrite-report-markdown", closeErr)
 					if fatalErr == nil {
 						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
 					}
 				}
-				addIssue("rewrite-report-human", writeErr)
+				addIssue("rewrite-report-markdown", writeErr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("rewrite report: %w", writeErr)
 				}
 			} else if closeErr := f.Close(); closeErr != nil {
-				addIssue("rewrite-report-human", closeErr)
+				addIssue("rewrite-report-markdown", closeErr)
 				if fatalErr == nil {
 					fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
 				}
@@ -515,37 +515,37 @@ func sbomExtension(format string) string {
 	}
 }
 
-// humanRenderOptionsFromConfig resolves human report renderer options from
+// markdownRenderOptionsFromConfig resolves Markdown report renderer options from
 // runtime configuration, including optional template file loading.
-type humanRenderConfig struct {
+type markdownRenderConfig struct {
 	Engine   string
 	Template string
 }
 
-func humanRenderOptionsFromConfig(cfg config.Config) (humanRenderConfig, error) {
-	engine := strings.TrimSpace(cfg.HumanRenderEngine)
+func markdownRenderOptionsFromConfig(cfg config.Config) (markdownRenderConfig, error) {
+	engine := strings.TrimSpace(cfg.MarkdownRenderEngine)
 	if engine == "" || engine == "writer" {
-		return humanRenderConfig{}, nil
+		return markdownRenderConfig{}, nil
 	}
 
-	opts := humanRenderConfig{}
+	opts := markdownRenderConfig{}
 	switch engine {
 	case "template-wrapper":
 		opts.Engine = "template-wrapper"
 	case "template-document":
 		opts.Engine = "template-document"
 	default:
-		return humanRenderConfig{}, fmt.Errorf("unsupported human render engine: %q", engine)
+		return markdownRenderConfig{}, fmt.Errorf("unsupported markdown render engine: %q", engine)
 	}
 
-	templateFile := strings.TrimSpace(cfg.HumanTemplateFile)
+	templateFile := strings.TrimSpace(cfg.MarkdownTemplateFile)
 	if templateFile == "" {
 		return opts, nil
 	}
 
 	raw, err := os.ReadFile(templateFile)
 	if err != nil {
-		return humanRenderConfig{}, fmt.Errorf("read human template file %q: %w", templateFile, err)
+		return markdownRenderConfig{}, fmt.Errorf("read markdown template file %q: %w", templateFile, err)
 	}
 	opts.Template = string(raw)
 	return opts, nil

@@ -230,7 +230,7 @@ main()
 - `--format`: SBOM output format — `cyclonedx-json` (default), `cyclonedx-xml`, `spdx-json`
 - `--policy`: `strict` (default) | `partial`
 - `--mode`: `installer-semantic` (default) | `physical`
-- `--report`: `human` (default) | `machine` | `both` | `html` | `sarif` | `all`
+- `--report`: `markdown` (default) | `json` | `both` | `html` | `sarif` | `all`
 - `--language`: `en` (default) | `de`
 - `--root-manufacturer`: override manufacturer / supplier for the SBOM root component
 - `--root-name`: override software / product name for the SBOM root component
@@ -267,7 +267,7 @@ type Config struct {
     SBOMFormat      string        // "cyclonedx-json" | "cyclonedx-xml" | "spdx-json"
     PolicyMode      PolicyMode    // Strict | Partial
     InterpretMode   InterpretMode // Physical | InstallerSemantic
-    ReportMode      ReportMode    // Human | Machine | Both | HTML | SARIF | All
+    ReportSelection      ReportSelection    // Markdown | JSON | Both | HTML | SARIF | All
     Language        string        // "en" | "de"
     GrypeEnabled    bool
     Passwords       []string      // ordered candidates for encrypted archives
@@ -748,18 +748,18 @@ type ReportData struct {
     EndTime          time.Time
 }
 
-// GenerateHuman writes the human report using the default writer backend.
-func GenerateHuman(data ReportData, lang string, w io.Writer) error
+// GenerateMarkdown writes the markdown report using the default writer backend.
+func GenerateMarkdown(data ReportData, lang string, w io.Writer) error
 
-// GenerateHumanWithEngine writes the human report using writer,
+// GenerateMarkdownWithEngine writes the markdown report using writer,
 // template-wrapper, or template-document backends.
-func GenerateHumanWithEngine(data ReportData, lang string, w io.Writer, engine string, templateContent string) error
+func GenerateMarkdownWithEngine(data ReportData, lang string, w io.Writer, engine string, templateContent string) error
 
 // GenerateHTML writes a self-contained HTML report.
 func GenerateHTML(data ReportData, lang string, w io.Writer) error
 
-// GenerateMachine writes a structured JSON report.
-func GenerateMachine(data ReportData, w io.Writer) error
+// GenerateJSON writes a structured JSON report.
+func GenerateJSON(data ReportData, w io.Writer) error
 
 // GenerateSARIF writes a SARIF 2.1.0 JSON report.
 func GenerateSARIF(data ReportData, w io.Writer) error
@@ -769,10 +769,10 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 
 - `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
 - `internal/report/internal/domain/*.go`: report-domain aggregation logic grouped by noun (occurrence collection/grouping, vulnerability counters, suppression reason stats, and extraction/scan/policy statistics) shared by report renderers.
-- `report.go`, `report_types.go`: public facade API, input summary hashing, a minimal orchestrator-facing type surface (`InputSummary`, `ProcessingIssue`, `ReportData`), and thin human/HTML/machine/SARIF facades delegating into internal report packages.
-- `internal/report/internal/human/*.go`: active human Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, remaining human-specific occurrence/vulnerability/suppression presentation logic, and human-specific i18n).
+- `report.go`, `report_types.go`: public facade API, input summary hashing, a minimal orchestrator-facing type surface (`InputSummary`, `ProcessingIssue`, `ReportData`), and thin markdown/HTML/json/SARIF facades delegating into internal report packages.
+- `internal/report/internal/markdown/*.go`: active Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, remaining markdown-specific occurrence/vulnerability/suppression presentation logic, and markdown-specific i18n).
 - `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
-- `internal/report/internal/machine/*.go`: structured machine JSON report generator, JSON schema projection helpers, and machine-specific tests.
+- `internal/report/internal/json/*.go`: structured json JSON report generator, JSON schema projection helpers, and json-specific tests.
 - `internal/report/internal/sarif/*.go`: SARIF 2.1.0 generator with deterministic rule/result ordering, explicit enrichment audit state, and SARIF-specific tests.
 
 **Required content (per DESIGN.md §10.4):**
@@ -815,24 +815,24 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   root `report` package re-exports only the minimal contracts needed by the
   orchestrator so implementation can keep moving into subpackages without
   widening the facade again.
-- The active human report execution path now lives in
-  `internal/report/internal/human`; the root package now keeps only the thin
-  orchestrator-facing human facade while human-specific helpers and tests live
-  next to the human implementation.
+- The active markdown report execution path now lives in
+  `internal/report/internal/markdown`; the root package now keeps only the thin
+  orchestrator-facing Markdown facade while markdown-specific helpers and tests
+  live next to the markdown implementation.
 - The active HTML report execution path now lives in
   `internal/report/internal/html`; the root package keeps only the thin
   orchestrator-facing `GenerateHTML` facade while HTML-specific labels,
   view-model helpers, and tests are package-local.
-- The active machine and SARIF report execution paths now live in
-  `internal/report/internal/machine` and `internal/report/internal/sarif`;
-  the root package keeps only thin `GenerateMachine` and `GenerateSARIF`
+- The active json and SARIF report execution paths now live in
+  `internal/report/internal/json` and `internal/report/internal/sarif`;
+  the root package keeps only thin `GenerateJSON` and `GenerateSARIF`
   facades while output-specific helpers and tests live with their renderer.
 - Report-domain aggregation now lives in
   `internal/report/internal/domain`; occurrence collection/grouping,
   vulnerability counters, suppression reason stats, and extraction/scan/policy
   aggregations are shared domain helpers consumed by renderers.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
-  and included in both human and machine reports.
+  and included in both markdown and JSON reports.
 - The report distinguishes explicit root metadata input from derived defaults.
 - Vulnerability enrichment is report-only: it does not mutate the SBOM and does
   not alter component deduplication or dependency relationships.
@@ -840,15 +840,15 @@ func GenerateSARIF(data ReportData, w io.Writer) error
   `completed`, `completed-with-errors`, `unavailable`, or `not-requested`.
 - Human report rendering is backend-oriented: a deterministic writer backend is
   the default for audit stability; optional template-wrapper/template-document
-  backends are selected through `GenerateHumanWithEngine`.
+  backends are selected through `GenerateMarkdownWithEngine`.
 - Runtime selection of the human renderer backend is configurable via
-  `Config.HumanRenderEngine` and `Config.HumanTemplateFile`.
+  `Config.MarkdownRenderEngine` and `Config.MarkdownTemplateFile`.
   The orchestrator resolves these into engine/template parameters and keeps
-  machine/HTML/SARIF report generation unaffected.
+  json/HTML/SARIF report generation unaffected.
 - Template execution helpers are package-local in
-  `internal/report/internal/human`; the root `report` package keeps a minimal
+  `internal/report/internal/markdown`; the root `report` package keeps a minimal
   orchestrator-facing surface and delegates backend selection via options.
-- Full template-first rendering for the complete human report remains deferred
+- Full template-first rendering for the complete markdown report remains deferred
   until all high-density logic (ordering, conditional sections, and
   provenance-driven tables) is isolated into view-model builders.
 
@@ -1260,7 +1260,7 @@ delivery without re-extracting it.
 2. `assembly`: multi-BOM merge, container components, dependency graph,
    composition annotations
 3. `policy`: strict/partial engine
-4. `report`: basic human-readable Markdown report (EN only)
+4. `report`: basic markdown-readable Markdown report (EN only)
 5. Extend delivery-path handling to nested container trees
 6. Integration tests with nested archives (ZIP-in-ZIP, TAR.GZ-in-ZIP)
 
@@ -1283,7 +1283,7 @@ delivery without re-extracting it.
 
 **Goal:** Full audit report, i18n, interpretation modes.
 
-1. `report`: complete human-readable report with all required sections
+1. `report`: complete markdown-readable report with all required sections
 2. `report`: machine-readable JSON schema and encoder
 3. `report`: German language support via embedded templates
 4. Installer-semantic interpretation mode: MSI table parsing via OLE reader,
@@ -1329,7 +1329,7 @@ vulnerability information.
 9. Release tests:
   - `integration/releasetest`: validate release artifact behavior with
     `--grype` enabled and disabled
-  - assert user-facing report sections and machine-report fields are present
+  - assert user-facing report sections and json-report fields are present
     and schema-stable
 
 ---

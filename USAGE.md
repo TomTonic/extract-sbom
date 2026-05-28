@@ -7,7 +7,7 @@ matter, and which outputs to expect.
 
 This quickstart runs the complete incoming-inspection flow in one command:
 SBOM generation plus optional Grype-based vulnerability enrichment for the
-human/machine report.
+markdown/json report.
 
 ```bash
 # 1) Create output directory and run extract-sbom with enrichment
@@ -21,7 +21,7 @@ ls -1 out/
 Expected outputs:
 
 - `out/vendor-delivery.cdx.json`
-- `out/vendor-delivery.report.md` (or `.report.json` with `--report machine`, `.report.html` with `--report html`, `.sarif.json` with `--report sarif`)
+- `out/vendor-delivery.report.md` (or `.report.json` with `--report json`, `.report.html` with `--report html`, `.sarif.json` with `--report sarif`)
 
 The report now includes a vulnerability summary table and package-grouped details.
 
@@ -117,8 +117,8 @@ For input `delivery.zip` and output directory `out/`:
 
 | `--report` | Report file(s) |
 |---|---|
-| `human` (default) | `out/delivery.report.md` |
-| `machine` | `out/delivery.report.json` |
+| `markdown` (default) | `out/delivery.report.md` |
+| `json` | `out/delivery.report.json` |
 | `html` | `out/delivery.report.html` |
 | `sarif` | `out/delivery.sarif.json` |
 | `both` | `.report.md` + `.report.json` |
@@ -128,7 +128,7 @@ For input `delivery.zip` and output directory `out/`:
 
 Goal:
 
-- process one delivery file and get SBOM + human report quickly
+- process one delivery file and get SBOM + markdown report quickly
 
 Command:
 
@@ -297,7 +297,7 @@ Command:
 mkdir -p out
 ./extract-sbom \
   --unsafe \
-  --report machine \
+  --report json \
   --output-dir out \
   vendor-delivery.zip
 ```
@@ -465,12 +465,12 @@ Determines how installer packages (MSI, CAB) are interpreted.
 Override to `physical` only for raw archive analysis where installer metadata
 is not relevant.
 
-**`--report human|machine|both|html|sarif|all` (default: human)**
+**`--report markdown|json|both|html|sarif|all` (default: markdown)**
 
 Output format for the audit report.
 
-- `human`: Markdown file (`*.report.md`), readable for manual review.
-- `machine`: JSON file (`*.report.json`), structured for tooling/CI integration.
+- `markdown`: Markdown file (`*.report.md`), readable for manual review.
+- `json`: JSON file (`*.report.json`), structured for tooling/CI integration.
 - `both`: both `human` + `machine` formats written.
 - `html`: standalone HTML file (`*.report.html`) with embedded CSS, severity-colored vulnerability table, and collapsible extraction log — no external dependencies, suitable for sharing with auditors.
 - `sarif`: SARIF 2.1.0 JSON file (`*.sarif.json`) — one result per vulnerability match, severity mapped to SARIF levels (`error` for critical/high, `warning` for medium, `note` for low/negligible). Use with `--grype` to populate results. Designed for GitHub/GitLab security scanning integration.
@@ -514,25 +514,25 @@ For the end-to-end processing model behind these progress messages, see
 
 **`--language en|de` (default: en)**
 
-Language for human-readable report. German (`de`) translates all narrative
-text; SBOM and machine report remain English.
+Language for markdown-readable report. German (`de`) translates all narrative
+text; SBOM and json report remain English.
 
-**`--human-render-engine writer|template-wrapper|template-document` (default: writer)**
+**`--markdown-render-engine writer|template-wrapper|template-document` (default: writer)**
 
-Selects the backend for Markdown human-report rendering.
+Selects the backend for Markdown markdown-report rendering.
 
 - `writer`: canonical deterministic writer backend (default).
 - `template-wrapper`: wraps canonical Markdown body (`{{.Body}}`) via `text/template`.
 - `template-document`: renders from a caller-provided document template using
   pre-rendered section blocks.
 
-This option only affects human Markdown reports (`--report human|both|all`).
+This option only affects Markdown reports (`--report markdown|both|all`).
 
-**`--human-template-file <path>`**
+**`--markdown-template-file <path>`**
 
 Path to a UTF-8 text/template file used by template renderers.
 
-- Required for `--human-render-engine template-document`.
+- Required for `--markdown-render-engine template-document`.
 - Optional for `template-wrapper` (empty wrapper defaults to `{{.Body}}`).
 - Rejected for `writer` to avoid silently ignored configuration.
 

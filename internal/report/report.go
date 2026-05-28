@@ -1,5 +1,5 @@
 // Package report generates audit reports from the processing state.
-// It supports human-readable Markdown output and machine-readable JSON output,
+// It supports Markdown output and JSON output,
 // in English or German. The report documents everything that was processed,
 // how, and with what limitations — enabling a third party to assess the
 // completeness and reliability of the inspection.
@@ -14,8 +14,8 @@ import (
 	"os"
 
 	htmlpkg "github.com/TomTonic/extract-sbom/internal/report/internal/html"
-	humanpkg "github.com/TomTonic/extract-sbom/internal/report/internal/human"
-	machinepkg "github.com/TomTonic/extract-sbom/internal/report/internal/machine"
+	jsonpkg "github.com/TomTonic/extract-sbom/internal/report/internal/json"
+	markdownpkg "github.com/TomTonic/extract-sbom/internal/report/internal/markdown"
 	sarifpkg "github.com/TomTonic/extract-sbom/internal/report/internal/sarif"
 )
 
@@ -55,31 +55,31 @@ func ComputeInputSummary(path string) (InputSummary, error) {
 	}, nil
 }
 
-// GenerateHuman writes the human report using the default deterministic
+// GenerateMarkdown writes the Markdown report using the default deterministic
 // writer backend.
-func GenerateHuman(data ReportData, lang string, w io.Writer) error {
-	return GenerateHumanWithEngine(data, lang, w, "", "")
+func GenerateMarkdown(data ReportData, lang string, w io.Writer) error {
+	return GenerateMarkdownWithEngine(data, lang, w, "", "")
 }
 
-// GenerateHumanWithEngine writes the human report using a selected renderer
+// GenerateMarkdownWithEngine writes the Markdown report using a selected renderer
 // backend. The engine can be "writer", "template-wrapper", or
 // "template-document". For template engines, templateContent is applied as the
 // wrapper or document template respectively.
-func GenerateHumanWithEngine(data ReportData, lang string, w io.Writer, engineName, templateContent string) error {
-	engine := humanpkg.RenderEngine(engineName)
+func GenerateMarkdownWithEngine(data ReportData, lang string, w io.Writer, engineName, templateContent string) error {
+	engine := markdownpkg.RenderEngine(engineName)
 	if engine == "" {
-		engine = humanpkg.RenderEngineWriter
+		engine = markdownpkg.RenderEngineWriter
 	}
-	humanOpts := humanpkg.RenderOptions{
+	markdownOpts := markdownpkg.RenderOptions{
 		Engine: engine,
 	}
-	if engine == humanpkg.RenderEngineTemplateWrapper {
-		humanOpts.WrapperTemplate = templateContent
+	if engine == markdownpkg.RenderEngineTemplateWrapper {
+		markdownOpts.WrapperTemplate = templateContent
 	}
-	if engine == humanpkg.RenderEngineTemplateDocument {
-		humanOpts.DocumentTemplate = templateContent
+	if engine == markdownpkg.RenderEngineTemplateDocument {
+		markdownOpts.DocumentTemplate = templateContent
 	}
-	return humanpkg.GenerateHumanWithOptions(data, lang, w, humanOpts)
+	return markdownpkg.GenerateMarkdownWithOptions(data, lang, w, markdownOpts)
 }
 
 // GenerateHTML writes a self-contained HTML audit report to w.
@@ -87,9 +87,9 @@ func GenerateHTML(data ReportData, language string, w io.Writer) error {
 	return htmlpkg.Generate(data, language, w)
 }
 
-// GenerateMachine writes a structured JSON audit report to the writer.
-func GenerateMachine(data ReportData, w io.Writer) error {
-	return machinepkg.Generate(data, w)
+// GenerateJSON writes a structured JSON audit report to the writer.
+func GenerateJSON(data ReportData, w io.Writer) error {
+	return jsonpkg.Generate(data, w)
 }
 
 // GenerateSARIF writes a SARIF 2.1.0 JSON report to w.

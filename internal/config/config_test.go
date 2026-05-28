@@ -56,8 +56,8 @@ func TestDefaultConfigHasSensibleValues(t *testing.T) {
 	if cfg.InterpretMode != InterpretInstallerSemantic {
 		t.Errorf("InterpretMode = %v, want installer-semantic", cfg.InterpretMode)
 	}
-	if cfg.ReportMode != ReportHuman {
-		t.Errorf("ReportMode = %v, want human", cfg.ReportMode)
+	if cfg.ReportSelection != ReportMarkdown {
+		t.Errorf("ReportSelection = %v, want markdown", cfg.ReportSelection)
 	}
 	if cfg.ProgressLevel != ProgressNormal {
 		t.Errorf("ProgressLevel = %v, want normal", cfg.ProgressLevel)
@@ -65,8 +65,8 @@ func TestDefaultConfigHasSensibleValues(t *testing.T) {
 	if cfg.Language != "en" {
 		t.Errorf("Language = %q, want en", cfg.Language)
 	}
-	if cfg.HumanRenderEngine != "writer" {
-		t.Errorf("HumanRenderEngine = %q, want writer", cfg.HumanRenderEngine)
+	if cfg.MarkdownRenderEngine != "writer" {
+		t.Errorf("MarkdownRenderEngine = %q, want writer", cfg.MarkdownRenderEngine)
 	}
 	if cfg.WorkDir != os.TempDir() {
 		t.Errorf("WorkDir = %q, want %q", cfg.WorkDir, os.TempDir())
@@ -138,31 +138,31 @@ func TestParseInterpretModeAcceptsValidValues(t *testing.T) {
 	}
 }
 
-// TestParseReportModeAcceptsValidValues verifies that ReportMode parsing
-// supports all three documented output modes. Users select human, machine,
+// TestParseReportSelectionAcceptsValidValues verifies that ReportSelection parsing
+// supports all documented output modes. Users select markdown, json,
 // or both depending on their automation needs.
-func TestParseReportModeAcceptsValidValues(t *testing.T) {
+func TestParseReportSelectionAcceptsValidValues(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
 		input   string
-		want    ReportMode
+		want    ReportSelection
 		wantErr bool
 	}{
-		{"human", "human", ReportHuman, false},
-		{"machine", "machine", ReportMachine, false},
+		{"markdown", "markdown", ReportMarkdown, false},
+		{"json", "json", ReportJSON, false},
 		{"both", "both", ReportBoth, false},
 		{"html", "html", ReportHTML, false},
 		{"sarif", "sarif", ReportSARIF, false},
 		{"all", "all", ReportAll, false},
-		{"invalid rejected", "xml", ReportHuman, true},
+		{"invalid rejected", "xml", ReportMarkdown, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ParseReportMode(tt.input)
+			got, err := ParseReportSelection(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -266,15 +266,15 @@ func TestConfigValidateRejectsInvalidConfig(t *testing.T) {
 		{"input is directory", func(c *Config) { c.InputPath = tmpDir }, true},
 		{"output dir is file", func(c *Config) { c.OutputDir = inputFile }, true},
 		{"unsupported language", func(c *Config) { c.Language = "fr" }, true},
-		{"unsupported human render engine", func(c *Config) { c.HumanRenderEngine = "custom" }, true},
-		{"template document requires template file", func(c *Config) { c.HumanRenderEngine = "template-document" }, true},
+		{"unsupported markdown render engine", func(c *Config) { c.MarkdownRenderEngine = "custom" }, true},
+		{"template document requires template file", func(c *Config) { c.MarkdownRenderEngine = "template-document" }, true},
 		{"template file requires non-writer engine", func(c *Config) {
-			c.HumanRenderEngine = "writer"
-			c.HumanTemplateFile = templateFile
+			c.MarkdownRenderEngine = "writer"
+			c.MarkdownTemplateFile = templateFile
 		}, true},
 		{"template wrapper with template file accepted", func(c *Config) {
-			c.HumanRenderEngine = "template-wrapper"
-			c.HumanTemplateFile = templateFile
+			c.MarkdownRenderEngine = "template-wrapper"
+			c.MarkdownTemplateFile = templateFile
 		}, false},
 		{"missing work dir", func(c *Config) { c.WorkDir = "" }, true},
 		{"nonexistent work dir", func(c *Config) { c.WorkDir = "/nonexistent/work-dir" }, true},
@@ -368,15 +368,15 @@ func TestInterpretModeStringReturnsReadableName(t *testing.T) {
 	}
 }
 
-// TestReportModeStringReturnsReadableName verifies the human-readable
+// TestReportSelectionStringReturnsReadableName verifies the markdown-readable
 // name of report modes for use in log messages and configuration display.
-func TestReportModeStringReturnsReadableName(t *testing.T) {
+func TestReportSelectionStringReturnsReadableName(t *testing.T) {
 	t.Parallel()
-	if ReportHuman.String() != "human" {
-		t.Errorf("got %q", ReportHuman.String())
+	if ReportMarkdown.String() != "markdown" {
+		t.Errorf("got %q", ReportMarkdown.String())
 	}
-	if ReportMachine.String() != "machine" {
-		t.Errorf("got %q", ReportMachine.String())
+	if ReportJSON.String() != "json" {
+		t.Errorf("got %q", ReportJSON.String())
 	}
 	if ReportBoth.String() != "both" {
 		t.Errorf("got %q", ReportBoth.String())

@@ -15,9 +15,9 @@ Given exactly one delivery file as input, extract-sbom produces:
    - Optional: **CycloneDX 1.6 XML** (`--format cyclonedx-xml`)
    - Optional: **SPDX 2.3 JSON** (`--format spdx-json`)
 2. A **formal audit report** explaining what was processed, how, and with which limitations
-   - Human-readable Markdown (`--report human`, default)
+   - Human-readable Markdown (`--report markdown`, default)
    - Standalone HTML (`--report html`)
-   - Machine-readable JSON (`--report machine`)
+   - Machine-readable JSON (`--report json`)
    - SARIF 2.1.0 for CI security integration (`--report sarif`)
    - Multiple formats simultaneously (`--report both`, `--report all`)
 
@@ -466,7 +466,7 @@ The audit output shall support all of the following forms:
 - **Machine-readable report** (JSON) — for downstream automation and pipeline integration
 - **SARIF 2.1.0** — for direct integration with GitHub Advanced Security, GitLab SAST, and compatible CI platforms; one result per vulnerability match (requires `--grype`)
 
-The chosen output mode or modes must be selectable explicitly via `--report`. The `both` mode produces human + machine; `all` produces human + machine + HTML.
+The chosen output mode or modes must be selectable explicitly via `--report`. The `both` mode produces markdown + json; `all` produces markdown + json + HTML.
 
 ### 10.4 Required Report Content
 

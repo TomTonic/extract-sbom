@@ -9,7 +9,7 @@ extract-sbom performs standardized incoming inspection for software deliveries.
 Given one input file, it produces:
 
 - one consolidated SBOM (CycloneDX JSON, CycloneDX XML, or SPDX JSON)
-- one audit report (human-readable Markdown, HTML, machine-readable JSON, SARIF, or any combination)
+- one audit report (Markdown, HTML, JSON, SARIF, or any combination)
 
 It recursively processes nested containers and archive formats, applies safety
 limits, records extraction/scanning decisions, and keeps traceability via
@@ -94,7 +94,7 @@ inspection: one file in, one consolidated CycloneDX SBOM and one auditable repor
 - Tries configured passwords in order for password-protected formats handled by external extractors
 - Uses Syft in library mode for component cataloging
 - Assembles one deterministic SBOM in CycloneDX 1.6 JSON (`--format cyclonedx-json`), CycloneDX XML (`--format cyclonedx-xml`), or SPDX 2.3 JSON (`--format spdx-json`)
-- Generates an auditable report in Markdown (`--report human`), standalone HTML (`--report html`), machine-readable JSON (`--report machine`), SARIF 2.1.0 (`--report sarif`), or all formats at once (`--report all`) — in English or German
+- Generates an auditable report in Markdown (`--report markdown`), standalone HTML (`--report html`), structured JSON (`--report json`), SARIF 2.1.0 (`--report sarif`), or all formats at once (`--report all`) — in English or German
 
 ## Encrypted Archives and Password Sources
 
@@ -155,7 +155,7 @@ extract-sbom \
 Typical outputs in `out/` (base name derived from input file):
 
 - `sample-delivery.cdx.json` (default; use `--format cyclonedx-xml` for `.cdx.xml`, `--format spdx-json` for `.spdx.json`)
-- `sample-delivery.report.md` (default; use `--report machine` for `.report.json`, `--report html` for `.report.html`, `--report sarif` for `.sarif.json`, `--report all` for all formats)
+- `sample-delivery.report.md` (default; use `--report json` for `.report.json`, `--report html` for `.report.html`, `--report sarif` for `.sarif.json`, `--report all` for all formats)
 
 ## Documentation
 

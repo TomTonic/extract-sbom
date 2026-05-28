@@ -48,34 +48,34 @@ func rootCmd() *cobra.Command {
 	bi := buildinfo.Read()
 
 	var (
-		configPath   string
-		outputDir    string
-		workDir      string
-		sbomFormat   string
-		policyStr    string
-		modeStr      string
-		reportStr    string
-		progress     string
-		language     string
-		humanEngine  string
-		templateFile string
-		mfg          string
-		name         string
-		version      string
-		delivDate    string
-		rootProps    []string
-		skipExts     []string
-		passwords    []string
-		passwordFile string
-		grype        bool
-		unsafe       bool
-		maxDepth     int
-		maxFiles     int
-		maxSize      int64
-		maxEntry     int64
-		maxRatio     int
-		timeout      string
-		parallel     int
+		configPath     string
+		outputDir      string
+		workDir        string
+		sbomFormat     string
+		policyStr      string
+		modeStr        string
+		reportStr      string
+		progress       string
+		language       string
+		markdownEngine string
+		templateFile   string
+		mfg            string
+		name           string
+		version        string
+		delivDate      string
+		rootProps      []string
+		skipExts       []string
+		passwords      []string
+		passwordFile   string
+		grype          bool
+		unsafe         bool
+		maxDepth       int
+		maxFiles       int
+		maxSize        int64
+		maxEntry       int64
+		maxRatio       int
+		timeout        string
+		parallel       int
 	)
 
 	cmd := &cobra.Command{
@@ -155,11 +155,11 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&sbomFormat, "format", "cyclonedx-json", "SBOM output format: cyclonedx-json, cyclonedx-xml, or spdx-json")
 	cmd.Flags().StringVar(&policyStr, "policy", "partial", "Policy mode: partial (skip issue and continue) or strict (abort)")
 	cmd.Flags().StringVar(&modeStr, "mode", "installer-semantic", "Interpretation mode: physical or installer-semantic")
-	cmd.Flags().StringVar(&reportStr, "report", "human", "Report output mode: human, machine, both, html, sarif, or all")
+	cmd.Flags().StringVar(&reportStr, "report", "markdown", "Report output mode: markdown, json, both, html, sarif, or all")
 	cmd.Flags().StringVar(&progress, "progress", "normal", "Progress output verbosity: quiet, normal, or verbose")
 	cmd.Flags().StringVar(&language, "language", "en", "Report language: en or de")
-	cmd.Flags().StringVar(&humanEngine, "human-render-engine", defaults.HumanRenderEngine, "Human report renderer: writer, template-wrapper, or template-document")
-	cmd.Flags().StringVar(&templateFile, "human-template-file", "", "Path to text/template file for human template renderers")
+	cmd.Flags().StringVar(&markdownEngine, "markdown-render-engine", defaults.MarkdownRenderEngine, "Markdown report renderer: writer, template-wrapper, or template-document")
+	cmd.Flags().StringVar(&templateFile, "markdown-template-file", "", "Path to text/template file for markdown template renderers")
 	cmd.Flags().StringVar(&mfg, "root-manufacturer", "", "Manufacturer/supplier for the SBOM root component")
 	cmd.Flags().StringVar(&name, "root-name", "", "Software/product name for the SBOM root component")
 	cmd.Flags().StringVar(&version, "root-version", "", "Version for the SBOM root component")
@@ -231,8 +231,8 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	cfg.WorkDir = v.GetString("work-dir")
 	cfg.SBOMFormat = v.GetString("format")
 	cfg.Language = v.GetString("language")
-	cfg.HumanRenderEngine = v.GetString("human-render-engine")
-	cfg.HumanTemplateFile = v.GetString("human-template-file")
+	cfg.MarkdownRenderEngine = v.GetString("markdown-render-engine")
+	cfg.MarkdownTemplateFile = v.GetString("markdown-template-file")
 	cfg.GrypeEnabled = v.GetBool("grype")
 	cfg.RootMetadata.Manufacturer = v.GetString("root-manufacturer")
 	cfg.RootMetadata.Name = v.GetString("root-name")
@@ -258,11 +258,11 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	}
 	cfg.InterpretMode = interpretMode
 
-	reportMode, err := config.ParseReportMode(v.GetString("report"))
+	reportMode, err := config.ParseReportSelection(v.GetString("report"))
 	if err != nil {
 		return config.Config{}, err
 	}
-	cfg.ReportMode = reportMode
+	cfg.ReportSelection = reportMode
 
 	progressLevel, err := config.ParseProgressLevel(v.GetString("progress"))
 	if err != nil {

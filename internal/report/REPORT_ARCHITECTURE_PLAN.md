@@ -85,7 +85,7 @@ module**, not additional `go.mod` modules.
 - `internal/report`
   - Thin facade used by the orchestrator.
   - Owns top-level entry points and compatibility shims during migration.
-  - Must not own human/HTML/machine/SARIF/domain implementation logic.
+  - Must not own markdown/HTML/json/SARIF/domain implementation logic.
 
 ### B. Shared internal packages
 
@@ -101,12 +101,12 @@ module**, not additional `go.mod` modules.
 
 ### C. Output packages
 
-- `internal/report/internal/human`
-  - Human Markdown rendering, templating, sections, and human-specific i18n.
+- `internal/report/internal/markdown`
+  - Markdown rendering, templating, sections, and markdown-specific i18n.
 - `internal/report/internal/html`
   - HTML rendering, view-model preparation, and HTML-specific i18n.
-- `internal/report/internal/machine`
-  - Machine JSON rendering.
+- `internal/report/internal/json`
+  - JSON rendering.
 - `internal/report/internal/sarif`
   - SARIF rendering.
 
@@ -193,7 +193,7 @@ Status values:
 
 - Status: `DONE`
 - Objective: Consolidate the human renderer into
-  `internal/report/internal/human` with package-local files such as
+  `internal/report/internal/markdown` with package-local files such as
   `render.go`, `template.go`, `sections.go`, and `i18n.go`.
 - Exit criteria:
   - Flat `report_human_*` file family removed from the root package.

@@ -129,31 +129,31 @@ func ParseInterpretMode(s string) (InterpretMode, error) {
 	}
 }
 
-// ReportMode controls which report output formats are produced.
-type ReportMode int
+// ReportSelection controls which report output formats are produced.
+type ReportSelection int
 
 const (
-	// ReportHuman produces a human-readable Markdown report.
-	ReportHuman ReportMode = iota
-	// ReportMachine produces a structured JSON report.
-	ReportMachine
-	// ReportBoth produces both human-readable and machine-readable reports.
+	// ReportMarkdown produces a human-readable Markdown report.
+	ReportMarkdown ReportSelection = iota
+	// ReportJSON produces a structured JSON report.
+	ReportJSON
+	// ReportBoth produces both Markdown and JSON reports.
 	ReportBoth
 	// ReportHTML produces a self-contained HTML report.
 	ReportHTML
 	// ReportSARIF produces a SARIF 2.1.0 JSON report.
 	ReportSARIF
-	// ReportAll produces human-readable, machine-readable, and HTML reports.
+	// ReportAll produces Markdown, JSON, and HTML reports.
 	ReportAll
 )
 
 // String returns the human-readable name of the report mode.
-func (r ReportMode) String() string {
+func (r ReportSelection) String() string {
 	switch r {
-	case ReportHuman:
-		return "human"
-	case ReportMachine:
-		return "machine"
+	case ReportMarkdown:
+		return "markdown"
+	case ReportJSON:
+		return "json"
 	case ReportBoth:
 		return "both"
 	case ReportHTML:
@@ -167,15 +167,15 @@ func (r ReportMode) String() string {
 	}
 }
 
-// ParseReportMode converts a string to a ReportMode.
-// Valid values are "human", "machine", "both", "html", "sarif", and "all" (case-insensitive).
+// ParseReportSelection converts a string to a ReportSelection.
+// Valid values are "markdown", "json", "both", "html", "sarif", and "all" (case-insensitive).
 // Returns an error for unrecognized values.
-func ParseReportMode(s string) (ReportMode, error) {
+func ParseReportSelection(s string) (ReportSelection, error) {
 	switch strings.ToLower(s) {
-	case "human":
-		return ReportHuman, nil
-	case "machine":
-		return ReportMachine, nil
+	case "markdown":
+		return ReportMarkdown, nil
+	case "json":
+		return ReportJSON, nil
 	case "both":
 		return ReportBoth, nil
 	case "html":
@@ -185,7 +185,7 @@ func ParseReportMode(s string) (ReportMode, error) {
 	case "all":
 		return ReportAll, nil
 	default:
-		return ReportHuman, fmt.Errorf("unknown report mode: %q (valid: human, machine, both, html, sarif, all)", s)
+		return ReportMarkdown, fmt.Errorf("unknown report mode: %q (valid: markdown, json, both, html, sarif, all)", s)
 	}
 }
 
@@ -258,23 +258,23 @@ func DefaultLimits() Limits {
 // Config is the central configuration for an extract-sbom run.
 // It is constructed from CLI flags and passed to all modules.
 type Config struct {
-	InputPath         string
-	OutputDir         string
-	WorkDir           string        // base directory for temporary extraction work
-	SBOMFormat        string        // "cyclonedx-json"
-	PolicyMode        PolicyMode    // Strict | Partial
-	InterpretMode     InterpretMode // Physical | InstallerSemantic
-	ReportMode        ReportMode    // Human | Machine | Both
-	ProgressLevel     ProgressLevel // Quiet | Normal | Verbose
-	Language          string        // "en" | "de"
-	HumanRenderEngine string        // writer | template-wrapper | template-document
-	HumanTemplateFile string        // path to text/template file used by template renderers
-	GrypeEnabled      bool          // GrypeEnabled enables optional Grype vulnerability enrichment when true.
-	RootMetadata      RootMetadata
-	Unsafe            bool
-	Limits            Limits
-	ProgressFn        ProgressReporter // optional runtime progress sink
-	ParallelScanners  int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
+	InputPath            string
+	OutputDir            string
+	WorkDir              string          // base directory for temporary extraction work
+	SBOMFormat           string          // "cyclonedx-json"
+	PolicyMode           PolicyMode      // Strict | Partial
+	InterpretMode        InterpretMode   // Physical | InstallerSemantic
+	ReportSelection      ReportSelection // Markdown | JSON | Both
+	ProgressLevel        ProgressLevel   // Quiet | Normal | Verbose
+	Language             string          // "en" | "de"
+	MarkdownRenderEngine string          // writer | template-wrapper | template-document
+	MarkdownTemplateFile string          // path to text/template file used by template renderers
+	GrypeEnabled         bool            // GrypeEnabled enables optional Grype vulnerability enrichment when true.
+	RootMetadata         RootMetadata
+	Unsafe               bool
+	Limits               Limits
+	ProgressFn           ProgressReporter // optional runtime progress sink
+	ParallelScanners     int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
 	// Passwords is the ordered list of candidate passwords to try when an
 	// encrypted archive is encountered during extraction. Passwords are tried
 	// in the order given; the first that successfully unlocks the archive is
@@ -323,18 +323,18 @@ func defaultSkipExtensions() []string {
 // InputPath and OutputDir must still be set by the caller.
 func DefaultConfig() Config {
 	return Config{
-		SBOMFormat:        "cyclonedx-json",
-		PolicyMode:        PolicyStrict,
-		InterpretMode:     InterpretInstallerSemantic,
-		ReportMode:        ReportHuman,
-		ProgressLevel:     ProgressNormal,
-		Language:          "en",
-		HumanRenderEngine: "writer",
-		GrypeEnabled:      false,
-		WorkDir:           os.TempDir(),
-		Limits:            DefaultLimits(),
-		ParallelScanners:  defaultParallelScanners(),
-		SkipExtensions:    defaultSkipExtensions(),
+		SBOMFormat:           "cyclonedx-json",
+		PolicyMode:           PolicyStrict,
+		InterpretMode:        InterpretInstallerSemantic,
+		ReportSelection:      ReportMarkdown,
+		ProgressLevel:        ProgressNormal,
+		Language:             "en",
+		MarkdownRenderEngine: "writer",
+		GrypeEnabled:         false,
+		WorkDir:              os.TempDir(),
+		Limits:               DefaultLimits(),
+		ParallelScanners:     defaultParallelScanners(),
+		SkipExtensions:       defaultSkipExtensions(),
 	}
 }
 
@@ -416,19 +416,19 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("unsupported language: %q (valid: en, de)", c.Language)
 	}
 
-	switch c.HumanRenderEngine {
+	switch c.MarkdownRenderEngine {
 	case "", "writer", "template-wrapper", "template-document":
 		// valid
 	default:
-		return fmt.Errorf("unsupported human render engine: %q (valid: writer, template-wrapper, template-document)", c.HumanRenderEngine)
+		return fmt.Errorf("unsupported markdown render engine: %q (valid: writer, template-wrapper, template-document)", c.MarkdownRenderEngine)
 	}
 
-	if c.HumanRenderEngine == "template-document" && strings.TrimSpace(c.HumanTemplateFile) == "" {
-		return fmt.Errorf("human template file is required when human render engine is template-document")
+	if c.MarkdownRenderEngine == "template-document" && strings.TrimSpace(c.MarkdownTemplateFile) == "" {
+		return fmt.Errorf("markdown template file is required when markdown render engine is template-document")
 	}
-	if strings.TrimSpace(c.HumanTemplateFile) != "" {
-		if c.HumanRenderEngine == "" || c.HumanRenderEngine == "writer" {
-			return fmt.Errorf("human template file requires human render engine template-wrapper or template-document")
+	if strings.TrimSpace(c.MarkdownTemplateFile) != "" {
+		if c.MarkdownRenderEngine == "" || c.MarkdownRenderEngine == "writer" {
+			return fmt.Errorf("markdown template file requires markdown render engine template-wrapper or template-document")
 		}
 	}
 

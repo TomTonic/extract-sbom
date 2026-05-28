@@ -142,8 +142,8 @@ func TestRootCmdFlagsExist(t *testing.T) {
 		"mode",
 		"report",
 		"language",
-		"human-render-engine",
-		"human-template-file",
+		"markdown-render-engine",
+		"markdown-template-file",
 		"root-manufacturer",
 		"root-name",
 		"root-version",
@@ -193,7 +193,7 @@ func TestLoadConfigRespectsPrecedence(t *testing.T) {
 		"work-dir: \"" + configWorkDir + "\"\n" +
 		"policy: partial\n" +
 		"mode: physical\n" +
-		"report: machine\n" +
+		"report: json\n" +
 		"language: de\n" +
 		"root-version: config-version\n" +
 		"max-files: 321\n" +
@@ -235,8 +235,8 @@ func TestLoadConfigRespectsPrecedence(t *testing.T) {
 	if cfg.RootMetadata.Version != "flag-version" {
 		t.Fatalf("RootMetadata.Version = %q, want %q", cfg.RootMetadata.Version, "flag-version")
 	}
-	if cfg.ReportMode != config.ReportBoth {
-		t.Fatalf("ReportMode = %v, want %v", cfg.ReportMode, config.ReportBoth)
+	if cfg.ReportSelection != config.ReportBoth {
+		t.Fatalf("ReportSelection = %v, want %v", cfg.ReportSelection, config.ReportBoth)
 	}
 	if cfg.PolicyMode != config.PolicyPartial {
 		t.Fatalf("PolicyMode = %v, want %v", cfg.PolicyMode, config.PolicyPartial)
@@ -327,10 +327,10 @@ func TestLoadConfigParsesHumanRenderOptions(t *testing.T) {
 	}
 
 	cmd := rootCmd()
-	if err := cmd.Flags().Set("human-render-engine", "template-wrapper"); err != nil {
+	if err := cmd.Flags().Set("markdown-render-engine", "template-wrapper"); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Flags().Set("human-template-file", tplPath); err != nil {
+	if err := cmd.Flags().Set("markdown-template-file", tplPath); err != nil {
 		t.Fatal(err)
 	}
 
@@ -338,11 +338,11 @@ func TestLoadConfigParsesHumanRenderOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig returned error: %v", err)
 	}
-	if cfg.HumanRenderEngine != "template-wrapper" {
-		t.Fatalf("HumanRenderEngine = %q, want %q", cfg.HumanRenderEngine, "template-wrapper")
+	if cfg.MarkdownRenderEngine != "template-wrapper" {
+		t.Fatalf("MarkdownRenderEngine = %q, want %q", cfg.MarkdownRenderEngine, "template-wrapper")
 	}
-	if cfg.HumanTemplateFile != tplPath {
-		t.Fatalf("HumanTemplateFile = %q, want %q", cfg.HumanTemplateFile, tplPath)
+	if cfg.MarkdownTemplateFile != tplPath {
+		t.Fatalf("MarkdownTemplateFile = %q, want %q", cfg.MarkdownTemplateFile, tplPath)
 	}
 }
 

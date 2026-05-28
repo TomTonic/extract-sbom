@@ -512,9 +512,9 @@ dependencies into a canonical order, then writes the SBOM and the audit report.
 - `spdx-json`: SPDX 2.3 JSON (`*.spdx.json`) — components mapped to SPDX packages with PURL download locations and DEPENDS_ON relationships derived from the CycloneDX dependency graph
 
 **Audit report format** is controlled by `--report`:
-- `human` (default): Markdown (`*.report.md`)
+- `markdown` (default): Markdown (`*.report.md`)
 - `html`: standalone HTML (`*.report.html`)
-- `machine`: JSON (`*.report.json`)
+- `json`: JSON (`*.report.json`)
 - `sarif`: SARIF 2.1.0 (`*.sarif.json`) — requires `--grype` to populate vulnerability results
 - `both`: Markdown + JSON
 - `all`: Markdown + JSON + HTML
