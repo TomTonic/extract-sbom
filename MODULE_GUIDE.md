@@ -748,20 +748,9 @@ type ReportData struct {
     EndTime          time.Time
 }
 
-// GenerateHuman writes a human-readable Markdown report.
-func GenerateHuman(data ReportData, lang string, w io.Writer) error
-
 // GenerateHumanWithOptions writes the human report using the selected
 // renderer backend (writer, template-wrapper, or template-document).
 func GenerateHumanWithOptions(data ReportData, lang string, w io.Writer, opts HumanRenderOptions) error
-
-// GenerateHumanWithTemplate writes the human report using an optional
-// text/template wrapper around the canonical Markdown body.
-func GenerateHumanWithTemplate(data ReportData, lang string, w io.Writer, wrapperTemplate string) error
-
-// GenerateHumanWithTemplateDocument writes the human report using a document
-// text/template fed with pre-rendered section blocks.
-func GenerateHumanWithTemplateDocument(data ReportData, lang string, w io.Writer, documentTemplate string) error
 
 // GenerateHTML writes a self-contained HTML report.
 func GenerateHTML(data ReportData, lang string, w io.Writer) error
@@ -846,18 +835,15 @@ func GenerateSARIF(data ReportData, w io.Writer) error
 - If `--grype` is set, the report renders an explicit enrichment state:
   `completed`, `completed-with-errors`, `unavailable`, or `not-requested`.
 - Human report rendering is backend-oriented: a deterministic writer backend is
-  the default for audit stability, while `GenerateHumanWithTemplate` provides
-  an optional text/template wrapper for embedding or branded framing without
-  changing core report semantics.
-- `GenerateHuman` delegates to `GenerateHumanWithOptions` (zero-value options),
-  so backend selection and validation are centralized in one code path.
+  the default for audit stability; optional template-wrapper/template-document
+  backends are selected through `GenerateHumanWithOptions`.
 - Runtime selection of the human renderer backend is configurable via
   `Config.HumanRenderEngine` and `Config.HumanTemplateFile`.
   The orchestrator resolves these into `HumanRenderOptions` and keeps
   machine/HTML/SARIF report generation unaffected.
-- `GenerateHumanWithTemplateDocument` is optional and receives deterministic,
-  pre-rendered section blocks. This allows layout customization (reordering,
-  selective section inclusion) without moving report logic into templates.
+- Template execution helpers are package-local in
+  `internal/report/internal/human`; the root `report` package keeps a minimal
+  orchestrator-facing surface and delegates backend selection via options.
 - Full template-first rendering for the complete human report remains deferred
   until all high-density logic (ordering, conditional sections, and
   provenance-driven tables) is isolated into view-model builders.
