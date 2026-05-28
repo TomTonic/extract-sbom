@@ -1,4 +1,4 @@
-package report
+package human
 
 import (
 	"bytes"
@@ -14,14 +14,6 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-func floatPtr(v float64) *float64 {
-	return &v
-}
-
-func boolPtr(v bool) *bool {
-	return &v
-}
-
 func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +25,7 @@ func TestGenerateHumanVulnerabilitySummaryNotRequested(t *testing.T) {
 	}
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	out := buf.String()
@@ -98,7 +90,7 @@ func TestGenerateHumanVulnerabilityDetailsFoundAndNone(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	out := buf.String()
@@ -134,7 +126,7 @@ func TestGenerateHumanIncludesGeneratorBuildInfo(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 
@@ -152,7 +144,7 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 
@@ -197,7 +189,7 @@ func TestGenerateHumanContainsInputHashes(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -219,7 +211,7 @@ func TestGenerateHumanGermanTranslation(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "de", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "de", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 
@@ -247,7 +239,7 @@ func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
 	data.SandboxInfo.UnsafeOvr = true
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -277,7 +269,7 @@ func TestGenerateHumanWithPolicyDecisions(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -303,7 +295,7 @@ func TestGenerateHumanWithProcessingIssues(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -327,7 +319,7 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -362,7 +354,7 @@ func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *te
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -405,7 +397,7 @@ func TestGenerateHumanSectionOrderPutsExecutiveSectionsFirst(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -439,7 +431,7 @@ func TestGenerateHumanIncludesMethodDeepLinks(t *testing.T) {
 	data := makeTestReportData()
 	var buf bytes.Buffer
 
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -474,7 +466,7 @@ func TestGenerateHumanWithScanResults(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -503,7 +495,7 @@ func TestGenerateHumanRootPropertiesAreSorted(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()
@@ -569,7 +561,7 @@ func TestGenerateHumanIncludesNestedExtractionEvidenceAndPolicyDetails(t *testin
 	}}
 
 	var buf bytes.Buffer
-	if err := GenerateHuman(data, "en", &buf); err != nil {
+	if err := GenerateHumanWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateHuman error: %v", err)
 	}
 	output := buf.String()

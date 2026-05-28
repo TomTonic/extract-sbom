@@ -241,7 +241,7 @@ Status values:
 
 ### REP-ARCH-017 - Re-align test ownership and names
 
-- Status: `PLANNED`
+- Status: `IN_PROGRESS`
 - Objective: Move tests to the owning packages and rename them so file names
   reflect the implementation slices they validate.
 - Exit criteria:
