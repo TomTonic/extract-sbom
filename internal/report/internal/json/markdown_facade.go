@@ -191,7 +191,7 @@ func ReportDataFromV2(report ReportV2) (ReportData, []string) {
 		},
 		Tree:            report.Raw.ExtractionTreeRaw,
 		Scans:           scans,
-		Vulnerabilities: report.Raw.VulnerabilitiesRaw,
+		Vulnerabilities: fromVulnerabilityResultV2(report.Raw.VulnerabilitiesRaw),
 		PolicyDecisions: append([]policy.Decision(nil), report.Raw.PolicyDecisionsRaw...),
 		SandboxInfo: SandboxSummary{
 			Name:      report.Runtime.Sandbox.Name,
@@ -220,4 +220,61 @@ func parseRFC3339OrZero(value string) time.Time {
 		return time.Time{}
 	}
 	return parsed
+}
+
+// fromVulnerabilityResultV2 reconstructs a vulnscan.Result from the canonical report snapshot.
+//
+// This is the single coupling point where the json package maps the report schema back to
+// vulnscan types for downstream markdown/html renderers. It is the inverse of toVulnerabilityResultV2.
+func fromVulnerabilityResultV2(v *vulnerabilityResultV2) *vulnscan.Result {
+	if v == nil {
+		return nil
+	}
+	out := &vulnscan.Result{
+		State:            vulnscan.State(v.State),
+		Requested:        v.Requested,
+		GrypeVersion:     v.GrypeVersion,
+		DBSchemaVersion:  v.DBSchemaVersion,
+		DBBuilt:          v.DBBuilt,
+		DBUpdated:        v.DBUpdated,
+		MatchesByBOMRef:  map[string][]vulnscan.VMatch{},
+		CoverageByBOMRef: map[string]vulnscan.CoverageState{},
+	}
+	for ref, matches := range v.MatchesByBOMRef {
+		native := make([]vulnscan.VMatch, len(matches))
+		for i := range matches {
+			m := &matches[i]
+			native[i] = vulnscan.VMatch{
+				VulnerabilityID: m.VulnerabilityID,
+				Severity:        m.Severity,
+				CVSSScore:       m.CVSSScore,
+				CVSSVersion:     m.CVSSVersion,
+				CVSSVector:      m.CVSSVector,
+				Description:     m.Description,
+				Namespace:       m.Namespace,
+				DataSource:      m.DataSource,
+				URLs:            append([]string(nil), m.URLs...),
+				FixState:        m.FixState,
+				FixVersions:     append([]string(nil), m.FixVersions...),
+				Matcher:         m.Matcher,
+				MatchType:       m.MatchType,
+				ArtifactName:    m.ArtifactName,
+				ArtifactVersion: m.ArtifactVersion,
+				ArtifactType:    m.ArtifactType,
+				ArtifactPURL:    m.ArtifactPURL,
+				EPSS:            m.EPSS,
+				EPSSPercentile:  m.EPSSPercentile,
+				Risk:            m.Risk,
+				KEV:             m.KEV,
+			}
+		}
+		out.MatchesByBOMRef[ref] = native
+	}
+	for ref, cov := range v.CoverageByBOMRef {
+		out.CoverageByBOMRef[ref] = vulnscan.CoverageState(cov)
+	}
+	for _, e := range v.Errors {
+		out.Errors = append(out.Errors, vulnscan.Issue{Code: e.Code, Message: e.Message})
+	}
+	return out
 }
