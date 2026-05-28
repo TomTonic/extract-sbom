@@ -40,7 +40,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 	sortSuppressionRecords(purlDups)
 
 	occurrences, _ := reportjson.CollectComponentOccurrences(bom)
-	resolver := newSuppressionLinkResolver(occurrences)
+	resolver := reportjson.BuildMarkdownSuppressionResolver(occurrences)
 
 	// Summary counts.
 	fmt.Fprintf(w, "| %s | %s |\n", t.reasonLabel, t.countLabel)
@@ -80,7 +80,7 @@ func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionReco
 
 // writeSuppressionReasonTable prints a bounded, deterministic table for one
 // suppression reason group.
-func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionRecord, resolver suppressionLinkResolver, t translations) {
+func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionRecord, resolver reportjson.MarkdownSuppressionResolver, t translations) {
 	fmt.Fprintf(w, "| %s | %s | %s |\n", t.suppressionTableDeliveryPath, t.suppressionTableComponentName, t.suppressionTableSuppressedBy)
 	fmt.Fprintln(w, "|---|---|---|")
 	if len(records) == 0 {
@@ -109,112 +109,31 @@ func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionReco
 	fmt.Fprintln(w)
 }
 
-// suppressionLinkCandidate is one surviving indexed component considered as a
-// replacement link target for suppressed records.
-type suppressionLinkCandidate struct {
-	// BOMRef is the surviving component bom-ref used as report anchor target.
-	BOMRef string
-	// Name is the surviving component name in plain text.
-	Name string
-	// FoundBy is the cataloger/source identifier; empty means unknown.
-	FoundBy string
-	// Score ranks replacement quality. Valid range: >= 0; larger is better.
-	Score int
-}
-
-// suppressionLinkResolver provides delivery-path-based lookup from suppressed
-// records to surviving indexed components.
-type suppressionLinkResolver struct {
-	// byDeliveryPath maps one logical delivery path to ranked replacement
-	// candidates. Map keys and contained path-like values use "/" separators.
-	byDeliveryPath map[string][]suppressionLinkCandidate
-}
-
-// newSuppressionLinkResolver builds the lookup index used by suppression
-// reporting to link removed records only to occurrence entries that are
-// actually rendered in the component index.
-func newSuppressionLinkResolver(occurrences []componentOccurrence) suppressionLinkResolver {
-	resolver := suppressionLinkResolver{byDeliveryPath: map[string][]suppressionLinkCandidate{}}
-	if len(occurrences) == 0 {
-		return resolver
-	}
-
-	for i := range occurrences {
-		occ := occurrences[i]
-		if occ.ObjectID == "" {
-			continue
-		}
-		candidate := suppressionLinkCandidate{
-			BOMRef:  occ.ObjectID,
-			Name:    occ.PackageName,
-			FoundBy: occ.FoundBy,
-			Score:   reportjson.OccurrenceQualityScore(occ),
-		}
-		for _, deliveryPath := range occ.DeliveryPaths {
-			resolver.byDeliveryPath[deliveryPath] = append(resolver.byDeliveryPath[deliveryPath], candidate)
-		}
-	}
-
-	for deliveryPath := range resolver.byDeliveryPath {
-		sort.Slice(resolver.byDeliveryPath[deliveryPath], func(i, j int) bool {
-			a := resolver.byDeliveryPath[deliveryPath][i]
-			b := resolver.byDeliveryPath[deliveryPath][j]
-			if a.Score != b.Score {
-				return a.Score > b.Score
-			}
-			if a.Name != b.Name {
-				return a.Name < b.Name
-			}
-			if a.FoundBy != b.FoundBy {
-				return a.FoundBy < b.FoundBy
-			}
-			return a.BOMRef < b.BOMRef
-		})
-	}
-
-	return resolver
-}
-
-// resolve chooses the best indexed replacement BOMRef for one suppression
-// record, or returns a localized explanation when no unambiguous match exists.
-func (r suppressionLinkResolver) resolve(record assembly.SuppressionRecord, t translations) (string, string) {
-	candidates := r.byDeliveryPath[record.DeliveryPath]
-	if len(candidates) == 0 {
-		return "", t.suppressedByNoIndexedMatch
-	}
-
-	if record.KeptName != "" {
-		for i := range candidates {
-			candidate := candidates[i]
-			if candidate.Name != record.KeptName {
-				continue
-			}
-			if record.KeptFoundBy != "" && candidate.FoundBy != record.KeptFoundBy {
-				continue
-			}
-			return candidate.BOMRef, ""
-		}
-		return "", t.suppressedByReplacementNotIndexed
-	}
-
-	if len(candidates) == 1 {
-		return candidates[0].BOMRef, ""
-	}
-
-	return "", t.suppressedByAmbiguousIndexedMatch
-}
-
 // suppressedByCell formats the "suppressed by" table cell with either a link
 // to the retained component or an explanatory fallback message.
-func suppressedByCell(record assembly.SuppressionRecord, resolver suppressionLinkResolver, t translations) string {
-	bomRef, reason := resolver.resolve(record, t)
+func suppressedByCell(record assembly.SuppressionRecord, resolver reportjson.MarkdownSuppressionResolver, t translations) string {
+	bomRef, reasonCode := resolver.Resolve(record)
 	if bomRef == "" {
+		reason := suppressionResolveReasonText(reasonCode, t)
 		if reason == "" {
 			reason = t.suppressedByNoIndexedMatch
 		}
 		return fmt.Sprintf("*%s*", escapeMarkdownCell(reason))
 	}
 	return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(bomRef), reportjson.OccurrenceAnchorID(bomRef))
+}
+
+func suppressionResolveReasonText(code string, t translations) string {
+	switch code {
+	case reportjson.SuppressionResolveNoIndexedMatch:
+		return t.suppressedByNoIndexedMatch
+	case reportjson.SuppressionResolveReplacementNotIndexed:
+		return t.suppressedByReplacementNotIndexed
+	case reportjson.SuppressionResolveAmbiguousIndexedMatch:
+		return t.suppressedByAmbiguousIndexedMatch
+	default:
+		return ""
+	}
 }
 
 // sortSuppressionRecords enforces deterministic ordering in suppression tables.
