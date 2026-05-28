@@ -48,34 +48,36 @@ func rootCmd() *cobra.Command {
 	bi := buildinfo.Read()
 
 	var (
-		configPath     string
-		outputDir      string
-		workDir        string
-		sbomFormat     string
-		policyStr      string
-		modeStr        string
-		reportStr      string
-		progress       string
-		language       string
-		markdownEngine string
-		templateFile   string
-		mfg            string
-		name           string
-		version        string
-		delivDate      string
-		rootProps      []string
-		skipExts       []string
-		passwords      []string
-		passwordFile   string
-		grype          bool
-		unsafe         bool
-		maxDepth       int
-		maxFiles       int
-		maxSize        int64
-		maxEntry       int64
-		maxRatio       int
-		timeout        string
-		parallel       int
+		configPath              string
+		outputDir               string
+		workDir                 string
+		sbomFormat              string
+		policyStr               string
+		modeStr                 string
+		reportStr               string
+		progress                string
+		language                string
+		markdownEngine          string
+		templateFile            string
+		legacyHumanEngine       string
+		legacyHumanTemplateFile string
+		mfg                     string
+		name                    string
+		version                 string
+		delivDate               string
+		rootProps               []string
+		skipExts                []string
+		passwords               []string
+		passwordFile            string
+		grype                   bool
+		unsafe                  bool
+		maxDepth                int
+		maxFiles                int
+		maxSize                 int64
+		maxEntry                int64
+		maxRatio                int
+		timeout                 string
+		parallel                int
 	)
 
 	cmd := &cobra.Command{
@@ -160,6 +162,10 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&language, "language", "en", "Report language: en or de")
 	cmd.Flags().StringVar(&markdownEngine, "markdown-render-engine", defaults.MarkdownRenderEngine, "Markdown report renderer: writer, template-wrapper, or template-document")
 	cmd.Flags().StringVar(&templateFile, "markdown-template-file", "", "Path to text/template file for markdown template renderers")
+	cmd.Flags().StringVar(&legacyHumanEngine, "human-render-engine", "", "DEPRECATED: use --markdown-render-engine")
+	cmd.Flags().StringVar(&legacyHumanTemplateFile, "human-template-file", "", "DEPRECATED: use --markdown-template-file")
+	_ = cmd.Flags().MarkDeprecated("human-render-engine", "use --markdown-render-engine")
+	_ = cmd.Flags().MarkDeprecated("human-template-file", "use --markdown-template-file")
 	cmd.Flags().StringVar(&mfg, "root-manufacturer", "", "Manufacturer/supplier for the SBOM root component")
 	cmd.Flags().StringVar(&name, "root-name", "", "Software/product name for the SBOM root component")
 	cmd.Flags().StringVar(&version, "root-version", "", "Version for the SBOM root component")
@@ -204,6 +210,8 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	v.SetEnvPrefix("EXTRACT_SBOM")
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
+	_ = v.BindEnv("markdown-render-engine", "EXTRACT_SBOM_MARKDOWN_RENDER_ENGINE", "EXTRACT_SBOM_HUMAN_RENDER_ENGINE")
+	_ = v.BindEnv("markdown-template-file", "EXTRACT_SBOM_MARKDOWN_TEMPLATE_FILE", "EXTRACT_SBOM_HUMAN_TEMPLATE_FILE")
 
 	var bindErr error
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
@@ -233,6 +241,16 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	cfg.Language = v.GetString("language")
 	cfg.MarkdownRenderEngine = v.GetString("markdown-render-engine")
 	cfg.MarkdownTemplateFile = v.GetString("markdown-template-file")
+	if !cmd.Flags().Changed("markdown-render-engine") {
+		if legacyEngine := strings.TrimSpace(v.GetString("human-render-engine")); legacyEngine != "" {
+			cfg.MarkdownRenderEngine = legacyEngine
+		}
+	}
+	if !cmd.Flags().Changed("markdown-template-file") {
+		if legacyTemplate := strings.TrimSpace(v.GetString("human-template-file")); legacyTemplate != "" {
+			cfg.MarkdownTemplateFile = legacyTemplate
+		}
+	}
 	cfg.GrypeEnabled = v.GetBool("grype")
 	cfg.RootMetadata.Manufacturer = v.GetString("root-manufacturer")
 	cfg.RootMetadata.Name = v.GetString("root-name")

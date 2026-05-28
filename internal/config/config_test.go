@@ -152,6 +152,8 @@ func TestParseReportSelectionAcceptsValidValues(t *testing.T) {
 	}{
 		{"markdown", "markdown", ReportMarkdown, false},
 		{"json", "json", ReportJSON, false},
+		{"legacy human alias", "human", ReportMarkdown, false},
+		{"legacy machine alias", "machine", ReportJSON, false},
 		{"both", "both", ReportBoth, false},
 		{"html", "html", ReportHTML, false},
 		{"sarif", "sarif", ReportSARIF, false},

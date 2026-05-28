@@ -169,12 +169,19 @@ func (r ReportSelection) String() string {
 
 // ParseReportSelection converts a string to a ReportSelection.
 // Valid values are "markdown", "json", "both", "html", "sarif", and "all" (case-insensitive).
+//
+// Backward compatibility: legacy values "human" and "machine" are accepted
+// as aliases for "markdown" and "json".
 // Returns an error for unrecognized values.
 func ParseReportSelection(s string) (ReportSelection, error) {
 	switch strings.ToLower(s) {
 	case "markdown":
 		return ReportMarkdown, nil
 	case "json":
+		return ReportJSON, nil
+	case "human":
+		return ReportMarkdown, nil
+	case "machine":
 		return ReportJSON, nil
 	case "both":
 		return ReportBoth, nil
