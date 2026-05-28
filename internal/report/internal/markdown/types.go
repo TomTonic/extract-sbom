@@ -39,20 +39,8 @@ type scanStats = reportjson.ScanStats
 // policyStats aliases policy aggregation counters.
 type policyStats = reportjson.PolicyStats
 
-// processingEntry is a flattened log row for the processing-issues table.
-type processingEntry struct {
-	Source         string
-	Location       string
-	Classification string
-	Status         string
-	DetectedFormat string
-	Tool           string
-	ArchiveType    string
-	ArchiveMethod  string
-	Encrypted      string
-	PhysicalSize   string
-	Detail         string
-}
+// processingEntry aliases JSON-owned processing row projection.
+type processingEntry = reportjson.MarkdownProcessingEntry
 
 // reportSection defines one TOC entry and heading anchor in the markdown report.
 type reportSection struct {
