@@ -216,9 +216,10 @@ type issueEntityV2 struct {
 }
 
 type projectionRowV2 struct {
-	SourceRefs       []string `json:"sourceRefs"`
-	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
-	ResolutionReason string   `json:"resolutionReason,omitempty"`
+	SourceRefs       []string       `json:"sourceRefs"`
+	ResolutionStatus string         `json:"resolutionStatus,omitempty"`
+	ResolutionReason string         `json:"resolutionReason,omitempty"`
+	Data             map[string]any `json:"data,omitempty"`
 }
 
 type entitiesV2 struct {
