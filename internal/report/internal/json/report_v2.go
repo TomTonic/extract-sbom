@@ -14,6 +14,7 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/policy"
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
@@ -40,8 +41,8 @@ func buildJSONReportV2Skeleton(data ReportData, generatedAt time.Time) ReportV2 
 		rawScans[i] = toRawScanV2(data.Scans[i])
 	}
 
-	entities, _ := buildEntitiesV2(data)
-	projections := buildProjectionsV2(entities)
+	entities, index := buildEntitiesV2(data)
+	projections := buildProjectionsV2(data, entities, index)
 	integrity := buildIntegrityV2(entities, projections)
 
 	return ReportV2{
@@ -406,63 +407,395 @@ func buildIssueEntities(issues []ProcessingIssue, out *[]issueEntityV2) {
 	}
 }
 
-func buildProjectionsV2(entities entitiesV2) projectionsV2 {
-	extractionRows := make([]projectionRowV2, 0, len(entities.Nodes))
-	for i := range entities.Nodes {
-		extractionRows = append(extractionRows, projectionRowV2{SourceRefs: []string{entities.Nodes[i].ID}})
-	}
+func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV2) projectionsV2 {
+	occurrences, occurrenceStats := domain.CollectComponentOccurrences(data.BOM)
+	packageGroups := domain.BuildPackageOccurrenceGroups(occurrences)
 
-	vulnerabilityRows := make([]projectionRowV2, 0, len(entities.Vulnerabilities))
-	for i := range entities.Vulnerabilities {
-		refs := []string{entities.Vulnerabilities[i].ID}
-		if entities.Vulnerabilities[i].ComponentID != "" {
-			refs = append(refs, entities.Vulnerabilities[i].ComponentID)
-		}
-		row := projectionRowV2{SourceRefs: refs}
-		if entities.Vulnerabilities[i].ComponentID == "" {
-			row.ResolutionStatus = "missing"
-			row.ResolutionReason = "component reference missing in vulnerability entity"
-		}
-		vulnerabilityRows = append(vulnerabilityRows, row)
+	extractionRows := buildExtractionProjectionRows(data.Tree, index)
+	vulnerabilityRows := buildVulnerabilityProjectionRows(entities)
+	issueRows := buildIssueProjectionRows(entities)
+	componentIndexRows := buildComponentIndexProjectionRows(packageGroups, index)
+	if len(componentIndexRows) == 0 {
+		componentIndexRows = buildComponentFallbackProjectionRows(entities.Components)
 	}
-
-	issueRows := make([]projectionRowV2, 0, len(entities.Issues))
-	for i := range entities.Issues {
-		issueRows = append(issueRows, projectionRowV2{SourceRefs: []string{entities.Issues[i].ID}})
-	}
-
-	componentIndex := make([]projectionRowV2, 0, len(entities.Components))
-	for i := range entities.Components {
-		componentIndex = append(componentIndex, projectionRowV2{SourceRefs: []string{entities.Components[i].ID}})
-	}
+	markdownSections, markdownTOC, markdownAnchors := buildMarkdownProjectionRows(entities, extractionRows, vulnerabilityRows, componentIndexRows)
+	htmlSummaryCards, htmlTableModels := buildHTMLProjectionRows(data, entities, extractionRows, vulnerabilityRows, issueRows)
 
 	return projectionsV2{
 		Generic: genericProjectionV2{
 			Summary: map[string]any{
-				"nodes":           len(entities.Nodes),
-				"scanTasks":       len(entities.ScanTasks),
-				"components":      len(entities.Components),
-				"packageGroups":   len(entities.PackageGroups),
-				"vulnerabilities": len(entities.Vulnerabilities),
-				"suppressions":    len(entities.Suppressions),
-				"policyDecisions": len(entities.PolicyDecisions),
-				"issues":          len(entities.Issues),
+				"nodes":                        len(entities.Nodes),
+				"scanTasks":                    len(entities.ScanTasks),
+				"components":                   len(entities.Components),
+				"packageGroups":                len(entities.PackageGroups),
+				"vulnerabilities":              len(entities.Vulnerabilities),
+				"suppressions":                 len(entities.Suppressions),
+				"policyDecisions":              len(entities.PolicyDecisions),
+				"issues":                       len(entities.Issues),
+				"componentIndexStats":          occurrenceStats,
+				"vulnerabilityEnrichmentState": vulnerabilityStateValue(data.Vulnerabilities),
+				"vulnerabilityRequested":       vulnerabilityRequestedValue(data.Vulnerabilities),
 			},
 			ExtractionRows:    extractionRows,
 			VulnerabilityRows: vulnerabilityRows,
 			IssueRows:         issueRows,
-			ComponentIndex:    componentIndex,
+			ComponentIndex:    componentIndexRows,
 		},
 		Markdown: markdownProjectionV2{
-			Sections: []projectionRowV2{},
-			TOC:      []projectionRowV2{},
-			Anchors:  []projectionRowV2{},
+			Sections: markdownSections,
+			TOC:      markdownTOC,
+			Anchors:  markdownAnchors,
 		},
 		HTML: htmlProjectionV2{
-			SummaryCards: []projectionRowV2{},
-			TableModels:  []projectionRowV2{},
+			SummaryCards: htmlSummaryCards,
+			TableModels:  htmlTableModels,
 		},
 	}
+}
+
+func buildExtractionProjectionRows(tree *extract.ExtractionNode, index entityIndexV2) []projectionRowV2 {
+	rows := make([]projectionRowV2, 0)
+	var walk func(node *extract.ExtractionNode, depth int)
+	walk = func(node *extract.ExtractionNode, depth int) {
+		if node == nil {
+			return
+		}
+		row := projectionRowV2{
+			SourceRefs: sourceRefsOrNil(index.nodeByPath[node.Path]),
+			Data: map[string]any{
+				"kind":   "extraction-node",
+				"path":   node.Path,
+				"status": node.Status.String(),
+				"format": node.Format.Format.String(),
+				"tool":   node.Tool,
+				"detail": node.StatusDetail,
+				"depth":  depth,
+			},
+		}
+		rows = append(rows, row)
+		for _, child := range node.Children {
+			walk(child, depth+1)
+		}
+	}
+	walk(tree, 0)
+	return rows
+}
+
+func buildVulnerabilityProjectionRows(entities entitiesV2) []projectionRowV2 {
+	componentByID := make(map[string]componentEntityV2, len(entities.Components))
+	for i := range entities.Components {
+		componentByID[entities.Components[i].ID] = entities.Components[i]
+	}
+
+	rows := make([]projectionRowV2, 0, len(entities.Vulnerabilities))
+	for i := range entities.Vulnerabilities {
+		refs := []string{entities.Vulnerabilities[i].ID}
+		component := componentEntityV2{}
+		if entities.Vulnerabilities[i].ComponentID != "" {
+			refs = append(refs, entities.Vulnerabilities[i].ComponentID)
+			component = componentByID[entities.Vulnerabilities[i].ComponentID]
+		}
+		row := projectionRowV2{
+			SourceRefs: refs,
+			Data: map[string]any{
+				"kind":            "vulnerability",
+				"vulnerabilityId": entities.Vulnerabilities[i].VulnerabilityID,
+				"severity":        entities.Vulnerabilities[i].Severity,
+				"packageName":     component.Name,
+				"installed":       component.Version,
+				"bomRef":          entities.Vulnerabilities[i].BOMRef,
+			},
+		}
+		if entities.Vulnerabilities[i].ComponentID == "" {
+			row.ResolutionStatus = "missing"
+			row.ResolutionReason = "component reference missing in vulnerability entity"
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func buildIssueProjectionRows(entities entitiesV2) []projectionRowV2 {
+	rows := make([]projectionRowV2, 0, len(entities.Issues))
+	for i := range entities.Issues {
+		rows = append(rows, projectionRowV2{
+			SourceRefs: []string{entities.Issues[i].ID},
+			Data: map[string]any{
+				"kind":    "issue",
+				"stage":   entities.Issues[i].Stage,
+				"message": entities.Issues[i].Message,
+			},
+		})
+	}
+	return rows
+}
+
+func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, index entityIndexV2) []projectionRowV2 {
+	rows := make([]projectionRowV2, 0)
+	for i := range groups {
+		groupRefs := make([]string, 0, len(groups[i].Occurrences))
+		for j := range groups[i].Occurrences {
+			if componentID := index.componentByRef[groups[i].Occurrences[j].ObjectID]; componentID != "" {
+				groupRefs = append(groupRefs, componentID)
+			}
+		}
+		groupRefs = dedupeSortedStrings(sortedStrings(groupRefs))
+		rows = append(rows, projectionRowV2{
+			SourceRefs: fallbackSourceRefs(groupRefs),
+			Data: map[string]any{
+				"kind":            "package-group",
+				"anchorId":        groups[i].AnchorID,
+				"packageName":     groups[i].PackageName,
+				"version":         groups[i].Version,
+				"purls":           groups[i].PURLs,
+				"occurrenceCount": len(groups[i].Occurrences),
+			},
+		})
+		for j := range groups[i].Occurrences {
+			componentID := index.componentByRef[groups[i].Occurrences[j].ObjectID]
+			if componentID == "" {
+				continue
+			}
+			rows = append(rows, projectionRowV2{
+				SourceRefs: []string{componentID},
+				Data: map[string]any{
+					"kind":            "occurrence",
+					"packageAnchorId": groups[i].AnchorID,
+					"anchorId":        occurrenceAnchorID(groups[i].Occurrences[j].ObjectID),
+					"objectId":        groups[i].Occurrences[j].ObjectID,
+					"deliveryPaths":   groups[i].Occurrences[j].DeliveryPaths,
+					"evidencePaths":   groups[i].Occurrences[j].EvidencePaths,
+					"evidenceSource":  groups[i].Occurrences[j].EvidenceSource,
+					"foundBy":         groups[i].Occurrences[j].FoundBy,
+				},
+			})
+		}
+	}
+	return rows
+}
+
+func buildComponentFallbackProjectionRows(components []componentEntityV2) []projectionRowV2 {
+	rows := make([]projectionRowV2, 0, len(components))
+	for i := range components {
+		rows = append(rows, projectionRowV2{
+			SourceRefs: []string{components[i].ID},
+			Data: map[string]any{
+				"kind":        "component-fallback",
+				"packageName": components[i].Name,
+				"version":     components[i].Version,
+				"purl":        components[i].PURL,
+				"bomRef":      components[i].BOMRef,
+			},
+		})
+	}
+	return rows
+}
+
+func buildMarkdownProjectionRows(entities entitiesV2, extractionRows, vulnerabilityRows, componentIndexRows []projectionRowV2) ([]projectionRowV2, []projectionRowV2, []projectionRowV2) {
+	fallback := firstProjectionSourceRef(entities)
+	sections := []struct {
+		key    string
+		anchor string
+		level  int
+		refs   []string
+	}{
+		{key: "summary", anchor: "summary", level: 0, refs: collectComponentIDs(entities.Components)},
+		{key: "processing-issues", anchor: "processing-errors", level: 0, refs: collectIssueIDs(entities.Issues)},
+		{key: "component-index", anchor: "component-occurrence-index", level: 1, refs: collectComponentIDs(entities.Components)},
+		{key: "policy", anchor: "policy-decisions", level: 1, refs: collectPolicyDecisionIDs(entities.PolicyDecisions)},
+		{key: "scan", anchor: "scan-results", level: 1, refs: collectScanTaskIDs(entities.ScanTasks)},
+		{key: "extraction", anchor: "extraction-log", level: 1, refs: collectNodeIDs(entities.Nodes)},
+		{key: "vulnerabilities", anchor: "vulnerability-summary", level: 1, refs: collectVulnerabilityIDs(entities.Vulnerabilities)},
+	}
+
+	sectionRows := make([]projectionRowV2, 0, len(sections))
+	tocRows := make([]projectionRowV2, 0, len(sections))
+	anchorRows := make([]projectionRowV2, 0)
+
+	for _, section := range sections {
+		refs := preferredOrFallback(section.refs, fallback)
+		if len(refs) == 0 {
+			continue
+		}
+		data := map[string]any{"kind": "section", "key": section.key, "anchor": section.anchor, "level": section.level}
+		sectionRows = append(sectionRows, projectionRowV2{SourceRefs: refs, Data: data})
+		tocRows = append(tocRows, projectionRowV2{SourceRefs: refs, Data: map[string]any{"kind": "toc-entry", "key": section.key, "anchor": section.anchor, "level": section.level}})
+	}
+
+	for i := range componentIndexRows {
+		if componentIndexRows[i].Data == nil {
+			continue
+		}
+		anchor, _ := componentIndexRows[i].Data["anchorId"].(string)
+		if anchor == "" {
+			continue
+		}
+		anchorRows = append(anchorRows, projectionRowV2{SourceRefs: componentIndexRows[i].SourceRefs, Data: map[string]any{"kind": "anchor", "anchor": anchor}})
+	}
+	for i := range extractionRows {
+		if extractionRows[i].Data == nil {
+			continue
+		}
+		path, _ := extractionRows[i].Data["path"].(string)
+		if path == "" {
+			continue
+		}
+		anchorRows = append(anchorRows, projectionRowV2{SourceRefs: extractionRows[i].SourceRefs, Data: map[string]any{"kind": "extraction-anchor", "path": path}})
+	}
+	for i := range vulnerabilityRows {
+		if vulnerabilityRows[i].Data == nil {
+			continue
+		}
+		vulnID, _ := vulnerabilityRows[i].Data["vulnerabilityId"].(string)
+		if vulnID == "" {
+			continue
+		}
+		anchorRows = append(anchorRows, projectionRowV2{SourceRefs: vulnerabilityRows[i].SourceRefs, Data: map[string]any{"kind": "vulnerability-anchor", "vulnerabilityId": vulnID}})
+	}
+
+	return sectionRows, tocRows, anchorRows
+}
+
+func buildHTMLProjectionRows(data ReportData, entities entitiesV2, extractionRows, vulnerabilityRows, issueRows []projectionRowV2) ([]projectionRowV2, []projectionRowV2) {
+	summaryCards := make([]projectionRowV2, 0, 4)
+	tableModels := make([]projectionRowV2, 0, 3)
+
+	summaryCards = append(summaryCards,
+		projectionRowV2{SourceRefs: preferredOrFallback(collectComponentIDs(entities.Components), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "components", "count": len(entities.Components)}},
+		projectionRowV2{SourceRefs: preferredOrFallback(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "vulnerabilities", "count": len(entities.Vulnerabilities), "state": vulnerabilityStateValue(data.Vulnerabilities)}},
+		projectionRowV2{SourceRefs: preferredOrFallback(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "issues", "count": len(entities.Issues)}},
+		projectionRowV2{SourceRefs: preferredOrFallback(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "summary-card", "name": "extraction", "count": len(extractionRows)}},
+	)
+
+	tableModels = append(tableModels,
+		projectionRowV2{SourceRefs: preferredOrFallback(collectVulnerabilityIDs(entities.Vulnerabilities), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "vulnerabilities", "rowCount": len(vulnerabilityRows), "columns": []string{"vulnerabilityId", "severity", "packageName", "installed"}}},
+		projectionRowV2{SourceRefs: preferredOrFallback(collectIssueIDs(entities.Issues), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "issues", "rowCount": len(issueRows), "columns": []string{"stage", "message"}}},
+		projectionRowV2{SourceRefs: preferredOrFallback(collectNodeIDs(entities.Nodes), firstProjectionSourceRef(entities)), Data: map[string]any{"kind": "table-model", "name": "extraction-log", "rowCount": len(extractionRows), "columns": []string{"path", "format", "status", "tool", "detail"}}},
+	)
+
+	return summaryCards, tableModels
+}
+
+func vulnerabilityStateValue(v *vulnscan.Result) string {
+	if v == nil {
+		return string(vulnscan.StateNotRequested)
+	}
+	if v.State == "" {
+		return string(vulnscan.StateNotRequested)
+	}
+	return string(v.State)
+}
+
+func vulnerabilityRequestedValue(v *vulnscan.Result) bool {
+	return v != nil && v.Requested
+}
+
+func sourceRefsOrNil(ref string) []string {
+	if ref == "" {
+		return nil
+	}
+	return []string{ref}
+}
+
+func preferredOrFallback(refs []string, fallback []string) []string {
+	if len(refs) > 0 {
+		return refs
+	}
+	return fallback
+}
+
+func fallbackSourceRefs(refs []string) []string {
+	if len(refs) > 0 {
+		return refs
+	}
+	return []string{}
+}
+
+func firstProjectionSourceRef(entities entitiesV2) []string {
+	if ids := collectNodeIDs(entities.Nodes); len(ids) > 0 {
+		return ids[:1]
+	}
+	if ids := collectComponentIDs(entities.Components); len(ids) > 0 {
+		return ids[:1]
+	}
+	if ids := collectIssueIDs(entities.Issues); len(ids) > 0 {
+		return ids[:1]
+	}
+	if ids := collectScanTaskIDs(entities.ScanTasks); len(ids) > 0 {
+		return ids[:1]
+	}
+	return nil
+}
+
+func collectNodeIDs(in []nodeEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func collectScanTaskIDs(in []scanTaskEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func collectComponentIDs(in []componentEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func collectVulnerabilityIDs(in []vulnerabilityEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func collectPolicyDecisionIDs(in []policyDecisionEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func collectIssueIDs(in []issueEntityV2) []string {
+	out := make([]string, 0, len(in))
+	for i := range in {
+		out = append(out, in[i].ID)
+	}
+	return out
+}
+
+func sortedStrings(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}
+
+func occurrenceAnchorID(objectID string) string {
+	if objectID == "" {
+		return "component-occurrence"
+	}
+
+	var b strings.Builder
+	b.WriteString("component-")
+	for _, r := range strings.ToLower(objectID) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('-')
+	}
+	return strings.TrimRight(b.String(), "-")
 }
 
 func buildIntegrityV2(entities entitiesV2, projections projectionsV2) integrityV2 {
