@@ -222,48 +222,15 @@ func TestGenerateV2PopulatesEntitiesAndIntegrity(t *testing.T) {
 	if !ok {
 		t.Fatalf("projections has unexpected type: %T", parsed["projections"])
 	}
-	genericProj, ok := projections["generic"].(map[string]any)
-	if !ok {
-		t.Fatalf("projections.generic has unexpected type: %T", projections["generic"])
-	}
-	componentIndex, _ := genericProj["componentIndex"].([]any)
-	vulnerabilityRows, _ := genericProj["vulnerabilityRows"].([]any)
+	componentIndex, _ := projections["componentIndex"].([]any)
+	vulnerabilityRows, _ := projections["vulnerabilities"].([]any)
 	if len(componentIndex) == 0 {
-		t.Fatal("expected non-empty generic.componentIndex projection")
+		t.Fatal("expected non-empty projections.componentIndex projection")
 	}
 	if len(vulnerabilityRows) == 0 {
-		t.Fatal("expected non-empty generic.vulnerabilityRows projection")
+		t.Fatal("expected non-empty projections.vulnerabilities projection")
 	}
 
-	markdownProj, ok := projections["markdown"].(map[string]any)
-	if !ok {
-		t.Fatalf("projections.markdown has unexpected type: %T", projections["markdown"])
-	}
-	sections, _ := markdownProj["sections"].([]any)
-	toc, _ := markdownProj["toc"].([]any)
-	anchors, _ := markdownProj["anchors"].([]any)
-	if len(sections) == 0 {
-		t.Fatal("expected non-empty markdown.sections projection")
-	}
-	if len(toc) == 0 {
-		t.Fatal("expected non-empty markdown.toc projection")
-	}
-	if len(anchors) == 0 {
-		t.Fatal("expected non-empty markdown.anchors projection")
-	}
-
-	htmlProj, ok := projections["html"].(map[string]any)
-	if !ok {
-		t.Fatalf("projections.html has unexpected type: %T", projections["html"])
-	}
-	summaryCards, _ := htmlProj["summaryCards"].([]any)
-	tableModels, _ := htmlProj["tableModels"].([]any)
-	if len(summaryCards) == 0 {
-		t.Fatal("expected non-empty html.summaryCards projection")
-	}
-	if len(tableModels) == 0 {
-		t.Fatal("expected non-empty html.tableModels projection")
-	}
 }
 
 func TestGenerateV2FlagsDanglingVulnerabilityComponentRef(t *testing.T) {

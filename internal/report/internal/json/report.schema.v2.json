@@ -21,127 +21,290 @@
     "schema": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "version", "generatedAt"],
+      "required": [
+        "name",
+        "version",
+        "generatedAt"
+      ],
       "properties": {
-        "name": { "const": "extract-sbom-report" },
-        "version": { "const": "2.0.0" },
-        "generatedAt": { "type": "string", "format": "date-time" }
+        "name": {
+          "const": "extract-sbom-report"
+        },
+        "version": {
+          "const": "2.0.0"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "run": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["runId", "startTime", "endTime", "duration", "exitCode"],
+      "required": [
+        "runId",
+        "startTime",
+        "endTime",
+        "duration",
+        "exitCode"
+      ],
       "properties": {
-        "runId": { "type": "string", "minLength": 1 },
-        "startTime": { "type": "string", "format": "date-time" },
-        "endTime": { "type": "string", "format": "date-time" },
-        "duration": { "type": "string", "minLength": 1 },
-        "exitCode": { "type": "integer", "minimum": 0 }
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["filename", "size", "sha256", "sha512"],
+      "required": [
+        "filename",
+        "size",
+        "sha256",
+        "sha512"
+      ],
       "properties": {
-        "filename": { "type": "string" },
-        "size": { "type": "integer", "minimum": 0 },
-        "sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
-        "sha512": { "type": "string", "minLength": 128, "maxLength": 128 }
+        "filename": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "sha512": {
+          "type": "string",
+          "minLength": 128,
+          "maxLength": 128
+        }
       }
     },
     "generator": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "modified", "display"],
+      "required": [
+        "version",
+        "modified",
+        "display"
+      ],
       "properties": {
-        "version": { "type": "string" },
-        "revision": { "type": "string" },
-        "time": { "type": "string" },
-        "modified": { "type": "boolean" },
-        "display": { "type": "string" }
+        "version": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "modified": {
+          "type": "boolean"
+        },
+        "display": {
+          "type": "string"
+        }
       }
     },
     "config": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "sbomFormat": { "type": "string" },
-        "policyMode": { "type": "string" },
-        "interpretMode": { "type": "string" },
-        "reportSelection": { "type": "string" },
-        "progressLevel": { "type": "string" },
-        "language": { "type": "string" },
-        "markdownRenderEngine": { "type": "string" },
-        "markdownTemplateFile": { "type": "string" },
-        "grypeEnabled": { "type": "boolean" },
-        "unsafe": { "type": "boolean" },
-        "parallelScanners": { "type": "integer", "minimum": 1 },
-        "skipExtensions": { "type": "array", "items": { "type": "string" } },
+        "sbomFormat": {
+          "type": "string"
+        },
+        "policyMode": {
+          "type": "string"
+        },
+        "interpretMode": {
+          "type": "string"
+        },
+        "reportSelection": {
+          "type": "string"
+        },
+        "progressLevel": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "markdownRenderEngine": {
+          "type": "string"
+        },
+        "markdownTemplateFile": {
+          "type": "string"
+        },
+        "grypeEnabled": {
+          "type": "boolean"
+        },
+        "unsafe": {
+          "type": "boolean"
+        },
+        "parallelScanners": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "skipExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "rootMetadata": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "manufacturer": { "type": "string" },
-            "name": { "type": "string" },
-            "version": { "type": "string" },
-            "deliveryDate": { "type": "string" },
-            "properties": { "type": "object", "additionalProperties": { "type": "string" } }
+            "manufacturer": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "deliveryDate": {
+              "type": "string"
+            },
+            "properties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
           }
         },
         "limits": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["maxDepth", "maxFiles", "maxTotalSize", "maxEntrySize", "maxRatio", "timeout"],
+          "required": [
+            "maxDepth",
+            "maxFiles",
+            "maxTotalSize",
+            "maxEntrySize",
+            "maxRatio",
+            "timeout"
+          ],
           "properties": {
-            "maxDepth": { "type": "integer", "minimum": 0 },
-            "maxFiles": { "type": "integer", "minimum": 0 },
-            "maxTotalSize": { "type": "integer", "minimum": 0 },
-            "maxEntrySize": { "type": "integer", "minimum": 0 },
-            "maxRatio": { "type": "integer", "minimum": 0 },
-            "timeout": { "type": "string" }
+            "maxDepth": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxFiles": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxTotalSize": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxEntrySize": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxRatio": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "timeout": {
+              "type": "string"
+            }
           }
         },
         "passwords": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["count", "sensitiveRedacted"],
+          "required": [
+            "count",
+            "sensitiveRedacted"
+          ],
           "properties": {
-            "count": { "type": "integer", "minimum": 0 },
-            "sensitiveRedacted": { "type": "boolean" }
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sensitiveRedacted": {
+              "type": "boolean"
+            }
           }
         },
         "properties": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sandbox", "toolVersions", "warnings"],
+      "required": [
+        "sandbox",
+        "toolVersions",
+        "warnings"
+      ],
       "properties": {
         "sandbox": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name", "available", "unsafeOverride"],
+          "required": [
+            "name",
+            "available",
+            "unsafeOverride"
+          ],
           "properties": {
-            "name": { "type": "string" },
-            "available": { "type": "boolean" },
-            "unsafeOverride": { "type": "boolean" }
+            "name": {
+              "type": "string"
+            },
+            "available": {
+              "type": "boolean"
+            },
+            "unsafeOverride": {
+              "type": "boolean"
+            }
           }
         },
         "toolVersions": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "sevenZip": { "type": "string" },
-            "unshield": { "type": "string" },
-            "unsquashfs": { "type": "string" },
-            "grype": { "type": "string" },
-            "grypeDb": { "type": "string" }
+            "sevenZip": {
+              "type": "string"
+            },
+            "unshield": {
+              "type": "string"
+            },
+            "unsquashfs": {
+              "type": "string"
+            },
+            "grype": {
+              "type": "string"
+            },
+            "grypeDb": {
+              "type": "string"
+            }
           }
         },
         "warnings": {
@@ -149,11 +312,20 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
-              "code": { "type": "string" },
-              "message": { "type": "string" },
-              "relatedNodeId": { "type": "string" }
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "relatedNodeId": {
+                "type": "string"
+              }
             }
           }
         }
@@ -174,22 +346,46 @@
       ],
       "properties": {
         "extractionTreeRaw": {},
-        "scansRaw": { "type": "array", "items": {} },
+        "scansRaw": {
+          "type": "array",
+          "items": {}
+        },
         "bomRaw": {},
         "vulnerabilitiesRaw": {},
-        "policyDecisionsRaw": { "type": "array", "items": {} },
-        "processingIssuesRaw": { "type": "array", "items": {} },
-        "suppressionsRaw": { "type": "array", "items": {} },
+        "policyDecisionsRaw": {
+          "type": "array",
+          "items": {}
+        },
+        "processingIssuesRaw": {
+          "type": "array",
+          "items": {}
+        },
+        "suppressionsRaw": {
+          "type": "array",
+          "items": {}
+        },
         "artifactPaths": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["sbomPath"],
+          "required": [
+            "sbomPath"
+          ],
           "properties": {
-            "sbomPath": { "type": "string" },
-            "markdownReportPath": { "type": "string" },
-            "jsonReportPath": { "type": "string" },
-            "htmlReportPath": { "type": "string" },
-            "sarifReportPath": { "type": "string" }
+            "sbomPath": {
+              "type": "string"
+            },
+            "markdownReportPath": {
+              "type": "string"
+            },
+            "jsonReportPath": {
+              "type": "string"
+            },
+            "htmlReportPath": {
+              "type": "string"
+            },
+            "sarifReportPath": {
+              "type": "string"
+            }
           }
         }
       }
@@ -208,50 +404,392 @@
         "issues"
       ],
       "properties": {
-        "nodes": { "$ref": "#/$defs/entityArray" },
-        "scanTasks": { "$ref": "#/$defs/entityArray" },
-        "components": { "$ref": "#/$defs/entityArray" },
-        "packageGroups": { "$ref": "#/$defs/entityArray" },
-        "vulnerabilities": { "$ref": "#/$defs/entityArray" },
-        "suppressions": { "$ref": "#/$defs/entityArray" },
-        "policyDecisions": { "$ref": "#/$defs/entityArray" },
-        "issues": { "$ref": "#/$defs/entityArray" }
+        "nodes": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "scanTasks": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "components": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "packageGroups": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "vulnerabilities": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "suppressions": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "policyDecisions": {
+          "$ref": "#/$defs/entityArray"
+        },
+        "issues": {
+          "$ref": "#/$defs/entityArray"
+        }
       }
     },
     "projections": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["generic", "markdown", "html"],
+      "required": [
+        "summary",
+        "extractionLog",
+        "vulnerabilities",
+        "issues",
+        "componentIndex"
+      ],
       "properties": {
-        "generic": {
+        "summary": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["summary", "extractionRows", "vulnerabilityRows", "issueRows", "componentIndex"],
+          "required": [
+            "nodes",
+            "scanTasks",
+            "components",
+            "packageGroups",
+            "vulnerabilities",
+            "suppressions",
+            "policyDecisions",
+            "issues",
+            "componentIndexStats",
+            "vulnerabilityEnrichmentState",
+            "vulnerabilityRequested"
+          ],
           "properties": {
-            "summary": { "type": "object" },
-            "extractionRows": { "$ref": "#/$defs/projectionArray" },
-            "vulnerabilityRows": { "$ref": "#/$defs/projectionArray" },
-            "issueRows": { "$ref": "#/$defs/projectionArray" },
-            "componentIndex": { "$ref": "#/$defs/projectionArray" }
+            "nodes": {
+              "type": "integer"
+            },
+            "scanTasks": {
+              "type": "integer"
+            },
+            "components": {
+              "type": "integer"
+            },
+            "packageGroups": {
+              "type": "integer"
+            },
+            "vulnerabilities": {
+              "type": "integer"
+            },
+            "suppressions": {
+              "type": "integer"
+            },
+            "policyDecisions": {
+              "type": "integer"
+            },
+            "issues": {
+              "type": "integer"
+            },
+            "vulnerabilityEnrichmentState": {
+              "type": "string"
+            },
+            "vulnerabilityRequested": {
+              "type": "boolean"
+            },
+            "componentIndexStats": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "totalComponents",
+                "missingDeliveryPath",
+                "filteredContainerNodes",
+                "filteredAbsolutePathNames",
+                "filteredLowValueFileArtifacts",
+                "duplicateMerged",
+                "indexedComponents",
+                "indexedWithPurl",
+                "indexedWithoutPurl",
+                "indexedWithEvidencePath",
+                "indexedWithEvidenceSourceOnly",
+                "indexedWithoutEvidence"
+              ],
+              "properties": {
+                "totalComponents": {
+                  "type": "integer"
+                },
+                "missingDeliveryPath": {
+                  "type": "integer"
+                },
+                "filteredContainerNodes": {
+                  "type": "integer"
+                },
+                "filteredAbsolutePathNames": {
+                  "type": "integer"
+                },
+                "filteredLowValueFileArtifacts": {
+                  "type": "integer"
+                },
+                "duplicateMerged": {
+                  "type": "integer"
+                },
+                "indexedComponents": {
+                  "type": "integer"
+                },
+                "indexedWithPurl": {
+                  "type": "integer"
+                },
+                "indexedWithoutPurl": {
+                  "type": "integer"
+                },
+                "indexedWithEvidencePath": {
+                  "type": "integer"
+                },
+                "indexedWithEvidenceSourceOnly": {
+                  "type": "integer"
+                },
+                "indexedWithoutEvidence": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         },
-        "markdown": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["sections", "toc", "anchors"],
-          "properties": {
-            "sections": { "$ref": "#/$defs/projectionArray" },
-            "toc": { "$ref": "#/$defs/projectionArray" },
-            "anchors": { "$ref": "#/$defs/projectionArray" }
+        "extractionLog": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "status",
+              "format",
+              "tool"
+            ],
+            "properties": {
+              "sourceRefs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resolutionStatus": {
+                "type": "string"
+              },
+              "resolutionReason": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "depth": {
+                "type": "integer"
+              }
+            }
           }
         },
-        "html": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["summaryCards", "tableModels"],
-          "properties": {
-            "summaryCards": { "$ref": "#/$defs/projectionArray" },
-            "tableModels": { "$ref": "#/$defs/projectionArray" }
+        "vulnerabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "installed",
+              "vulnerabilityId",
+              "severity"
+            ],
+            "properties": {
+              "sourceRefs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resolutionStatus": {
+                "type": "string"
+              },
+              "resolutionReason": {
+                "type": "string"
+              },
+              "packageAnchorId": {
+                "type": "string"
+              },
+              "packageKey": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "installed": {
+                "type": "string"
+              },
+              "fixedIn": {
+                "type": "string"
+              },
+              "vulnerabilityId": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "cvssScore": {
+                "type": "number"
+              },
+              "cvssVersion": {
+                "type": "string"
+              },
+              "cvssVector": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "epss": {
+                "type": "number"
+              },
+              "epssPercentile": {
+                "type": "number"
+              },
+              "risk": {
+                "type": "number"
+              },
+              "kev": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stage",
+              "message"
+            ],
+            "properties": {
+              "sourceRefs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resolutionStatus": {
+                "type": "string"
+              },
+              "resolutionReason": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "componentIndex": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchorId",
+              "packageName",
+              "version",
+              "purls"
+            ],
+            "properties": {
+              "sourceRefs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "resolutionStatus": {
+                "type": "string"
+              },
+              "resolutionReason": {
+                "type": "string"
+              },
+              "anchorId": {
+                "type": "string"
+              },
+              "packageName": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "purls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "occurrenceCount": {
+                "type": "integer"
+              },
+              "occurrences": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "anchorId",
+                    "objectId",
+                    "deliveryPaths",
+                    "evidencePaths",
+                    "evidenceSource",
+                    "foundBy"
+                  ],
+                  "properties": {
+                    "sourceRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "resolutionStatus": {
+                      "type": "string"
+                    },
+                    "resolutionReason": {
+                      "type": "string"
+                    },
+                    "anchorId": {
+                      "type": "string"
+                    },
+                    "objectId": {
+                      "type": "string"
+                    },
+                    "deliveryPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "evidencePaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "evidenceSource": {
+                      "type": "string"
+                    },
+                    "foundBy": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -259,7 +797,12 @@
     "integrity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["counts", "danglingReferenceCount", "validationState", "validationErrors"],
+      "required": [
+        "counts",
+        "danglingReferenceCount",
+        "validationState",
+        "validationErrors"
+      ],
       "properties": {
         "counts": {
           "type": "object",
@@ -275,28 +818,66 @@
             "issues"
           ],
           "properties": {
-            "nodes": { "type": "integer", "minimum": 0 },
-            "scanTasks": { "type": "integer", "minimum": 0 },
-            "components": { "type": "integer", "minimum": 0 },
-            "packageGroups": { "type": "integer", "minimum": 0 },
-            "vulnerabilities": { "type": "integer", "minimum": 0 },
-            "suppressions": { "type": "integer", "minimum": 0 },
-            "policyDecisions": { "type": "integer", "minimum": 0 },
-            "issues": { "type": "integer", "minimum": 0 }
+            "nodes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scanTasks": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "components": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "packageGroups": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "vulnerabilities": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "suppressions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "policyDecisions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "issues": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
-        "danglingReferenceCount": { "type": "integer", "minimum": 0 },
-        "validationState": { "enum": ["ok", "warning", "error"] },
+        "danglingReferenceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "validationState": {
+          "enum": [
+            "ok",
+            "warning",
+            "error"
+          ]
+        },
         "validationErrors": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
     "compatibility": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["legacyAliasesUsed", "migrationHints"],
+      "required": [
+        "legacyAliasesUsed",
+        "migrationHints"
+      ],
       "properties": {
         "legacyAliasesUsed": {
           "type": "object",
@@ -304,13 +885,17 @@
           "properties": {
             "deprecatedFlagsUsed": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
         "migrationHints": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
@@ -321,25 +906,14 @@
       "items": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "properties": {
-          "id": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "projectionArray": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": true,
-        "required": ["sourceRefs"],
-        "properties": {
-          "sourceRefs": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 }
-          },
-          "resolutionStatus": { "enum": ["resolved", "missing", "ambiguous"] },
-          "resolutionReason": { "type": "string" }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }

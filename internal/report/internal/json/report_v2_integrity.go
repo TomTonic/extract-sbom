@@ -100,20 +100,27 @@ func buildIntegrityV2(entities entitiesV2, projections projectionsV2, entityConf
 		}
 	}
 
-	projectionRows := append([]projectionRowV2{}, projections.Generic.ExtractionRows...)
-	projectionRows = append(projectionRows, projections.Generic.VulnerabilityRows...)
-	projectionRows = append(projectionRows, projections.Generic.IssueRows...)
-	projectionRows = append(projectionRows, projections.Generic.ComponentIndex...)
-	projectionRows = append(projectionRows, projections.Markdown.Sections...)
-	projectionRows = append(projectionRows, projections.Markdown.TOC...)
-	projectionRows = append(projectionRows, projections.Markdown.Anchors...)
-	projectionRows = append(projectionRows, projections.HTML.SummaryCards...)
-	projectionRows = append(projectionRows, projections.HTML.TableModels...)
-	for i := range projectionRows {
-		for j := range projectionRows[i].SourceRefs {
-			if _, ok := allEntityIDs[projectionRows[i].SourceRefs[j]]; !ok {
-				addMissing(fmt.Sprintf("projection row %d references unknown sourceRef %q", i, projectionRows[i].SourceRefs[j]))
+	checkRefs := func(contextName string, refs []string) {
+		for _, ref := range refs {
+			if _, ok := allEntityIDs[ref]; !ok {
+				addMissing(fmt.Sprintf("%s references unknown sourceRef %q", contextName, ref))
 			}
+		}
+	}
+
+	for i, row := range projections.ExtractionLog {
+		checkRefs(fmt.Sprintf("extractionLog[%d]", i), row.SourceRefs)
+	}
+	for i, row := range projections.Vulnerabilities {
+		checkRefs(fmt.Sprintf("vulnerabilities[%d]", i), row.SourceRefs)
+	}
+	for i, row := range projections.Issues {
+		checkRefs(fmt.Sprintf("issues[%d]", i), row.SourceRefs)
+	}
+	for i, group := range projections.ComponentIndex {
+		checkRefs(fmt.Sprintf("componentIndex[%d]", i), group.SourceRefs)
+		for j, occ := range group.Occurrences {
+			checkRefs(fmt.Sprintf("componentIndex[%d].occurrences[%d]", i, j), occ.SourceRefs)
 		}
 	}
 

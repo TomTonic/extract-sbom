@@ -312,12 +312,6 @@ type issueEntityV2 struct {
 
 // projectionRowV2 is one renderer-facing projection row with back-references to source entities.
 // SourceRefs must contain IDs of entities in the same report; the integrity validator enforces this.
-type projectionRowV2 struct {
-	SourceRefs       []string       `json:"sourceRefs"`
-	ResolutionStatus string         `json:"resolutionStatus,omitempty"`
-	ResolutionReason string         `json:"resolutionReason,omitempty"`
-	Data             map[string]any `json:"data,omitempty"`
-}
 
 // entitiesV2 holds all normalized canonical entity collections for this report.
 // Arrays are pre-sorted deterministically; ordinal positions are not stable across runs.
@@ -335,31 +329,116 @@ type entitiesV2 struct {
 // projectionsV2 holds renderer-oriented view models pre-computed from the entity layer.
 // Renderers should consume these projections instead of processing raw or entity data directly.
 type projectionsV2 struct {
-	Generic  genericProjectionV2  `json:"generic"`
-	Markdown markdownProjectionV2 `json:"markdown"`
-	HTML     htmlProjectionV2     `json:"html"`
+	Summary         projectionSummaryV2        `json:"summary"`
+	ExtractionLog   []extractionLogRowV2       `json:"extractionLog"`
+	Vulnerabilities []vulnerabilityRowV2       `json:"vulnerabilities"`
+	Issues          []issueRowV2               `json:"issues"`
+	ComponentIndex  []packageOccurrenceGroupV2 `json:"componentIndex"`
 }
 
-// genericProjectionV2 contains format-neutral projection views usable by any renderer.
-type genericProjectionV2 struct {
-	Summary           map[string]any    `json:"summary"`
-	ExtractionRows    []projectionRowV2 `json:"extractionRows"`
-	VulnerabilityRows []projectionRowV2 `json:"vulnerabilityRows"`
-	IssueRows         []projectionRowV2 `json:"issueRows"`
-	ComponentIndex    []projectionRowV2 `json:"componentIndex"`
+// projectionSummaryV2 holds strongly-typed aggregated counters.
+type projectionSummaryV2 struct {
+	Nodes                        int                   `json:"nodes"`
+	ScanTasks                    int                   `json:"scanTasks"`
+	Components                   int                   `json:"components"`
+	PackageGroups                int                   `json:"packageGroups"`
+	Vulnerabilities              int                   `json:"vulnerabilities"`
+	Suppressions                 int                   `json:"suppressions"`
+	PolicyDecisions              int                   `json:"policyDecisions"`
+	Issues                       int                   `json:"issues"`
+	ComponentIndexStats          componentIndexStatsV2 `json:"componentIndexStats"`
+	VulnerabilityEnrichmentState string                `json:"vulnerabilityEnrichmentState"`
+	VulnerabilityRequested       bool                  `json:"vulnerabilityRequested"`
 }
 
-// markdownProjectionV2 contains Markdown-specific projection views including TOC and anchors.
-type markdownProjectionV2 struct {
-	Sections []projectionRowV2 `json:"sections"`
-	TOC      []projectionRowV2 `json:"toc"`
-	Anchors  []projectionRowV2 `json:"anchors"`
+// componentIndexStatsV2 holds strongly-typed component index statistics.
+type componentIndexStatsV2 struct {
+	TotalComponents               int `json:"totalComponents"`
+	MissingDeliveryPath           int `json:"missingDeliveryPath"`
+	FilteredContainerNodes        int `json:"filteredContainerNodes"`
+	FilteredAbsolutePathNames     int `json:"filteredAbsolutePathNames"`
+	FilteredLowValueFileArtifacts int `json:"filteredLowValueFileArtifacts"`
+	DuplicateMerged               int `json:"duplicateMerged"`
+	IndexedComponents             int `json:"indexedComponents"`
+	IndexedWithPURL               int `json:"indexedWithPurl"`
+	IndexedWithoutPURL            int `json:"indexedWithoutPurl"`
+	IndexedWithEvidencePath       int `json:"indexedWithEvidencePath"`
+	IndexedWithEvidenceSourceOnly int `json:"indexedWithEvidenceSourceOnly"`
+	IndexedWithoutEvidence        int `json:"indexedWithoutEvidence"`
 }
 
-// htmlProjectionV2 contains HTML-specific projection views for summary cards and table models.
-type htmlProjectionV2 struct {
-	SummaryCards []projectionRowV2 `json:"summaryCards"`
-	TableModels  []projectionRowV2 `json:"tableModels"`
+// extractionLogRowV2 represents a single extraction event in the log.
+type extractionLogRowV2 struct {
+	SourceRefs       []string `json:"sourceRefs,omitempty"`
+	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
+	ResolutionReason string   `json:"resolutionReason,omitempty"`
+
+	Path   string `json:"path"`
+	Status string `json:"status"`
+	Format string `json:"format"`
+	Tool   string `json:"tool"`
+	Detail string `json:"detail"`
+	Depth  int    `json:"depth"`
+}
+
+// vulnerabilityRowV2 represents an aggregated vulnerability display row.
+type vulnerabilityRowV2 struct {
+	SourceRefs       []string `json:"sourceRefs,omitempty"`
+	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
+	ResolutionReason string   `json:"resolutionReason,omitempty"`
+
+	PackageAnchorID string   `json:"packageAnchorId,omitempty"`
+	PackageKey      string   `json:"packageKey,omitempty"`
+	Name            string   `json:"name"`
+	Installed       string   `json:"installed"`
+	FixedIn         string   `json:"fixedIn,omitempty"`
+	VulnerabilityID string   `json:"vulnerabilityId"`
+	Severity        string   `json:"severity"`
+	CVSSScore       *float64 `json:"cvssScore,omitempty"`
+	CVSSVersion     string   `json:"cvssVersion,omitempty"`
+	CVSSVector      string   `json:"cvssVector,omitempty"`
+	Description     string   `json:"description,omitempty"`
+	EPSS            *float64 `json:"epss,omitempty"`
+	EPSSPercentile  *float64 `json:"epssPercentile,omitempty"`
+	Risk            *float64 `json:"risk,omitempty"`
+	KEV             bool     `json:"kev,omitempty"`
+}
+
+// issueRowV2 represents a generic processing or scanning issue.
+type issueRowV2 struct {
+	SourceRefs       []string `json:"sourceRefs,omitempty"`
+	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
+	ResolutionReason string   `json:"resolutionReason,omitempty"`
+
+	Stage   string `json:"stage"`
+	Message string `json:"message"`
+}
+
+// packageOccurrenceGroupV2 groups a high-level software package to its constituent occurrences.
+type packageOccurrenceGroupV2 struct {
+	SourceRefs       []string `json:"sourceRefs,omitempty"`
+	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
+	ResolutionReason string   `json:"resolutionReason,omitempty"`
+
+	AnchorID        string             `json:"anchorId"`
+	PackageName     string             `json:"packageName"`
+	Version         string             `json:"version"`
+	PURLs           []string           `json:"purls"`
+	OccurrenceCount int                `json:"occurrenceCount"`
+	Occurrences     []occurrenceRowV2  `json:"occurrences"`
+}
+
+// occurrenceRowV2 lists where a component was exactly found in the extracted files.
+type occurrenceRowV2 struct {
+	SourceRefs       []string `json:"sourceRefs,omitempty"`
+	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
+	ResolutionReason string   `json:"resolutionReason,omitempty"`
+
+	ObjectID       string   `json:"objectId"`
+	DeliveryPaths  []string `json:"deliveryPaths"`
+	EvidencePaths  []string `json:"evidencePaths"`
+	EvidenceSource string   `json:"evidenceSource"`
+	FoundBy        string   `json:"foundBy"`
 }
 
 // integrityV2 holds the results of cross-reference validation over the entity and projection layers.
