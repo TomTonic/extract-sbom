@@ -488,6 +488,14 @@
             "vulnerabilityRequested": {
               "type": "boolean"
             },
+        "extensionFilteredPaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "scanNoPackagePaths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
             "componentIndexStats": {
               "type": "object",
               "additionalProperties": false,

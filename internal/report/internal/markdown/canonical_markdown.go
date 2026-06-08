@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
-	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
@@ -16,11 +14,7 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	data := vm.data
 	t := vm.translations
 	sections := vm.sections
-	occurrences := vm.occurrences
-	indexStats := vm.indexStats
-	extStats := vm.extStats
-	scnStats := vm.scnStats
-	polStats := vm.polStats
+	proj := vm.report.Projections
 
 	fmt.Fprint(w, buildHumanHeaderBlock(vm))
 	fmt.Fprintf(w, "## %s\n\n", t.tableOfContentsSection)
@@ -29,7 +23,7 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 
 	// Executive summary and reader guidance.
 	writeSectionHeading(w, t.summarySection, anchorSummary)
-	writeSummary(w, data, extStats, scnStats, polStats, indexStats, occurrences, t)
+	writeSummary(w, data, proj, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.methodOverviewSection, anchorMethodOverview)
@@ -38,11 +32,11 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 
 	// Actionable limitations and known blind spots.
 	writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
-	writeProcessingIssues(w, data, extStats, scnStats, t)
+	writeProcessingIssues(w, data, proj, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
-	writeResidualRisk(w, data, extStats, scnStats, indexStats, t)
+	writeResidualRisk(w, data, proj, t)
 	fmt.Fprintln(w)
 
 	// Appendix: complete raw audit trail.
@@ -51,11 +45,11 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
-	writeComponentOccurrenceIndex(w, occurrences, indexStats, data.Vulnerabilities, t)
+	writeComponentOccurrenceIndex(w, proj, data.Vulnerabilities, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
-	writeSuppressionReport(w, data.Suppressions, data.BOM, t)
+	writeSuppressionReport(w, data.Suppressions, proj, t)
 	fmt.Fprintln(w)
 
 	// Input identification.
@@ -89,7 +83,7 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 
 	// Extension filter section: configured list and files excluded in this run.
 	writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
-	writeExtensionFilterSection(w, data, extStats, t)
+	writeExtensionFilterSection(w, data, proj, t)
 	fmt.Fprintln(w)
 
 	// Root SBOM metadata.
@@ -131,7 +125,7 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 		}
 	}
 	fmt.Fprintln(w)
-	writeScanNoPackageIdentitiesSubsection(w, scnStats, t)
+	writeScanNoPackageIdentitiesSubsection(w, proj, t)
 	fmt.Fprintln(w)
 
 	// Extraction log.
@@ -144,17 +138,25 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 }
 
 func buildHumanHeaderBlock(vm markdownReportViewModel) string {
-	data := vm.data
-	t := vm.translations
-	header := reportjson.BuildMarkdownHeaderData(data, time.Now())
+        t := vm.translations
+        var b strings.Builder
+        fmt.Fprintf(&b, "# %s\n\n", t.title)
+        
+        now := ""
+        if vm.report.Generator.Time != "" { now = vm.report.Generator.Time }
+        gen := ""
+        if vm.data.Generator.Version != "" { gen = "[" + vm.data.Generator.Version + "](https://github.com/TomTonic/extract-sbom/releases/tag/" + vm.data.Generator.Version + ")" }
+        syft := ""
+        if false { syft = "" }
+        
+        fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.reportHeaderGeneratorVersionTemplate, now, gen, syft))
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", t.title)
-	fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.reportHeaderGeneratorVersionTemplate, header.GeneratorDate, header.LinkedVersion, header.SyftVersion))
-
-	toolParts := header.ToolParts
-	if len(toolParts) > 0 {
-		fmt.Fprintf(&b, "%s %s\n\n", t.reportHeaderToolsLabel, strings.Join(toolParts, " | "))
-	}
-	return b.String()
+        var toolParts []string
+        if vm.data.ToolVersions.Grype != "" { toolParts = append(toolParts, vm.data.ToolVersions.Grype) }
+        func(data ReportData) { _ = data }(vm.data) // avoid data unused
+        
+        if len(toolParts) > 0 {
+                fmt.Fprintf(&b, "%s %s\n\n", t.reportHeaderToolsLabel, strings.Join(toolParts, " | "))
+        }
+        return b.String()
 }

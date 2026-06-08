@@ -21,7 +21,7 @@ type ReportV2 struct {
 	Runtime       runtimeV2        `json:"runtime"`
 	Raw           rawV2            `json:"raw"`
 	Entities      entitiesV2       `json:"entities"`
-	Projections   projectionsV2    `json:"projections"`
+	Projections   ProjectionsV2    `json:"projections"`
 	Integrity     integrityV2      `json:"integrity"`
 	Compatibility compatibilityV2  `json:"compatibility"`
 }
@@ -326,33 +326,36 @@ type entitiesV2 struct {
 	Issues          []issueEntityV2          `json:"issues"`
 }
 
-// projectionsV2 holds renderer-oriented view models pre-computed from the entity layer.
+// ProjectionsV2 holds renderer-oriented view models pre-computed from the entity layer.
 // Renderers should consume these projections instead of processing raw or entity data directly.
-type projectionsV2 struct {
-	Summary         projectionSummaryV2        `json:"summary"`
-	ExtractionLog   []extractionLogRowV2       `json:"extractionLog"`
-	Vulnerabilities []vulnerabilityRowV2       `json:"vulnerabilities"`
-	Issues          []issueRowV2               `json:"issues"`
-	ComponentIndex  []packageOccurrenceGroupV2 `json:"componentIndex"`
+type ProjectionsV2 struct {
+	Summary         ProjectionSummaryV2        `json:"summary"`
+	ExtractionLog   []ExtractionLogRowV2       `json:"extractionLog"`
+	Vulnerabilities []VulnerabilityRowV2       `json:"vulnerabilities"`
+	Issues          []IssueRowV2               `json:"issues"`
+	ComponentIndex  []PackageOccurrenceGroupV2 `json:"componentIndex"`
 }
 
-// projectionSummaryV2 holds strongly-typed aggregated counters.
-type projectionSummaryV2 struct {
-	Nodes                        int                   `json:"nodes"`
-	ScanTasks                    int                   `json:"scanTasks"`
-	Components                   int                   `json:"components"`
-	PackageGroups                int                   `json:"packageGroups"`
-	Vulnerabilities              int                   `json:"vulnerabilities"`
-	Suppressions                 int                   `json:"suppressions"`
-	PolicyDecisions              int                   `json:"policyDecisions"`
-	Issues                       int                   `json:"issues"`
-	ComponentIndexStats          componentIndexStatsV2 `json:"componentIndexStats"`
-	VulnerabilityEnrichmentState string                `json:"vulnerabilityEnrichmentState"`
-	VulnerabilityRequested       bool                  `json:"vulnerabilityRequested"`
+// ProjectionSummaryV2 holds strongly-typed aggregated counters.
+type ProjectionSummaryV2 struct {
+	Nodes                  int                   `json:"nodes"`
+	ScanTasks              int                   `json:"scanTasks"`
+	Components             int                   `json:"components"`
+	PackageGroups          int                   `json:"packageGroups"`
+	Vulnerabilities        int                   `json:"vulnerabilities"`
+	Suppressions           int                   `json:"suppressions"`
+	PolicyDecisions        int                   `json:"policyDecisions"`
+	Issues                 int                   `json:"issues"`
+	ComponentIndexStats    ComponentIndexStatsV2 `json:"componentIndexStats"`
+	ExtensionFilteredPaths []string              `json:"extensionFilteredPaths"`
+	ScanNoPackagePaths     []string              `json:"scanNoPackagePaths"`
+
+	VulnerabilityEnrichmentState string `json:"vulnerabilityEnrichmentState"`
+	VulnerabilityRequested       bool   `json:"vulnerabilityRequested"`
 }
 
-// componentIndexStatsV2 holds strongly-typed component index statistics.
-type componentIndexStatsV2 struct {
+// ComponentIndexStatsV2 holds strongly-typed component index statistics.
+type ComponentIndexStatsV2 struct {
 	TotalComponents               int `json:"totalComponents"`
 	MissingDeliveryPath           int `json:"missingDeliveryPath"`
 	FilteredContainerNodes        int `json:"filteredContainerNodes"`
@@ -367,8 +370,8 @@ type componentIndexStatsV2 struct {
 	IndexedWithoutEvidence        int `json:"indexedWithoutEvidence"`
 }
 
-// extractionLogRowV2 represents a single extraction event in the log.
-type extractionLogRowV2 struct {
+// ExtractionLogRowV2 represents a single extraction event in the log.
+type ExtractionLogRowV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
@@ -381,8 +384,8 @@ type extractionLogRowV2 struct {
 	Depth  int    `json:"depth"`
 }
 
-// vulnerabilityRowV2 represents an aggregated vulnerability display row.
-type vulnerabilityRowV2 struct {
+// VulnerabilityRowV2 represents an aggregated vulnerability display row.
+type VulnerabilityRowV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
@@ -404,8 +407,8 @@ type vulnerabilityRowV2 struct {
 	KEV             bool     `json:"kev,omitempty"`
 }
 
-// issueRowV2 represents a generic processing or scanning issue.
-type issueRowV2 struct {
+// IssueRowV2 represents a generic processing or scanning issue.
+type IssueRowV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
@@ -414,22 +417,22 @@ type issueRowV2 struct {
 	Message string `json:"message"`
 }
 
-// packageOccurrenceGroupV2 groups a high-level software package to its constituent occurrences.
-type packageOccurrenceGroupV2 struct {
+// PackageOccurrenceGroupV2 groups a high-level software package to its constituent occurrences.
+type PackageOccurrenceGroupV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
 
-	AnchorID        string             `json:"anchorId"`
-	PackageName     string             `json:"packageName"`
-	Version         string             `json:"version"`
-	PURLs           []string           `json:"purls"`
-	OccurrenceCount int                `json:"occurrenceCount"`
-	Occurrences     []occurrenceRowV2  `json:"occurrences"`
+	AnchorID        string            `json:"anchorId"`
+	PackageName     string            `json:"packageName"`
+	Version         string            `json:"version"`
+	PURLs           []string          `json:"purls"`
+	OccurrenceCount int               `json:"occurrenceCount"`
+	Occurrences     []OccurrenceRowV2 `json:"occurrences"`
 }
 
-// occurrenceRowV2 lists where a component was exactly found in the extracted files.
-type occurrenceRowV2 struct {
+// OccurrenceRowV2 lists where a component was exactly found in the extracted files.
+type OccurrenceRowV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
