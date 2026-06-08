@@ -8,7 +8,7 @@ require (
 	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/anchore/syft v1.45.1
 	github.com/glebarez/go-sqlite v1.22.0
-	github.com/richardlehane/mscfb v1.0.6
+	github.com/richardlehane/mscfb v1.0.7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
