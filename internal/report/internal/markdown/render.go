@@ -43,32 +43,19 @@ type markdownReportViewModel struct {
 	language     string
 	translations translations
 	sections     []reportSection
-	occurrences  []componentOccurrence
-	indexStats   componentIndexStats
-	extStats     extractionStats
-	scnStats     scanStats
-	polStats     policyStats
 }
 
 // buildMarkdownReportViewModel derives deterministic section and statistics data
 // once so different renderer backends can reuse the same snapshot.
 func buildMarkdownReportViewModel(data ReportData, lang string) markdownReportViewModel {
 	report := reportjson.BuildV2Report(data)
-	// ReportData was just serialized in the same process; parse errors cannot occur.
-	sourceData, _ := reportjson.ReportDataFromV2(report)
-	occurrences, indexStats := reportjson.CollectComponentOccurrences(sourceData.BOM)
 	t := getTranslations(lang)
 	return markdownReportViewModel{
-		data:         sourceData,
+		data:         data,
 		report:       report,
 		language:     lang,
 		translations: t,
 		sections:     reportSections(t),
-		occurrences:  occurrences,
-		indexStats:   indexStats,
-		extStats:     reportjson.CollectExtractionStats(sourceData.Tree),
-		scnStats:     reportjson.CollectScanStats(sourceData.Scans),
-		polStats:     reportjson.CollectPolicyStats(sourceData.PolicyDecisions),
 	}
 }
 

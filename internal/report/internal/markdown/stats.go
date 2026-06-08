@@ -77,60 +77,62 @@ func formatArchiveMetaForLog(node *extract.ExtractionNode) string {
 
 // writeResidualRisk writes the explicit limitations statement required for
 // auditability when extraction/scan coverage is partial.
-func writeResidualRisk(w io.Writer, data ReportData, ext extractionStats, scn scanStats, idx componentIndexStats, t translations) {
-	fmt.Fprintln(w, t.residualRiskText)
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "- %s\n", t.residualRiskProfileLead)
-	fmt.Fprintf(w, "- %s\n", t.residualRiskAbsenceHint)
-	model := reportjson.BuildMarkdownResidualRiskModel(data, ext, scn, idx, reportjson.MarkdownResidualRiskTemplates{
-		ResidualRiskPURLCoverage:         t.residualRiskPURLCoverage,
-		ResidualRiskEvidenceCoverage:     t.residualRiskEvidenceCoverage,
-		ResidualRiskNoComponentTasks:     t.residualRiskNoComponentTasks,
-		ResidualRiskFileArtifactCoverage: t.residualRiskFileArtifactCoverage,
-		ResidualRiskExtensionFilter:      t.residualRiskExtensionFilter,
-		ResidualRiskExtractionGap:        t.residualRiskExtractionGap,
-		ResidualRiskToolGap:              t.residualRiskToolGap,
-		ResidualRiskScanGap:              t.residualRiskScanGap,
-		ResidualRiskMoreDetails:          t.residualRiskMoreDetails,
-		NoneValue:                        t.noneValue,
-	}, reportjson.MarkdownResidualRiskLinks{
-		ScanNoPackageIdentitiesLink:     sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
-		SuppressionFSArtifactsLink:      sectionLink(t.suppressionReasonFSArtifact, anchorSuppressionFSArtifacts),
-		SuppressionLowValueLink:         sectionLink(t.suppressionReasonLowValueFile, anchorSuppressionLowValue),
-		ExtensionFilterLink:             sectionLink(t.extensionFilterSection, anchorExtensionFilter),
-		PackageDetectionReliabilityLink: scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability"),
-		ComponentsWithPURLAnchorID:      anchorComponentsWithPURL,
-		ComponentsWithoutPURLAnchorID:   anchorComponentsWithoutPURL,
-	})
-	if model.PURLLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.PURLLine)
-	}
-	if model.EvidenceLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.EvidenceLine)
-	}
-	if model.NoComponentLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.NoComponentLine)
-	}
-	if model.FileArtifactLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.FileArtifactLine)
-	}
-	if model.ExtensionLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.ExtensionLine)
-	}
-	if model.ExtractionGapLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.ExtractionGapLine)
-	}
-	if model.ToolGapLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.ToolGapLine)
-	}
-	if model.ScanGapLine != "" {
-		fmt.Fprintf(w, "- %s\n", model.ScanGapLine)
-	}
-	fmt.Fprintf(w, "- %s\n", model.MoreDetailsLine)
+func writeResidualRisk(w io.Writer, data ReportData, proj reportjson.ProjectionsV2, t translations) {
+        fmt.Fprintln(w, t.residualRiskText)
+        fmt.Fprintln(w)
+        fmt.Fprintf(w, "- %s\n", t.residualRiskProfileLead)
+        fmt.Fprintf(w, "- %s\n", t.residualRiskAbsenceHint)
+        
+        idx := proj.Summary.ComponentIndexStats
+        
+        var extFailed, extBlocked, extMissing int
+        for _, row := range proj.ExtractionLog {
+        	switch row.Status {
+        	case "failed": extFailed++
+        	case "blocked": extBlocked++
+        	case "tool_missing": extMissing++
+        	}
+        }
+        
+        var scnErrors int
+        // Assuming scan errors are also in proj.Issues which we could check, or we don't bother for residual risk (usually it's extracting gap we care about)
+        // Let's count them from Issues
+        for _, issue := range proj.Issues {
+        	if issue.Stage == "scan" {
+        		scnErrors++
+        	}
+        }
+        
+        // Output PURLLine
+        v := t.noneValue
+        if idx.IndexedComponents > 0 { v = fmt.Sprintf("%d", idx.IndexedWithPURL) }
+        fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskPURLCoverage, sectionLink(t.scanNoPackageIDsSection, anchorComponentsWithPURL), v))
+
+        v = t.noneValue
+        if idx.IndexedComponents > 0 { v = fmt.Sprintf("%d", idx.IndexedWithEvidencePath + idx.IndexedWithEvidenceSourceOnly) }
+        fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage, v))
+        
+        if len(proj.Summary.ScanNoPackagePaths) > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks, sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs), len(proj.Summary.ScanNoPackagePaths)))
+        }
+        if idx.FilteredLowValueFileArtifacts > 0 || idx.FilteredContainerNodes > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage, sectionLink(t.suppressionReasonLowValueFile, anchorSuppressionLowValue), idx.FilteredLowValueFileArtifacts + idx.FilteredContainerNodes))
+        }
+        if len(proj.Summary.ExtensionFilteredPaths) > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtensionFilter, sectionLink(t.extensionFilterSection, anchorExtensionFilter), len(proj.Summary.ExtensionFilteredPaths)))
+        }
+        if extFailed > 0 || extBlocked > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap, extFailed+extBlocked))
+        }
+        if extMissing > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap, extMissing))
+        }
+        if scnErrors > 0 {
+                fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap, scnErrors))
+        }
+        fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
 }
 
-// configSkipExtensionsDisplay returns a compact one-liner for the configuration
-// table showing the active skip list, capped to keep the table cell readable.
 func configSkipExtensionsDisplay(exts []string) string {
-	return reportjson.FormatMarkdownConfigSkipExtensions(exts)
+	return strings.Join(exts, ", ")
 }

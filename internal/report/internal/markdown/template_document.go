@@ -84,7 +84,7 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 	return humanTemplateSections{
 		Summary: render(func(w io.Writer) {
 			writeSectionHeading(w, t.summarySection, anchorSummary)
-			writeSummary(w, data, vm.extStats, vm.scnStats, vm.polStats, vm.indexStats, vm.occurrences, t)
+			writeSummary(w, data, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		MethodOverview: render(func(w io.Writer) {
@@ -94,12 +94,12 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		ProcessingIssues: render(func(w io.Writer) {
 			writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
-			writeProcessingIssues(w, data, vm.extStats, vm.scnStats, t)
+			writeProcessingIssues(w, data, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		ResidualRisk: render(func(w io.Writer) {
 			writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
-			writeResidualRisk(w, data, vm.extStats, vm.scnStats, vm.indexStats, t)
+			writeResidualRisk(w, data, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		Appendix: render(func(w io.Writer) {
@@ -109,12 +109,12 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		ComponentIndex: render(func(w io.Writer) {
 			writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
-			writeComponentOccurrenceIndex(w, vm.occurrences, vm.indexStats, data.Vulnerabilities, t)
+			writeComponentOccurrenceIndex(w, vm.report.Projections, data.Vulnerabilities, t)
 			fmt.Fprintln(w)
 		}),
 		ComponentNormalization: render(func(w io.Writer) {
 			writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
-			writeSuppressionReport(w, data.Suppressions, data.BOM, t)
+			writeSuppressionReport(w, data.Suppressions, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		Input: render(func(w io.Writer) {
@@ -148,7 +148,7 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		ExtensionFilter: render(func(w io.Writer) {
 			writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
-			writeExtensionFilterSection(w, data, vm.extStats, t)
+			writeExtensionFilterSection(w, data, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		RootMetadata: render(func(w io.Writer) {
@@ -190,7 +190,7 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 				}
 			}
 			fmt.Fprintln(w)
-			writeScanNoPackageIdentitiesSubsection(w, vm.scnStats, t)
+			writeScanNoPackageIdentitiesSubsection(w, vm.report.Projections, t)
 			fmt.Fprintln(w)
 		}),
 		Extraction: render(func(w io.Writer) {

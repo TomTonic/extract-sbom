@@ -6,7 +6,7 @@ import "fmt"
 //
 // entityConflicts carries structural warnings detected during entity building
 // (e.g. duplicate BOMRefs) that are surfaced alongside dangling-reference errors.
-func buildIntegrityV2(entities entitiesV2, projections projectionsV2, entityConflicts []string) integrityV2 {
+func buildIntegrityV2(entities entitiesV2, projections ProjectionsV2, entityConflicts []string) integrityV2 {
 	allEntityIDs := map[string]struct{}{}
 	nodeIDs := map[string]struct{}{}
 	componentIDs := map[string]struct{}{}

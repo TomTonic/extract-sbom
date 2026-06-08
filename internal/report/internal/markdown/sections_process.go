@@ -23,65 +23,42 @@ func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translatio
 
 // writeProcessingIssues prints a bounded table of pipeline/extraction/scan
 // issues for auditable troubleshooting.
-func writeProcessingIssues(w io.Writer, data ReportData, ext extractionStats, scn scanStats, t translations) {
-	entries := reportjson.CollectMarkdownProcessingEntries(data)
+func writeProcessingIssues(w io.Writer, data ReportData, proj reportjson.ProjectionsV2, t translations) {
+        fmt.Fprintf(w, "- %s: %d\n", t.processingPipelineLabel, len(proj.Issues))
+        
+        var extractionIssues []reportjson.ExtractionLogRowV2
+        var extFailed, extBlocked, extMissing int
+        for _, row := range proj.ExtractionLog {
+        	if row.Status != "success" && row.Status != "skipped" {
+        		extractionIssues = append(extractionIssues, row)
+        		switch row.Status {
+        		case "failed": extFailed++
+        		case "blocked": extBlocked++
+        		case "tool_missing": extMissing++
+        		}
+        	}
+        }
+        fmt.Fprintf(w, "- %s: %d\n", t.processingExtractionFailedLabel, extFailed)
+        fmt.Fprintf(w, "- %s: %d\n", t.processingSecurityBlockedLabel, extBlocked)
+        fmt.Fprintf(w, "- %s: %d\n", t.processingToolMissingLabel, extMissing)
 
-	fmt.Fprintf(w, "- %s: %d\n", t.processingPipelineLabel, len(data.ProcessingIssues))
-	fmt.Fprintf(w, "- %s: %d\n", t.processingExtractionFailedLabel, ext.Failed)
-	fmt.Fprintf(w, "- %s: %d\n", t.processingSecurityBlockedLabel, ext.SecurityBlocked)
-	fmt.Fprintf(w, "- %s: %d\n", t.processingToolMissingLabel, ext.ToolMissing)
-	fmt.Fprintf(w, "- %s: %d\n", t.processingScanErrorsLabel, scn.Errors)
+        if len(proj.Issues) == 0 && len(extractionIssues) == 0 {
+                fmt.Fprintf(w, "\n- %s\n", t.noProcessingIssues)
+                return
+        }
 
-	if len(entries) == 0 {
-		fmt.Fprintf(w, "\n- %s\n", t.noProcessingIssues)
-		return
-	}
-
-	fmt.Fprintln(w)
-	fmt.Fprintf(
-		w,
-		"| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
-		t.processingSourceHeader,
-		t.processingLocationHeader,
-		t.processingClassHeader,
-		t.processingStatusHeader,
-		t.processingDetectedHeader,
-		t.processingToolHeader,
-		t.processingArchiveTypeHeader,
-		t.processingArchiveMethodHeader,
-		t.processingEncryptedHeader,
-		t.processingPhysicalSizeHeader,
-		t.processingDetailHeader,
-	)
-	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|---|---|---|")
-
-	maxRows := 25
-	for i := range entries {
-		entry := &entries[i]
-		if i >= maxRows {
-			remaining := len(entries) - maxRows
-			fmt.Fprintf(w, "| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | %s |\n", fmt.Sprintf(t.additionalEntriesOmittedTemplate, remaining))
-			break
-		}
-		fmt.Fprintf(
-			w,
-			"| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
-			escapeMarkdownCell(entry.Source),
-			escapeMarkdownCell(entry.Location),
-			escapeMarkdownCell(entry.Classification),
-			escapeMarkdownCell(entry.Status),
-			escapeMarkdownCell(entry.DetectedFormat),
-			escapeMarkdownCell(entry.Tool),
-			escapeMarkdownCell(entry.ArchiveType),
-			escapeMarkdownCell(entry.ArchiveMethod),
-			escapeMarkdownCell(entry.Encrypted),
-			escapeMarkdownCell(entry.PhysicalSize),
-			escapeMarkdownCell(entry.Detail),
-		)
-	}
+        fmt.Fprintln(w)
+        fmt.Fprintf(w, "| Stage | Message |\n|---|---|\n")
+        
+        for _, issue := range proj.Issues {
+        	fmt.Fprintf(w, "| %s | %s |\n", escapeMarkdownCell(issue.Stage), escapeMarkdownCell(issue.Message))
+        }
+        
+        for _, extIssue := range extractionIssues {
+        	fmt.Fprintf(w, "| extraction | %s (%s) %s |\n", escapeMarkdownCell(extIssue.Path), escapeMarkdownCell(extIssue.Status), escapeMarkdownCell(extIssue.Detail))
+        }
 }
 
-// escapeMarkdownCell sanitizes table-cell content for Markdown output.
 func escapeMarkdownCell(value string) string {
 	value = strings.ReplaceAll(value, "|", "\\|")
 	value = strings.ReplaceAll(value, "\n", " ")

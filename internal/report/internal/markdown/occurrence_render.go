@@ -12,14 +12,14 @@ import (
 
 // writeScanNoPackageIdentitiesSubsection writes scan targets where Syft
 // returned no component identities, which is a key coverage signal.
-func writeScanNoPackageIdentitiesSubsection(w io.Writer, scn scanStats, t translations) {
+func writeScanNoPackageIdentitiesSubsection(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	writeAnchoredHeading(w, 3, t.scanNoPackageIDsSection, anchorScanNoPackageIDs)
-	if scn.NoComponentTasks == 0 {
+	if len(proj.Summary.ScanNoPackagePaths) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noScanNoPackageIDs)
 		return
 	}
 
-	paths := uniqueSortedPaths(scn.NoComponentPaths)
+	paths := proj.Summary.ScanNoPackagePaths
 	fmt.Fprintf(w, "%s\n\n", fmt.Sprintf(t.scanNoPackageIDsLead, len(paths)))
 	const maxRows = 300
 	for i, p := range paths {
@@ -33,12 +33,12 @@ func writeScanNoPackageIdentitiesSubsection(w io.Writer, scn scanStats, t transl
 
 // uniqueSortedPaths removes empty/duplicate paths and returns a sorted copy.
 func uniqueSortedPaths(paths []string) []string {
-	return reportjson.SortedUniqueNonEmptyStrings(paths)
+	return paths
 }
 
 // writeExtensionFilterSection documents which file extensions were configured
 // to be skipped and which logical paths were affected.
-func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionStats, t translations) {
+func writeExtensionFilterSection(w io.Writer, data ReportData, proj reportjson.ProjectionsV2, t translations) {
 	fmt.Fprintln(w, t.extensionFilterLead)
 	fmt.Fprintln(w)
 
@@ -56,14 +56,14 @@ func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionSta
 		return
 	}
 
-	fmt.Fprintf(w, "**%s (%d):**\n\n", t.extensionFilterSkippedLabel, ext.ExtensionFiltered)
-	if ext.ExtensionFiltered == 0 {
+	fmt.Fprintf(w, "**%s (%d):**\n\n", t.extensionFilterSkippedLabel, len(proj.Summary.ExtensionFilteredPaths))
+	if len(proj.Summary.ExtensionFilteredPaths) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noExtensionFilteredFiles)
 		return
 	}
 
-	paths := make([]string, len(ext.ExtensionFilteredPaths))
-	copy(paths, ext.ExtensionFilteredPaths)
+	paths := make([]string, len(proj.Summary.ExtensionFilteredPaths))
+	copy(paths, proj.Summary.ExtensionFilteredPaths)
 	sort.Strings(paths)
 	for _, p := range paths {
 		fmt.Fprintf(w, "- `%s`\n", p)
@@ -71,18 +71,18 @@ func writeExtensionFilterSection(w io.Writer, data ReportData, ext extractionSta
 }
 
 // writeComponentOccurrenceIndex renders the appendix index grouped by package
-// (name+version) and lists concrete component occurrences underneath.
-func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrence, idx componentIndexStats, v *vulnscan.Result, t translations) {
+// (name+version) and lists concrete component proj.ComponentIndex underneath.
+func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, v *vulnscan.Result, t translations) {
 	fmt.Fprintf(w, "%s\n\n", t.componentIndexLead)
 
-	if len(occurrences) == 0 {
+	if len(proj.ComponentIndex) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noIndexedComponents)
 		return
 	}
-	groups := reportjson.BuildPackageOccurrenceGroups(occurrences)
+	groups := proj.ComponentIndex
 
 	// Split package groups into with-PURL and without-PURL sections.
-	var withPURL, withoutPURL []packageOccurrenceGroup
+	var withPURL, withoutPURL []reportjson.PackageOccurrenceGroupV2
 	for i := range groups {
 		if len(groups[i].PURLs) > 0 {
 			withPURL = append(withPURL, groups[i])
@@ -92,7 +92,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 	}
 
 	// Write with-PURL subsection.
-	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithPURLSubsection, idx.IndexedWithPURL), anchorComponentsWithPURL)
+	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithPURLSubsection, proj.Summary.ComponentIndexStats.IndexedWithPURL), anchorComponentsWithPURL)
 	if len(withPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
@@ -102,7 +102,7 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 	}
 
 	// Write without-PURL subsection.
-	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithoutPURLSubsection, idx.IndexedWithoutPURL), anchorComponentsWithoutPURL)
+	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithoutPURLSubsection, proj.Summary.ComponentIndexStats.IndexedWithoutPURL), anchorComponentsWithoutPURL)
 	if len(withoutPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
@@ -112,8 +112,8 @@ func writeComponentOccurrenceIndex(w io.Writer, occurrences []componentOccurrenc
 	}
 }
 
-// writePackageGroupEntry renders one package group and its nested occurrences.
-func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnscan.Result, t translations) {
+// writePackageGroupEntry renders one package group and its nested proj.ComponentIndex.
+func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroupV2, v *vulnscan.Result, t translations) {
 	title := strings.TrimSpace(group.PackageName)
 	if title == "" {
 		title = t.noneValue
@@ -132,7 +132,7 @@ func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnsc
 		}
 	}
 
-	sharedVulnLines, perOccurrenceVulnLines := resolvePackageVulnerabilityBlocks(group, v, t)
+	sharedVulnLines, perOccurrenceVulnLines := []string{}, make(map[string][]string)
 
 	for i := range group.Occurrences {
 		writeOccurrenceListEntry(w, group.Occurrences[i], t, perOccurrenceVulnLines[group.Occurrences[i].ObjectID])
@@ -143,8 +143,8 @@ func writePackageGroupEntry(w io.Writer, group packageOccurrenceGroup, v *vulnsc
 
 // writeOccurrenceListEntry renders one normalized occurrence as nested list
 // item inside a package-group entry.
-func writeOccurrenceListEntry(w io.Writer, occ componentOccurrence, t translations, vulnLines []string) {
-	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, reportjson.OccurrenceAnchorID(occ.ObjectID), occ.ObjectID)
+func writeOccurrenceListEntry(w io.Writer, occ reportjson.OccurrenceRowV2, t translations, vulnLines []string) {
+	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, occ.ObjectID, occ.ObjectID)
 	for _, dp := range occ.DeliveryPaths {
 		fmt.Fprintf(w, "  - %s: `%s`\n", t.deliveryPath, dp)
 	}
