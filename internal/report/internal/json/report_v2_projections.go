@@ -59,6 +59,7 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
 	rootComponent := buildRootComponent(data)
 	archiveCount, fileCount := countTreeArchivesAndFiles(data.Tree)
 	affectedPackages, uniqueVulns := countVulnerabilityCoverage(data.Vulnerabilities)
+	grypeProvenance := buildGrypeProvenance(data.Vulnerabilities)
 
 	return ProjectionsV2{
 		Summary: ProjectionSummaryV2{
@@ -93,6 +94,7 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
 			FileCount:                    fileCount,
 			AffectedPackageCount:         affectedPackages,
 			UniqueVulnerabilityCount:     uniqueVulns,
+			GrypeProvenance:              grypeProvenance,
 		},
 		ExtractionLog:     buildExtractionProjectionRows(data.Tree, index),
 		Scans:             scanRows,
@@ -315,6 +317,20 @@ func countTreeArchivesAndFiles(tree *extract.ExtractionNode) (archives, files in
 	}
 	walk(tree)
 	return archives, files
+}
+
+// buildGrypeProvenance extracts the Grype scanner and DB provenance for the
+// projection, leaving fields empty when enrichment did not run.
+func buildGrypeProvenance(v *vulnscan.Result) GrypeProvenanceV2 {
+	if v == nil {
+		return GrypeProvenanceV2{}
+	}
+	return GrypeProvenanceV2{
+		Version:   v.GrypeVersion,
+		DBSchema:  v.DBSchemaVersion,
+		DBBuilt:   v.DBBuilt,
+		DBUpdated: v.DBUpdated,
+	}
 }
 
 // countVulnerabilityCoverage returns the number of distinct components with at

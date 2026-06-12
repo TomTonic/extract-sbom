@@ -104,7 +104,7 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks,
 			len(proj.Summary.ScanNoPackagePaths),
 			proj.Summary.ScanTasks,
-			joinPathExamples(proj.Summary.ScanNoPackagePaths, 3)))
+			joinPathExamples(proj.Summary.ScanNoPackagePaths)))
 	}
 	if idx.FilteredLowValueFileArtifacts > 0 || idx.FilteredContainerNodes > 0 {
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage,
@@ -118,17 +118,17 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 	if extFailed > 0 || extBlocked > 0 {
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap,
 			extFailed+extBlocked,
-			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "failed", "security-blocked"), 3)))
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "failed", "security-blocked"))))
 	}
 	if extMissing > 0 {
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap,
 			extMissing,
-			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"), 3)))
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"))))
 	}
 	if scnErrors > 0 {
 		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap,
 			scnErrors,
-			joinPathExamples(scanIssuePaths(proj.Issues), 3)))
+			joinPathExamples(scanIssuePaths(proj.Issues))))
 	}
 	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
 }
@@ -165,22 +165,25 @@ func scanIssuePaths(issues []reportjson.IssueRowV2) []string {
 	return out
 }
 
-// joinPathExamples renders up to max backtick-quoted example paths, appending an
-// ellipsis when more entries exist, for use in prose summaries.
-func joinPathExamples(paths []string, max int) string {
+// maxProseExamples bounds how many example paths appear in a prose summary line.
+const maxProseExamples = 3
+
+// joinPathExamples renders up to maxProseExamples backtick-quoted example paths,
+// appending an ellipsis when more entries exist, for use in prose summaries.
+func joinPathExamples(paths []string) string {
 	if len(paths) == 0 {
 		return "-"
 	}
 	n := len(paths)
-	if n > max {
-		n = max
+	if n > maxProseExamples {
+		n = maxProseExamples
 	}
 	quoted := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		quoted = append(quoted, "`"+paths[i]+"`")
 	}
 	out := strings.Join(quoted, ", ")
-	if len(paths) > max {
+	if len(paths) > maxProseExamples {
 		out += ", …"
 	}
 	return out

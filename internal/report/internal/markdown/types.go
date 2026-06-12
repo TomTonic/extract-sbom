@@ -20,8 +20,6 @@ type ProcessingIssue = model.ProcessingIssue
 // ReportData aliases the shared report snapshot contract from model.
 type ReportData = model.ReportData
 
-
-
 // reportSection defines one TOC entry and heading anchor in the markdown report.
 type reportSection struct {
 	title  string

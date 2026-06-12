@@ -40,6 +40,9 @@ type translations struct {
 	setting                                string
 	filename                               string
 	filesize                               string
+	runIDLabel                             string
+	runStartedLabel                        string
+	runEndedLabel                          string
 	unitBytes                              string
 	skipExtensions                         string
 	nameLabel                              string

@@ -41,6 +41,33 @@ func writeRootMetadata(w io.Writer, root *reportjson.BOMRootComponentV2, t trans
 	fmt.Fprintln(w)
 }
 
+// writeInputSection renders the input fingerprint together with the run
+// provenance (run id, start/end timestamps, duration) so an auditor can verify
+// when, and against which artifact, the report was produced.
+func writeInputSection(w io.Writer, report reportjson.ReportV2, t translations) {
+	inp := report.Input
+	run := report.Run
+
+	fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
+	fmt.Fprintf(w, "|---|---|\n")
+	fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, inp.Filename)
+	fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, inp.Size, t.unitBytes)
+	fmt.Fprintf(w, "| SHA-256 | `%s` |\n", inp.SHA256)
+	fmt.Fprintf(w, "| SHA-512 | `%s` |\n", inp.SHA512)
+	if run.RunID != "" {
+		fmt.Fprintf(w, "| %s | `%s` |\n", t.runIDLabel, run.RunID)
+	}
+	if run.StartTime != "" {
+		fmt.Fprintf(w, "| %s | %s |\n", t.runStartedLabel, run.StartTime)
+	}
+	if run.EndTime != "" {
+		fmt.Fprintf(w, "| %s | %s |\n", t.runEndedLabel, run.EndTime)
+	}
+	if run.Duration != "" {
+		fmt.Fprintf(w, "| %s | %s |\n", t.duration, run.Duration)
+	}
+}
+
 func reportSections(t translations) []reportSection {
 	return []reportSection{
 		{title: t.summarySection, anchor: anchorSummary, level: 0},
