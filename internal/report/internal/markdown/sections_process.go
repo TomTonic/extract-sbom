@@ -23,10 +23,10 @@ func writePolicyDecisions(w io.Writer, decisions []reportjson.PolicyDecisionRowV
 // issues for auditable troubleshooting.
 func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	var extractionIssues []reportjson.ExtractionLogRowV2
-	for _, row := range proj.ExtractionLog {
-		switch row.Status {
+	for i := range proj.ExtractionLog {
+		switch proj.ExtractionLog[i].Status {
 		case "failed", "security-blocked", "tool-missing":
-			extractionIssues = append(extractionIssues, row)
+			extractionIssues = append(extractionIssues, proj.ExtractionLog[i])
 		}
 	}
 
@@ -49,7 +49,8 @@ func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t transla
 			escapeMarkdownCell(t.processingPipelineLabel+"-error"),
 			escapeMarkdownCell(issue.Message))
 	}
-	for _, row := range extractionIssues {
+	for i := range extractionIssues {
+		row := &extractionIssues[i]
 		class := extractionStatusClass(row.Status, t)
 		archiveType, archiveMethod, encrypted, physicalSize := extractionArchiveCols(row)
 		detected := ""
@@ -83,7 +84,7 @@ func extractionStatusClass(status string, t translations) string {
 	}
 }
 
-func extractionArchiveCols(row reportjson.ExtractionLogRowV2) (archiveType, archiveMethod, encrypted, physicalSize string) {
+func extractionArchiveCols(row *reportjson.ExtractionLogRowV2) (archiveType, archiveMethod, encrypted, physicalSize string) {
 	if row.ArchiveMeta == nil {
 		return "-", "-", "-", "-"
 	}

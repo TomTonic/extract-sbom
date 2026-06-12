@@ -13,9 +13,10 @@ import (
 // deterministically, and resolves kept-component anchors from the component index.
 func buildSuppressionGroupsProjection(records []assembly.SuppressionRecord, suppressionEntities []suppressionEntityV2, componentIndex []PackageOccurrenceGroupV2) SuppressionGroupsV2 {
 	componentToAnchor := make(map[string]string)
-	for _, group := range componentIndex {
-		for _, occ := range group.Occurrences {
-			for _, ref := range occ.SourceRefs {
+	for i := range componentIndex {
+		group := &componentIndex[i]
+		for j := range group.Occurrences {
+			for _, ref := range group.Occurrences[j].SourceRefs {
 				componentToAnchor[ref] = group.AnchorID
 			}
 		}

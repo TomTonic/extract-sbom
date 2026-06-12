@@ -12,9 +12,9 @@ func buildReportData(data ReportData, language string) htmlReportData {
 	proj := report.Projections
 
 	var total, extracted, failed, skipped int
-	for _, row := range proj.ExtractionLog {
+	for i := range proj.ExtractionLog {
 		total++
-		switch row.Status {
+		switch proj.ExtractionLog[i].Status {
 		case "extracted", "syft-native":
 			extracted++
 		case "failed", "security-blocked":
@@ -61,7 +61,8 @@ func buildReportData(data ReportData, language string) htmlReportData {
 
 func buildHTMLVulnRows(rows []reportjson.VulnerabilityRowV2) []htmlVuln {
 	out := make([]htmlVuln, 0, len(rows))
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		desc := row.Description
 		if len([]rune(desc)) > 120 {
 			desc = string([]rune(desc)[:120]) + "…"
@@ -80,7 +81,8 @@ func buildHTMLVulnRows(rows []reportjson.VulnerabilityRowV2) []htmlVuln {
 
 func buildHTMLExtrNodes(rows []reportjson.ExtractionLogRowV2) []htmlNode {
 	out := make([]htmlNode, 0, len(rows))
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		depth := row.Depth
 		if depth > 5 {
 			depth = 5

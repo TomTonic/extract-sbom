@@ -69,11 +69,11 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 		proj.Summary.PackageGroups))
 
 	var extFailed, extMissing int
-	for _, r := range proj.ExtractionLog {
-		if r.Status == "failed" || r.Status == "security-blocked" {
+	for i := range proj.ExtractionLog {
+		switch proj.ExtractionLog[i].Status {
+		case "failed", "security-blocked":
 			extFailed++
-		}
-		if r.Status == "tool-missing" {
+		case "tool-missing":
 			extMissing++
 		}
 	}

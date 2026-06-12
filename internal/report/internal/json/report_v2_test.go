@@ -230,7 +230,6 @@ func TestGenerateV2PopulatesEntitiesAndIntegrity(t *testing.T) {
 	if len(vulnerabilityRows) == 0 {
 		t.Fatal("expected non-empty projections.vulnerabilities projection")
 	}
-
 }
 
 func TestGenerateV2FlagsDanglingVulnerabilityComponentRef(t *testing.T) {
