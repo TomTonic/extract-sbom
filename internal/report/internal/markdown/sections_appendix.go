@@ -117,6 +117,18 @@ func sectionLink(title, anchor string) string {
 	return fmt.Sprintf("[%s](#%s)", title, anchor)
 }
 
+// componentAnchorLink renders label as a Markdown link to a package group's
+// anchor in the Component Occurrence Index, or the plain label when no anchor is
+// known. Group anchors are already slugified (e.g. "package-foo-1-0-0") and are
+// used verbatim as the link fragment, keeping anchor handling consistent across
+// the vulnerability and suppression renderers.
+func componentAnchorLink(label, anchorID string) string {
+	if anchorID == "" {
+		return label
+	}
+	return fmt.Sprintf("[%s](#%s)", label, anchorID)
+}
+
 func scanApproachLink(label, anchor string) string {
 	return fmt.Sprintf("[%s](%s#%s)", label, scanApproachGitHubURL, anchor)
 }
