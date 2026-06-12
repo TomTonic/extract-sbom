@@ -37,6 +37,7 @@ const (
 	anchorExtensionFilter        = "extension-filter"
 	anchorRootMetadata           = "root-sbom-metadata"
 	anchorSandbox                = "sandbox-configuration"
+	anchorRunScope               = "run-and-scope"
 	anchorSummary                = "summary"
 	anchorProcessingErrors       = "processing-errors"
 	anchorResidualRisk           = "residual-risk-and-limitations"

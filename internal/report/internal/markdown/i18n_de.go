@@ -11,6 +11,8 @@ func translationsDE() translations {
 		extractionSection:                      "Extraktionsprotokoll",
 		scanSection:                            "Paketscan-Protokoll",
 		policySection:                          "Richtlinienentscheidungen",
+		runScopeSection:                        "Durchführung & Umfang",
+		runScopeLead:                           "Dokumentiert, was analysiert wurde, unter welchen Bedingungen und mit welcher Werkzeugkonfiguration.",
 		summarySection:                         "Zusammenfassung",
 		residualRiskSection:                    "Restrisiko und Einschränkungen",
 		processingIssuesSection:                "Verarbeitungsfehler",

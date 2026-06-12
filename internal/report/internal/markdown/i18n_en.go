@@ -11,6 +11,8 @@ func translationsEN() translations {
 		extractionSection:                      "Extraction Log",
 		scanSection:                            "Package Scan Log",
 		policySection:                          "Policy Decisions",
+		runScopeSection:                        "Run & Scope",
+		runScopeLead:                           "Records what was analysed, under which conditions, and with which tool configuration.",
 		summarySection:                         "Summary",
 		residualRiskSection:                    "Residual Risk and Limitations",
 		processingIssuesSection:                "Processing Errors",

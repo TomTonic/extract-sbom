@@ -68,6 +68,39 @@ func TestInputSectionContainsRunProvenance(t *testing.T) {
 	}
 }
 
+// TestRunScopeAppearsBeforeAppendix verifies that the "Run & Scope" block
+// (input file, configuration, sandbox) appears directly after the Summary and
+// before the Appendix, so auditors do not have to scroll through the large
+// Component Occurrence Index to find provenance information.
+func TestRunScopeAppearsBeforeAppendix(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(makeTestReportData(), "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	out := buf.String()
+
+	// Use H2 markers to find actual section headings, not TOC entries.
+	posRunScope := strings.Index(out, "## Run & Scope")
+	posSummary := strings.Index(out, "## Summary")
+	posAppendix := strings.Index(out, "## Appendix")
+	posInputInAppendix := strings.Index(out[posAppendix:], "## Input File")
+
+	if posRunScope < 0 {
+		t.Fatal("'## Run & Scope' section heading not found")
+	}
+	if posSummary < 0 || posRunScope < posSummary {
+		t.Errorf("'Run & Scope' heading should appear after Summary (summary=%d, runScope=%d)", posSummary, posRunScope)
+	}
+	if posAppendix < 0 || posRunScope > posAppendix {
+		t.Errorf("'Run & Scope' heading should appear before Appendix (runScope=%d, appendix=%d)", posRunScope, posAppendix)
+	}
+	if posInputInAppendix >= 0 {
+		t.Error("'## Input File' must not appear as a standalone H2 section inside the Appendix area")
+	}
+}
+
 // TestToolProvenanceLineListsAllToolsAndGrypeDB verifies that every external
 // tool version and the Grype database provenance are surfaced for supply-chain
 // reproducibility, not just the Grype scanner version.
