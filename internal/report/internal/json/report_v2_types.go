@@ -329,14 +329,14 @@ type entitiesV2 struct {
 // ProjectionsV2 holds renderer-oriented view models pre-computed from the entity layer.
 // Renderers should consume these projections instead of processing raw or entity data directly.
 type ProjectionsV2 struct {
-	Summary          ProjectionSummaryV2        `json:"summary"`
-	ExtractionLog    []ExtractionLogRowV2       `json:"extractionLog"`
-	Scans            []ScanRowV2                `json:"scans"`
-	Vulnerabilities  []VulnerabilityRowV2       `json:"vulnerabilities"`
-	Issues           []IssueRowV2               `json:"issues"`
-	ComponentIndex   []PackageOccurrenceGroupV2 `json:"componentIndex"`
-	PolicyDecisions  []PolicyDecisionRowV2      `json:"policyDecisions"`
-	SuppressionGroups SuppressionGroupsV2       `json:"suppressionGroups"`
+	Summary           ProjectionSummaryV2        `json:"summary"`
+	ExtractionLog     []ExtractionLogRowV2       `json:"extractionLog"`
+	Scans             []ScanRowV2                `json:"scans"`
+	Vulnerabilities   []VulnerabilityRowV2       `json:"vulnerabilities"`
+	Issues            []IssueRowV2               `json:"issues"`
+	ComponentIndex    []PackageOccurrenceGroupV2 `json:"componentIndex"`
+	PolicyDecisions   []PolicyDecisionRowV2      `json:"policyDecisions"`
+	SuppressionGroups SuppressionGroupsV2        `json:"suppressionGroups"`
 }
 
 // ProjectionSummaryV2 holds strongly-typed aggregated counters.
@@ -356,6 +356,17 @@ type ProjectionSummaryV2 struct {
 	VulnerabilityEnrichmentState string              `json:"vulnerabilityEnrichmentState"`
 	VulnerabilityRequested       bool                `json:"vulnerabilityRequested"`
 	RootComponent                *BOMRootComponentV2 `json:"rootComponent,omitempty"`
+
+	// ArchiveCount is the number of extraction-tree nodes that were expanded as
+	// containers (have children). FileCount is the number of leaf nodes (files).
+	ArchiveCount int `json:"archiveCount"`
+	FileCount    int `json:"fileCount"`
+
+	// AffectedPackageCount is the number of distinct components (by bom-ref) with
+	// at least one vulnerability match. UniqueVulnerabilityCount is the number of
+	// distinct vulnerability IDs across all matches.
+	AffectedPackageCount     int `json:"affectedPackageCount"`
+	UniqueVulnerabilityCount int `json:"uniqueVulnerabilityCount"`
 }
 
 // ScanRowV2 is one scan-task projection row with component count and flattened evidence paths.
@@ -442,15 +453,15 @@ type ExtractionLogRowV2 struct {
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
 
-	Path        string                    `json:"path"`
-	Status      string                    `json:"status"`
-	Format      string                    `json:"format"`
-	Tool        string                    `json:"tool"`
-	Detail      string                    `json:"detail"`
-	Depth       int                       `json:"depth"`
-	SandboxUsed string                    `json:"sandboxUsed,omitempty"`
-	Duration    string                    `json:"duration,omitempty"`
-	ArchiveMeta *ExtractionArchiveMetaV2  `json:"archiveMeta,omitempty"`
+	Path        string                   `json:"path"`
+	Status      string                   `json:"status"`
+	Format      string                   `json:"format"`
+	Tool        string                   `json:"tool"`
+	Detail      string                   `json:"detail"`
+	Depth       int                      `json:"depth"`
+	SandboxUsed string                   `json:"sandboxUsed,omitempty"`
+	Duration    string                   `json:"duration,omitempty"`
+	ArchiveMeta *ExtractionArchiveMetaV2 `json:"archiveMeta,omitempty"`
 }
 
 // VulnerabilityRowV2 represents an aggregated vulnerability display row.

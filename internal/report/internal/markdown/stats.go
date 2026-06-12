@@ -94,39 +94,94 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 		}
 	}
 
-	v := t.noneValue
-	if idx.IndexedComponents > 0 {
-		v = fmt.Sprintf("%d", idx.IndexedWithPURL)
-	}
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskPURLCoverage, sectionLink(t.scanNoPackageIDsSection, anchorComponentsWithPURL), v))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskPURLCoverage,
+		idx.IndexedWithPURL, idx.IndexedComponents, idx.IndexedWithoutPURL))
 
-	v = t.noneValue
-	if idx.IndexedComponents > 0 {
-		v = fmt.Sprintf("%d", idx.IndexedWithEvidencePath+idx.IndexedWithEvidenceSourceOnly)
-	}
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage, v))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage,
+		idx.IndexedWithEvidencePath, idx.IndexedWithEvidenceSourceOnly, idx.IndexedWithoutEvidence))
 
 	if len(proj.Summary.ScanNoPackagePaths) > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks, sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs), len(proj.Summary.ScanNoPackagePaths)))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks,
+			len(proj.Summary.ScanNoPackagePaths),
+			proj.Summary.ScanTasks,
+			joinPathExamples(proj.Summary.ScanNoPackagePaths, 3)))
 	}
 	if idx.FilteredLowValueFileArtifacts > 0 || idx.FilteredContainerNodes > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage, sectionLink(t.suppressionReasonLowValueFile, anchorSuppressionLowValue), idx.FilteredLowValueFileArtifacts+idx.FilteredContainerNodes))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage,
+			idx.FilteredLowValueFileArtifacts+idx.FilteredContainerNodes))
 	}
 	if len(proj.Summary.ExtensionFilteredPaths) > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtensionFilter, sectionLink(t.extensionFilterSection, anchorExtensionFilter), len(proj.Summary.ExtensionFilteredPaths)))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtensionFilter,
+			len(proj.Summary.ExtensionFilteredPaths),
+			sectionLink(t.extensionFilterSection, anchorExtensionFilter)))
 	}
 	if extFailed > 0 || extBlocked > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap, extFailed+extBlocked))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap,
+			extFailed+extBlocked,
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "failed", "security-blocked"), 3)))
 	}
 	if extMissing > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap, extMissing))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap,
+			extMissing,
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"), 3)))
 	}
 	if scnErrors > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap, scnErrors))
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap,
+			scnErrors,
+			joinPathExamples(scanIssuePaths(proj.Issues), 3)))
 	}
 	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
 }
 
 func configSkipExtensionsDisplay(exts []string) string {
 	return strings.Join(exts, ", ")
+}
+
+// extractionPathsByStatus collects extraction-log node paths whose status is in
+// the given set, for use as example lists in prose summaries.
+func extractionPathsByStatus(rows []reportjson.ExtractionLogRowV2, statuses ...string) []string {
+	want := make(map[string]struct{}, len(statuses))
+	for _, s := range statuses {
+		want[s] = struct{}{}
+	}
+	var out []string
+	for _, row := range rows {
+		if _, ok := want[row.Status]; ok {
+			out = append(out, row.Path)
+		}
+	}
+	return out
+}
+
+// scanIssuePaths returns the messages of scan-stage processing issues for use as
+// example lists in prose summaries.
+func scanIssuePaths(issues []reportjson.IssueRowV2) []string {
+	var out []string
+	for _, issue := range issues {
+		if issue.Stage == "scan" {
+			out = append(out, issue.Message)
+		}
+	}
+	return out
+}
+
+// joinPathExamples renders up to max backtick-quoted example paths, appending an
+// ellipsis when more entries exist, for use in prose summaries.
+func joinPathExamples(paths []string, max int) string {
+	if len(paths) == 0 {
+		return "-"
+	}
+	n := len(paths)
+	if n > max {
+		n = max
+	}
+	quoted := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		quoted = append(quoted, "`"+paths[i]+"`")
+	}
+	out := strings.Join(quoted, ", ")
+	if len(paths) > max {
+		out += ", …"
+	}
+	return out
 }
