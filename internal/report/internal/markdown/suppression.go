@@ -59,11 +59,12 @@ func writeSuppressionTable(w io.Writer, rows []reportjson.SuppressionRowV2, t tr
 	}
 
 	const maxRows = 30
-	for i, row := range rows {
+	for i := range rows {
 		if i >= maxRows {
 			fmt.Fprintf(w, "| ... | ... | %s |\n", fmt.Sprintf(t.additionalEntriesOmittedTemplate, len(rows)-maxRows))
 			break
 		}
+		row := &rows[i]
 		name := row.ComponentName
 		if name == "" {
 			name = "-"
@@ -79,7 +80,7 @@ func writeSuppressionTable(w io.Writer, rows []reportjson.SuppressionRowV2, t tr
 
 // suppressedByCell formats the "suppressed by" column with a link to the kept
 // component when resolution succeeded, or an explanatory fallback otherwise.
-func suppressedByCell(row reportjson.SuppressionRowV2, t translations) string {
+func suppressedByCell(row *reportjson.SuppressionRowV2, t translations) string {
 	if row.ResolutionStatus == "resolved" && row.KeptComponentName != "" {
 		if row.KeptAnchorID != "" {
 			return componentAnchorLink(escapeMarkdownCell(row.KeptComponentName), row.KeptAnchorID)

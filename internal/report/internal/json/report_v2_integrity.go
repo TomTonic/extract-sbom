@@ -108,19 +108,20 @@ func buildIntegrityV2(entities entitiesV2, projections ProjectionsV2, entityConf
 		}
 	}
 
-	for i, row := range projections.ExtractionLog {
-		checkRefs(fmt.Sprintf("extractionLog[%d]", i), row.SourceRefs)
+	for i := range projections.ExtractionLog {
+		checkRefs(fmt.Sprintf("extractionLog[%d]", i), projections.ExtractionLog[i].SourceRefs)
 	}
-	for i, row := range projections.Vulnerabilities {
-		checkRefs(fmt.Sprintf("vulnerabilities[%d]", i), row.SourceRefs)
+	for i := range projections.Vulnerabilities {
+		checkRefs(fmt.Sprintf("vulnerabilities[%d]", i), projections.Vulnerabilities[i].SourceRefs)
 	}
-	for i, row := range projections.Issues {
-		checkRefs(fmt.Sprintf("issues[%d]", i), row.SourceRefs)
+	for i := range projections.Issues {
+		checkRefs(fmt.Sprintf("issues[%d]", i), projections.Issues[i].SourceRefs)
 	}
-	for i, group := range projections.ComponentIndex {
+	for i := range projections.ComponentIndex {
+		group := &projections.ComponentIndex[i]
 		checkRefs(fmt.Sprintf("componentIndex[%d]", i), group.SourceRefs)
-		for j, occ := range group.Occurrences {
-			checkRefs(fmt.Sprintf("componentIndex[%d].occurrences[%d]", i, j), occ.SourceRefs)
+		for j := range group.Occurrences {
+			checkRefs(fmt.Sprintf("componentIndex[%d].occurrences[%d]", i, j), group.Occurrences[j].SourceRefs)
 		}
 	}
 

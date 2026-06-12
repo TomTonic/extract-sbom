@@ -75,7 +75,6 @@ type htmlNode struct {
 	Detail string
 }
 
-
 const htmlReportCSS = `
 body{font-family:system-ui,sans-serif;margin:0;padding:1rem 2rem;color:#1a1a1a;background:#fff}
 h1{font-size:1.6rem;margin-bottom:0.3rem;border-bottom:2px solid #333;padding-bottom:0.3rem}

@@ -130,8 +130,8 @@ func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroup
 	perOccurrenceVuln := false
 	if enrichmentDone && len(group.Occurrences) > 0 {
 		allFound, anyFound := true, false
-		for _, occ := range group.Occurrences {
-			if occ.VulnCount > 0 {
+		for i := range group.Occurrences {
+			if group.Occurrences[i].VulnCount > 0 {
 				anyFound = true
 			} else {
 				allFound = false

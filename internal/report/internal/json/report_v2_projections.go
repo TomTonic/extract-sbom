@@ -137,10 +137,11 @@ func bomNamesByRef(data ReportData) map[string]string {
 	if data.BOM == nil || data.BOM.Components == nil {
 		return nil
 	}
-	m := make(map[string]string, len(*data.BOM.Components))
-	for _, c := range *data.BOM.Components {
-		if c.BOMRef != "" {
-			m[c.BOMRef] = c.Name
+	comps := *data.BOM.Components
+	m := make(map[string]string, len(comps))
+	for i := range comps {
+		if comps[i].BOMRef != "" {
+			m[comps[i].BOMRef] = comps[i].Name
 		}
 	}
 	return m

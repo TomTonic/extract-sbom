@@ -11,7 +11,8 @@ import (
 // writeExtractionLog renders the extraction log projection as an indented Markdown list
 // with status, tool, sandbox, duration, and archive metadata per node.
 func writeExtractionLog(w io.Writer, rows []reportjson.ExtractionLogRowV2, t translations) {
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		indent := strings.Repeat("  ", row.Depth)
 		fmt.Fprintf(w, "%s- **%s** [%s] %s=%s", indent, row.Path, row.Format, t.status, row.Status)
 		if row.Tool != "" {
@@ -76,8 +77,8 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 	idx := proj.Summary.ComponentIndexStats
 
 	var extFailed, extBlocked, extMissing int
-	for _, row := range proj.ExtractionLog {
-		switch row.Status {
+	for i := range proj.ExtractionLog {
+		switch proj.ExtractionLog[i].Status {
 		case "failed":
 			extFailed++
 		case "security-blocked":
@@ -145,9 +146,9 @@ func extractionPathsByStatus(rows []reportjson.ExtractionLogRowV2, statuses ...s
 		want[s] = struct{}{}
 	}
 	var out []string
-	for _, row := range rows {
-		if _, ok := want[row.Status]; ok {
-			out = append(out, row.Path)
+	for i := range rows {
+		if _, ok := want[rows[i].Status]; ok {
+			out = append(out, rows[i].Path)
 		}
 	}
 	return out
