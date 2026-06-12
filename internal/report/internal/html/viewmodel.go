@@ -4,108 +4,101 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TomTonic/extract-sbom/internal/extract"
-	"github.com/TomTonic/extract-sbom/internal/vulnscan"
+	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
 
 func buildReportData(data ReportData, language string) htmlReportData {
-	extStats := collectExtractionStats(data.Tree)
+	report := reportjson.BuildV2Report(data)
+	proj := report.Projections
 
-	compCount := 0
-	if data.BOM != nil && data.BOM.Components != nil {
-		compCount = len(*data.BOM.Components)
+	var total, extracted, failed, skipped int
+	for _, row := range proj.ExtractionLog {
+		total++
+		switch row.Status {
+		case "extracted", "syft-native":
+			extracted++
+		case "failed", "security-blocked":
+			failed++
+		case "skipped", "tool-missing":
+			skipped++
+		}
 	}
 
-	vulns := collectVulns(data)
+	vulns := buildHTMLVulnRows(proj.Vulnerabilities)
 
-	var issues []htmlIssue
-	for _, iss := range data.ProcessingIssues {
-		issues = append(issues, htmlIssue(iss))
+	issues := make([]htmlIssue, len(proj.Issues))
+	for i, iss := range proj.Issues {
+		issues[i] = htmlIssue{Stage: iss.Stage, Message: iss.Message}
 	}
 
-	var nodes []htmlNode
-	flattenExtractionNodes(data.Tree, 0, &nodes)
+	nodes := buildHTMLExtrNodes(proj.ExtractionLog)
 
 	return htmlReportData{
 		M:                   messagesFor(language),
 		Generated:           time.Now().Format("2006-01-02 15:04:05"),
-		Generator:           data.Generator.String(),
-		Tools:               toolVersions(data.ToolVersions),
-		InputFile:           data.Input.Filename,
-		InputSize:           data.Input.Size,
-		InputSHA256:         data.Input.SHA256,
-		Duration:            data.EndTime.Sub(data.StartTime).Round(time.Millisecond).String(),
-		SBOMPath:            data.SBOMPath,
-		SandboxName:         data.SandboxInfo.Name,
+		Generator:           report.Generator.Display,
+		Tools:               buildHTMLToolVersions(report),
+		InputFile:           report.Input.Filename,
+		InputSize:           report.Input.Size,
+		InputSHA256:         report.Input.SHA256,
+		Duration:            report.Run.Duration,
+		SBOMPath:            report.Raw.ArtifactPaths.SBOMPath,
+		SandboxName:         report.Runtime.Sandbox.Name,
 		Language:            language,
-		ExtractionTotal:     extStats.Total,
-		ExtractionExtracted: extStats.Extracted,
-		ExtractionFailed:    extStats.Failed,
-		ExtractionSkipped:   extStats.Skipped + extStats.ToolMissing,
-		ComponentCount:      compCount,
+		ExtractionTotal:     total,
+		ExtractionExtracted: extracted,
+		ExtractionFailed:    failed,
+		ExtractionSkipped:   skipped,
+		ComponentCount:      proj.Summary.Components,
 		VulnCount:           len(vulns),
 		IssueCount:          len(issues),
-		VulnState:           vulnState(data.Vulnerabilities),
+		VulnState:           proj.Summary.VulnerabilityEnrichmentState,
 		Vulns:               vulns,
 		Issues:              issues,
 		ExtrNodes:           nodes,
 	}
 }
 
-func collectExtractionStats(node *extract.ExtractionNode) extractionStats {
-	stats := extractionStats{}
-
-	var walk func(n *extract.ExtractionNode)
-	walk = func(n *extract.ExtractionNode) {
-		if n == nil {
-			return
+func buildHTMLVulnRows(rows []reportjson.VulnerabilityRowV2) []htmlVuln {
+	out := make([]htmlVuln, 0, len(rows))
+	for _, row := range rows {
+		desc := row.Description
+		if len([]rune(desc)) > 120 {
+			desc = string([]rune(desc)[:120]) + "…"
 		}
-
-		stats.Total++
-		switch n.Status {
-		case extract.StatusExtracted:
-			stats.Extracted++
-			stats.TotalFileEntries += n.EntriesCount
-		case extract.StatusSyftNative:
-			stats.SyftNative++
-		case extract.StatusFailed:
-			stats.Failed++
-		case extract.StatusSkipped:
-			stats.Skipped++
-		case extract.StatusToolMissing:
-			stats.ToolMissing++
-		case extract.StatusSecurityBlocked:
-			stats.SecurityBlocked++
-		case extract.StatusPending:
-			stats.Pending++
-		default:
-			stats.Other++
-		}
-
-		for _, child := range n.Children {
-			walk(child)
-		}
+		out = append(out, htmlVuln{
+			ID:          row.VulnerabilityID,
+			Severity:    row.Severity,
+			SeverityCSS: severityCSSClass(row.Severity),
+			Package:     row.Name,
+			Version:     row.Installed,
+			Description: desc,
+		})
 	}
-
-	walk(node)
-	return stats
+	return out
 }
 
-// vulnState classifies the vulnerability-enrichment outcome for the HTML
-// summary. It exists so the report can distinguish "no vulnerabilities found"
-// from "enrichment was not requested" or "Grype was unavailable".
-func vulnState(v *vulnscan.Result) string {
-	if v == nil || !v.Requested || v.State == vulnscan.StateNotRequested {
-		return "not-requested"
+func buildHTMLExtrNodes(rows []reportjson.ExtractionLogRowV2) []htmlNode {
+	out := make([]htmlNode, 0, len(rows))
+	for _, row := range rows {
+		depth := row.Depth
+		if depth > 5 {
+			depth = 5
+		}
+		out = append(out, htmlNode{
+			Depth:  depth,
+			Path:   row.Path,
+			Status: row.Status,
+			Format: row.Format,
+			Tool:   row.Tool,
+			Detail: row.Detail,
+		})
 	}
-	if v.State == vulnscan.StateUnavailable {
-		return "unavailable"
-	}
-	return "assessed"
+	return out
 }
 
-// toolVersions joins detected external-tool version strings into one summary.
-func toolVersions(tv ToolVersions) string {
+func buildHTMLToolVersions(report reportjson.ReportV2) string {
+	tv := report.Runtime.ToolVersions
 	var parts []string
 	if tv.Grype != "" {
 		entry := tv.Grype
@@ -124,4 +117,21 @@ func toolVersions(tv ToolVersions) string {
 		parts = append(parts, tv.Unsquashfs)
 	}
 	return strings.Join(parts, " | ")
+}
+
+func severityCSSClass(sev string) string {
+	switch sev {
+	case "critical":
+		return "critical"
+	case "high":
+		return "high"
+	case "medium":
+		return "medium"
+	case "low":
+		return "low"
+	case "negligible":
+		return "negligible"
+	default:
+		return "unknown-sev"
+	}
 }

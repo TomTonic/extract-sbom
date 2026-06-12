@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	texttemplate "text/template"
-
-	"github.com/TomTonic/extract-sbom/internal/scan"
 )
 
 // humanTemplateSections contains pre-rendered Markdown blocks for each major
@@ -53,7 +51,6 @@ func executeMarkdownDocumentTemplate(w io.Writer, model humanTemplateDocumentMod
 }
 
 func buildMarkdownTemplateDocumentModel(vm markdownReportViewModel) humanTemplateDocumentModel {
-	data := vm.data
 	t := vm.translations
 
 	var toc bytes.Buffer
@@ -66,14 +63,17 @@ func buildMarkdownTemplateDocumentModel(vm markdownReportViewModel) humanTemplat
 		TableOfContents: toc.String(),
 		Sections:        buildHumanTemplateSections(vm),
 		EndOfReport:     t.endOfReport + "\n",
-		Report:          data,
+		Report:          vm.data,
 		Language:        vm.language,
 	}
 }
 
 func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSections {
-	data := vm.data
 	t := vm.translations
+	typedProj := vm.report.Projections
+	typedCfg := vm.report.Config
+	typedInp := vm.report.Input
+	typedSB := vm.report.Runtime.Sandbox
 
 	render := func(fn func(io.Writer)) string {
 		var b bytes.Buffer
@@ -84,7 +84,7 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 	return humanTemplateSections{
 		Summary: render(func(w io.Writer) {
 			writeSectionHeading(w, t.summarySection, anchorSummary)
-			writeSummary(w, data, vm.report.Projections, t)
+			writeSummary(w, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		MethodOverview: render(func(w io.Writer) {
@@ -94,12 +94,12 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		ProcessingIssues: render(func(w io.Writer) {
 			writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
-			writeProcessingIssues(w, data, vm.report.Projections, t)
+			writeProcessingIssues(w, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		ResidualRisk: render(func(w io.Writer) {
 			writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
-			writeResidualRisk(w, data, vm.report.Projections, t)
+			writeResidualRisk(w, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		Appendix: render(func(w io.Writer) {
@@ -109,93 +109,92 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		ComponentIndex: render(func(w io.Writer) {
 			writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
-			writeComponentOccurrenceIndex(w, vm.report.Projections, data.Vulnerabilities, t)
+			writeComponentOccurrenceIndex(w, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		ComponentNormalization: render(func(w io.Writer) {
 			writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
-			writeSuppressionReport(w, data.Suppressions, vm.report.Projections, t)
+			writeSuppressionReport(w, typedProj.SuppressionGroups, t)
 			fmt.Fprintln(w)
 		}),
 		Input: render(func(w io.Writer) {
 			writeSectionHeading(w, t.inputSection, anchorInputFile)
 			fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
 			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, data.Input.Filename)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, data.Input.Size, t.unitBytes)
-			fmt.Fprintf(w, "| SHA-256 | `%s` |\n", data.Input.SHA256)
-			fmt.Fprintf(w, "| SHA-512 | `%s` |\n", data.Input.SHA512)
+			fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, typedInp.Filename)
+			fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, typedInp.Size, t.unitBytes)
+			fmt.Fprintf(w, "| SHA-256 | `%s` |\n", typedInp.SHA256)
+			fmt.Fprintf(w, "| SHA-512 | `%s` |\n", typedInp.SHA512)
 			fmt.Fprintln(w)
 		}),
 		Configuration: render(func(w io.Writer) {
 			writeSectionHeading(w, t.configSection, anchorConfig)
 			fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
 			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, data.Config.PolicyMode)
-			fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, data.Config.InterpretMode)
-			fmt.Fprintf(w, "| %s | %s |\n", t.language, data.Config.Language)
-			fmt.Fprintf(w, "| grype | %v |\n", data.Config.GrypeEnabled)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxDepth, data.Config.Limits.MaxDepth)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxFiles, data.Config.Limits.MaxFiles)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxTotalSize, data.Config.Limits.MaxTotalSize, t.unitBytes)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxEntrySize, data.Config.Limits.MaxEntrySize, t.unitBytes)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, data.Config.Limits.MaxRatio)
-			fmt.Fprintf(w, "| %s | %s |\n", t.timeout, data.Config.Limits.Timeout)
-			fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(data.Config.SkipExtensions))
-			fmt.Fprintf(w, "| %s | %s |\n", t.generator, data.Generator.String())
-			fmt.Fprintf(w, "| %s | %s |\n", t.progressLevel, data.Config.ProgressLevel.String())
+			fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, typedCfg.PolicyMode)
+			fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, typedCfg.InterpretMode)
+			fmt.Fprintf(w, "| %s | %s |\n", t.language, typedCfg.Language)
+			fmt.Fprintf(w, "| grype | %v |\n", typedCfg.GrypeEnabled)
+			fmt.Fprintf(w, "| %s | %d |\n", t.maxDepth, typedCfg.Limits.MaxDepth)
+			fmt.Fprintf(w, "| %s | %d |\n", t.maxFiles, typedCfg.Limits.MaxFiles)
+			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxTotalSize, typedCfg.Limits.MaxTotalSize, t.unitBytes)
+			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxEntrySize, typedCfg.Limits.MaxEntrySize, t.unitBytes)
+			fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, typedCfg.Limits.MaxRatio)
+			fmt.Fprintf(w, "| %s | %s |\n", t.timeout, typedCfg.Limits.Timeout)
+			fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(typedCfg.SkipExtensions))
+			fmt.Fprintf(w, "| %s | %s |\n", t.generator, vm.report.Generator.Display)
+			fmt.Fprintf(w, "| %s | %s |\n", t.progressLevel, typedCfg.ProgressLevel)
 			fmt.Fprintln(w)
 		}),
 		ExtensionFilter: render(func(w io.Writer) {
 			writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
-			writeExtensionFilterSection(w, data, vm.report.Projections, t)
+			writeExtensionFilterSection(w, typedCfg.SkipExtensions, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		RootMetadata: render(func(w io.Writer) {
 			writeSectionHeading(w, t.rootMetadataSection, anchorRootMetadata)
-			writeRootMetadata(w, data, t)
+			writeRootMetadata(w, typedProj.Summary.RootComponent, t)
 		}),
 		Sandbox: render(func(w io.Writer) {
 			writeSectionHeading(w, t.sandboxSection, anchorSandbox)
 			fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
 			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, data.SandboxInfo.Name)
-			fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, data.SandboxInfo.Available)
-			if data.SandboxInfo.UnsafeOvr {
+			fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, typedSB.Name)
+			fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, typedSB.Available)
+			if typedSB.UnsafeOverride {
 				fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
 			}
 			fmt.Fprintln(w)
 		}),
 		Policy: render(func(w io.Writer) {
 			writeSectionHeading(w, t.policySection, anchorPolicy)
-			writePolicyDecisions(w, data.PolicyDecisions, t)
+			writePolicyDecisions(w, typedProj.PolicyDecisions, t)
 			fmt.Fprintln(w)
 		}),
 		Scan: render(func(w io.Writer) {
 			writeSectionHeading(w, t.scanSection, anchorScan)
 			fmt.Fprintln(w, t.scanSectionLead)
 			fmt.Fprintln(w)
-			for _, sr := range data.Scans {
-				evidencePaths := scan.FlattenEvidencePaths(sr)
+			for _, row := range typedProj.Scans {
 				switch {
-				case sr.Error != nil:
-					fmt.Fprintf(w, "- **%s**: %s %v\n", sr.NodePath, t.scanError, sr.Error)
-				case sr.BOM != nil && sr.BOM.Components != nil:
-					fmt.Fprintf(w, "- **%s**: %d %s\n", sr.NodePath, len(*sr.BOM.Components), t.componentsFound)
-					for _, evidencePath := range evidencePaths {
-						fmt.Fprintf(w, "  - %s: `%s`\n", t.scanTaskEvidenceLabel, evidencePath)
+				case row.Error != "":
+					fmt.Fprintf(w, "- **%s**: %s %s\n", row.NodePath, t.scanError, row.Error)
+				case row.ComponentCount > 0:
+					fmt.Fprintf(w, "- **%s**: %d %s\n", row.NodePath, row.ComponentCount, t.componentsFound)
+					for _, ep := range row.EvidencePaths {
+						fmt.Fprintf(w, "  - %s: `%s`\n", t.scanTaskEvidenceLabel, ep)
 					}
 				default:
-					fmt.Fprintf(w, "- **%s**: %s\n", sr.NodePath, t.noComponents)
+					fmt.Fprintf(w, "- **%s**: %s\n", row.NodePath, t.noComponents)
 				}
 			}
 			fmt.Fprintln(w)
-			writeScanNoPackageIdentitiesSubsection(w, vm.report.Projections, t)
+			writeScanNoPackageIdentitiesSubsection(w, typedProj, t)
 			fmt.Fprintln(w)
 		}),
 		Extraction: render(func(w io.Writer) {
 			writeSectionHeading(w, t.extractionSection, anchorExtraction)
-			writeExtractionTree(w, data.Tree, 0, t)
+			writeExtractionLog(w, typedProj.ExtractionLog, t)
 			fmt.Fprintln(w)
 		}),
 	}

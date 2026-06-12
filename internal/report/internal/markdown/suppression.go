@@ -1,172 +1,104 @@
 package markdown
 
 import (
-	"strings"
 	"fmt"
 	"io"
-	"sort"
+	"strings"
 
-
-	"github.com/TomTonic/extract-sbom/internal/assembly"
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
 
-// writeSuppressionReport renders normalization/suppression evidence grouped by
+// writeSuppressionReport renders normalisation/suppression evidence grouped by
 // reason so deduplication remains auditable.
-type suppressionResolver struct {
-	knownRefs map[string]bool
-}
-
-func (r suppressionResolver) Resolve(record assembly.SuppressionRecord) (string, string) {
-	// Simple mock resolve to avoid getting stuck on struct details
-	return "", "no_indexed_match"
-}
-
-func buildSuppressionResolver(proj reportjson.ProjectionsV2) suppressionResolver {
-	refs := make(map[string]bool)
-	for _, grp := range proj.ComponentIndex {
-		for _, occ := range grp.Occurrences {
-			refs[occ.ObjectID] = true
-		}
-	}
-	return suppressionResolver{knownRefs: refs}
-}
-
-func writeSuppressionReport(w io.Writer, suppressions []assembly.SuppressionRecord, proj reportjson.ProjectionsV2, t translations) {
+func writeSuppressionReport(w io.Writer, groups reportjson.SuppressionGroupsV2, t translations) {
 	fmt.Fprintf(w, "%s\n\n", t.componentNormalizationLead)
 
-	if len(suppressions) == 0 {
+	total := len(groups.FSArtifacts) + len(groups.LowValue) + len(groups.WeakDups) + len(groups.PURLDups)
+	if total == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noSuppressions)
 	}
 
-	// Group by reason for a structured overview.
-	var fsArtifacts, lowValue, weakDups, purlDups []assembly.SuppressionRecord
-	for i := range suppressions {
-		switch suppressions[i].Reason {
-		case assembly.SuppressionFSArtifact:
-			fsArtifacts = append(fsArtifacts, suppressions[i])
-		case assembly.SuppressionLowValueFile:
-			lowValue = append(lowValue, suppressions[i])
-		case assembly.SuppressionWeakDuplicate:
-			weakDups = append(weakDups, suppressions[i])
-		case assembly.SuppressionPURLDuplicate:
-			purlDups = append(purlDups, suppressions[i])
-		}
-	}
-	sortSuppressionRecords(fsArtifacts)
-	sortSuppressionRecords(lowValue)
-	sortSuppressionRecords(weakDups)
-	sortSuppressionRecords(purlDups)
-
-	
-	resolver := buildSuppressionResolver(proj)
-
-	// Summary counts.
 	fmt.Fprintf(w, "| %s | %s |\n", t.reasonLabel, t.countLabel)
 	fmt.Fprintln(w, "|---|---|")
-	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonFSArtifact, len(fsArtifacts))
-	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonLowValueFile, len(lowValue))
-	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonWeakDuplicate, len(weakDups))
-	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonPURLDuplicate, len(purlDups))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonFSArtifact, len(groups.FSArtifacts))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonLowValueFile, len(groups.LowValue))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonWeakDuplicate, len(groups.WeakDups))
+	fmt.Fprintf(w, "| %s | %d |\n", t.suppressionReasonPURLDuplicate, len(groups.PURLDups))
 	fmt.Fprintln(w)
 
-	// FS-cataloger artifacts.
-	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonFSArtifact, len(fsArtifacts)), anchorSuppressionFSArtifacts)
+	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonFSArtifact, len(groups.FSArtifacts)), anchorSuppressionFSArtifacts)
 	fmt.Fprintln(w, t.suppressionOperationalFS)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, t.suppressionOperationalFSFollowUp)
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, fsArtifacts, resolver, t)
+	writeSuppressionTable(w, groups.FSArtifacts, t)
 
-	// Low-value file artifacts.
-	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonLowValueFile, len(lowValue)), anchorSuppressionLowValue)
+	writeAnchoredHeading(w, 4, fmt.Sprintf("%s (%d)", t.suppressionReasonLowValueFile, len(groups.LowValue)), anchorSuppressionLowValue)
 	fmt.Fprintln(w, t.suppressionOperationalLowValue)
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, lowValue, resolver, t)
+	writeSuppressionTable(w, groups.LowValue, t)
 
-	// Weak duplicates.
-	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonWeakDuplicate, len(weakDups))
+	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonWeakDuplicate, len(groups.WeakDups))
 	fmt.Fprintln(w, t.suppressionOperationalWeakDup)
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, weakDups, resolver, t)
+	writeSuppressionTable(w, groups.WeakDups, t)
 
-	// PURL duplicates across scan nodes or evidence variants.
-	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonPURLDuplicate, len(purlDups))
+	fmt.Fprintf(w, "#### %s (%d)\n\n", t.suppressionReasonPURLDuplicate, len(groups.PURLDups))
 	fmt.Fprintln(w, t.suppressionOperationalPURLDup)
 	fmt.Fprintln(w)
-	writeSuppressionReasonTable(w, purlDups, resolver, t)
+	writeSuppressionTable(w, groups.PURLDups, t)
 }
 
-// writeSuppressionReasonTable prints a bounded, deterministic table for one
-// suppression reason group.
-func writeSuppressionReasonTable(w io.Writer, records []assembly.SuppressionRecord, resolver suppressionResolver, t translations) {
+// writeSuppressionTable prints a bounded, deterministic table for one suppression group.
+func writeSuppressionTable(w io.Writer, rows []reportjson.SuppressionRowV2, t translations) {
 	fmt.Fprintf(w, "| %s | %s | %s |\n", t.suppressionTableDeliveryPath, t.suppressionTableComponentName, t.suppressionTableSuppressedBy)
 	fmt.Fprintln(w, "|---|---|---|")
-	if len(records) == 0 {
+	if len(rows) == 0 {
 		fmt.Fprintln(w, "| - | - | - |")
 		fmt.Fprintln(w)
 		return
 	}
 
 	const maxRows = 30
-	for i := range records {
+	for i, row := range rows {
 		if i >= maxRows {
-			fmt.Fprintf(w, "| ... | ... | %s |\n", fmt.Sprintf(t.additionalEntriesOmittedTemplate, len(records)-maxRows))
+			fmt.Fprintf(w, "| ... | ... | %s |\n", fmt.Sprintf(t.additionalEntriesOmittedTemplate, len(rows)-maxRows))
 			break
 		}
-		r := records[i]
-		suppressedName := r.Component.Name
-		if suppressedName == "" {
-			suppressedName = "-"
+		name := row.ComponentName
+		if name == "" {
+			name = "-"
 		}
 		fmt.Fprintf(w, "| `%s` | `%s` | %s |\n",
-			escapeMarkdownCell(r.DeliveryPath),
-			escapeMarkdownCell(suppressedName),
-			suppressedByCell(r, resolver, t),
+			escapeMarkdownCell(row.DeliveryPath),
+			escapeMarkdownCell(name),
+			suppressedByCell(row, t),
 		)
 	}
 	fmt.Fprintln(w)
 }
 
-// suppressedByCell formats the "suppressed by" table cell with either a link
-// to the retained component or an explanatory fallback message.
-func suppressedByCell(record assembly.SuppressionRecord, resolver suppressionResolver, t translations) string {
-	bomRef, reasonCode := resolver.Resolve(record)
-	if bomRef == "" {
-		reason := suppressionResolveReasonText(reasonCode, t)
-		if reason == "" {
-			reason = t.suppressedByNoIndexedMatch
+// suppressedByCell formats the "suppressed by" column with a link to the kept
+// component when resolution succeeded, or an explanatory fallback otherwise.
+func suppressedByCell(row reportjson.SuppressionRowV2, t translations) string {
+	if row.ResolutionStatus == "resolved" && row.KeptComponentName != "" {
+		if row.KeptAnchorID != "" {
+			return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(row.KeptComponentName), strings.ReplaceAll(row.KeptAnchorID, ":", "-"))
 		}
-		return fmt.Sprintf("*%s*", escapeMarkdownCell(reason))
+		return fmt.Sprintf("`%s`", escapeMarkdownCell(row.KeptComponentName))
 	}
-	return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(bomRef), func (s string) string { return strings.ReplaceAll(strings.ReplaceAll(s, ".", "-"), "/", "-") }(bomRef))
+	reason := suppressionResolveReasonText(row.ResolutionReason, t)
+	if reason == "" {
+		reason = t.suppressedByNoIndexedMatch
+	}
+	return fmt.Sprintf("*%s*", escapeMarkdownCell(reason))
 }
 
 func suppressionResolveReasonText(code string, t translations) string {
 	switch code {
-	case "no_indexed_match":
+	case "suppressed component not present in canonical component set":
 		return t.suppressedByNoIndexedMatch
-	case "replacement_not_indexed":
-		return t.suppressedByReplacementNotIndexed
-	case "ambiguous_indexed_match":
-		return t.suppressedByAmbiguousIndexedMatch
 	default:
 		return ""
 	}
-}
-
-// sortSuppressionRecords enforces deterministic ordering in suppression tables.
-func sortSuppressionRecords(records []assembly.SuppressionRecord) {
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].DeliveryPath != records[j].DeliveryPath {
-			return records[i].DeliveryPath < records[j].DeliveryPath
-		}
-		if records[i].Component.Name != records[j].Component.Name {
-			return records[i].Component.Name < records[j].Component.Name
-		}
-		if records[i].KeptName != records[j].KeptName {
-			return records[i].KeptName < records[j].KeptName
-		}
-		return records[i].Component.BOMRef < records[j].Component.BOMRef
-	})
 }
