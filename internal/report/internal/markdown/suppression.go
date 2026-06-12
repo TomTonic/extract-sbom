@@ -3,7 +3,6 @@ package markdown
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
@@ -83,7 +82,7 @@ func writeSuppressionTable(w io.Writer, rows []reportjson.SuppressionRowV2, t tr
 func suppressedByCell(row reportjson.SuppressionRowV2, t translations) string {
 	if row.ResolutionStatus == "resolved" && row.KeptComponentName != "" {
 		if row.KeptAnchorID != "" {
-			return fmt.Sprintf("[%s](#%s)", escapeMarkdownCell(row.KeptComponentName), strings.ReplaceAll(row.KeptAnchorID, ":", "-"))
+			return componentAnchorLink(escapeMarkdownCell(row.KeptComponentName), row.KeptAnchorID)
 		}
 		return fmt.Sprintf("`%s`", escapeMarkdownCell(row.KeptComponentName))
 	}
