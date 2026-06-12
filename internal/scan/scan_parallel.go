@@ -3,12 +3,19 @@ package scan
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/mattn/go-isatty"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 )
+
+// stderrIsTerminal reports whether os.Stderr is an interactive terminal.
+// Overridable in tests.
+var stderrIsTerminal = func() bool { return isatty.IsTerminal(os.Stderr.Fd()) }
 
 // scanTask identifies one result slot to be processed by a worker.
 type scanTask struct {
@@ -68,16 +75,25 @@ func shouldLogScanCompletion(label string, duration time.Duration) bool {
 	return label != "scan-native" || duration >= scanNativeVerboseCompletionMinimum
 }
 
-// FormatComponentCount formats a component count for terminal output:
-// 0 -> plain "0 components", 1 -> bold "1 component", N -> bold "N components".
+// BoldText wraps s in ANSI bold escape codes when stderr is a terminal,
+// and returns s unchanged otherwise. Use for progress output only.
+func BoldText(s string) string {
+	if !stderrIsTerminal() {
+		return s
+	}
+	return "\033[1m" + s + "\033[0m"
+}
+
+// FormatComponentCount formats a component count for progress output.
+// Non-zero counts are rendered in bold when stderr is a terminal.
 func FormatComponentCount(n int) string {
 	switch n {
 	case 0:
 		return "0 components"
 	case 1:
-		return "\033[1m1 component\033[0m"
+		return BoldText("1 component")
 	default:
-		return fmt.Sprintf("\033[1m%d components\033[0m", n)
+		return BoldText(fmt.Sprintf("%d components", n))
 	}
 }
 

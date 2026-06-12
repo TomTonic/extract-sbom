@@ -1,6 +1,7 @@
 package json
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -35,7 +36,7 @@ func buildSuppressionGroupsProjection(records []assembly.SuppressionRecord, supp
 		row := SuppressionRowV2{
 			SourceRef:         entity.ID,
 			DeliveryPath:      records[i].DeliveryPath,
-			ComponentName:     records[i].Component.Name,
+			ComponentName:     cleanSuppressionComponentName(records[i].Component.Name),
 			KeptComponentName: entity.KeptComponentName,
 			KeptComponentID:   entity.KeptComponentID,
 			KeptAnchorID:      componentToAnchor[entity.KeptComponentID],
@@ -65,6 +66,18 @@ func buildSuppressionGroupsProjection(records []assembly.SuppressionRecord, supp
 		WeakDups:    weakDups,
 		PURLDups:    purlDups,
 	}
+}
+
+// cleanSuppressionComponentName strips absolute temp-directory paths from
+// component names emitted by Syft's file cataloger. Such names carry run-specific
+// random suffixes (e.g. /tmp/extract-sbom-7z-383614817/…) that leak internal
+// state and break report reproducibility. When the name is an absolute path,
+// only the final path element is retained; logical names are returned unchanged.
+func cleanSuppressionComponentName(name string) string {
+	if filepath.IsAbs(name) {
+		return filepath.Base(name)
+	}
+	return name
 }
 
 func sortSuppressionRows(rows []SuppressionRowV2) {

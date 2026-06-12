@@ -161,20 +161,20 @@ func buildToolProvenanceLine(vm markdownReportViewModel) string {
 
 	var parts []string
 	if rt.SevenZip != "" {
-		parts = append(parts, "7-Zip "+rt.SevenZip)
+		parts = append(parts, rt.SevenZip)
 	}
 	if rt.Unshield != "" {
-		parts = append(parts, "unshield "+rt.Unshield)
+		parts = append(parts, rt.Unshield)
 	}
 	if rt.Unsquashfs != "" {
-		parts = append(parts, "unsquashfs "+rt.Unsquashfs)
+		parts = append(parts, rt.Unsquashfs)
 	}
-	grype := rt.Grype
-	if grype == "" {
-		grype = gp.Version
-	}
-	if grype != "" {
-		parts = append(parts, "grype "+grype)
+	// rt.Grype is set by the orchestrator as "grype <version>" (already labelled).
+	// Fall back to gp.Version (bare number) only when the runtime field is absent.
+	if rt.Grype != "" {
+		parts = append(parts, rt.Grype)
+	} else if gp.Version != "" {
+		parts = append(parts, "grype "+gp.Version)
 	}
 
 	line := strings.Join(parts, " | ")
