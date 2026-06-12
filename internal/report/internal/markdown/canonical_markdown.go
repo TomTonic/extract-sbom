@@ -12,8 +12,6 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	t := vm.translations
 	sections := vm.sections
 	proj := vm.report.Projections
-	cfg := vm.report.Config
-	sb := vm.report.Runtime.Sandbox
 
 	fmt.Fprint(w, buildHumanHeaderBlock(vm))
 	fmt.Fprintf(w, "## %s\n\n", t.tableOfContentsSection)
@@ -23,6 +21,8 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	writeSectionHeading(w, t.summarySection, anchorSummary)
 	writeSummary(w, proj, t)
 	fmt.Fprintln(w)
+
+	writeRunScopeSection(w, vm)
 
 	writeSectionHeading(w, t.methodOverviewSection, anchorMethodOverview)
 	writeMethodOverview(w, t)
@@ -48,47 +48,12 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	writeSuppressionReport(w, proj.SuppressionGroups, t)
 	fmt.Fprintln(w)
 
-	// Input identification and run provenance.
-	writeSectionHeading(w, t.inputSection, anchorInputFile)
-	writeInputSection(w, vm.report, t)
-	fmt.Fprintln(w)
-
-	// Configuration snapshot.
-	writeSectionHeading(w, t.configSection, anchorConfig)
-	fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
-	fmt.Fprintf(w, "|---|---|\n")
-	fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, cfg.PolicyMode)
-	fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, cfg.InterpretMode)
-	fmt.Fprintf(w, "| %s | %s |\n", t.language, cfg.Language)
-	fmt.Fprintf(w, "| grype | %v |\n", cfg.GrypeEnabled)
-	fmt.Fprintf(w, "| %s | %d |\n", t.maxDepth, cfg.Limits.MaxDepth)
-	fmt.Fprintf(w, "| %s | %d |\n", t.maxFiles, cfg.Limits.MaxFiles)
-	fmt.Fprintf(w, "| %s | %d %s |\n", t.maxTotalSize, cfg.Limits.MaxTotalSize, t.unitBytes)
-	fmt.Fprintf(w, "| %s | %d %s |\n", t.maxEntrySize, cfg.Limits.MaxEntrySize, t.unitBytes)
-	fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, cfg.Limits.MaxRatio)
-	fmt.Fprintf(w, "| %s | %s |\n", t.timeout, cfg.Limits.Timeout)
-	fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(cfg.SkipExtensions))
-	fmt.Fprintf(w, "| %s | %s |\n", t.generator, vm.report.Generator.Display)
-	fmt.Fprintf(w, "| %s | %s |\n", t.progressLevel, cfg.ProgressLevel)
-	fmt.Fprintln(w)
-
 	writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
-	writeExtensionFilterSection(w, cfg.SkipExtensions, proj, t)
+	writeExtensionFilterSection(w, vm.report.Config.SkipExtensions, proj, t)
 	fmt.Fprintln(w)
 
 	writeSectionHeading(w, t.rootMetadataSection, anchorRootMetadata)
 	writeRootMetadata(w, proj.Summary.RootComponent, t)
-
-	// Sandbox information.
-	writeSectionHeading(w, t.sandboxSection, anchorSandbox)
-	fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
-	fmt.Fprintf(w, "|---|---|\n")
-	fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, sb.Name)
-	fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, sb.Available)
-	if sb.UnsafeOverride {
-		fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
-	}
-	fmt.Fprintln(w)
 
 	// Policy decisions.
 	writeSectionHeading(w, t.policySection, anchorPolicy)

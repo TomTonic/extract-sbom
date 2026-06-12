@@ -12,17 +12,15 @@ import (
 // report content.
 type humanTemplateSections struct {
 	Summary                string
+	RunScope               string
 	MethodOverview         string
 	ProcessingIssues       string
 	ResidualRisk           string
 	Appendix               string
 	ComponentIndex         string
 	ComponentNormalization string
-	Input                  string
-	Configuration          string
 	ExtensionFilter        string
 	RootMetadata           string
-	Sandbox                string
 	Policy                 string
 	Scan                   string
 	Extraction             string
@@ -72,7 +70,6 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 	t := vm.translations
 	typedProj := vm.report.Projections
 	typedCfg := vm.report.Config
-	typedSB := vm.report.Runtime.Sandbox
 
 	render := func(fn func(io.Writer)) string {
 		var b bytes.Buffer
@@ -116,29 +113,8 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 			writeSuppressionReport(w, typedProj.SuppressionGroups, t)
 			fmt.Fprintln(w)
 		}),
-		Input: render(func(w io.Writer) {
-			writeSectionHeading(w, t.inputSection, anchorInputFile)
-			writeInputSection(w, vm.report, t)
-			fmt.Fprintln(w)
-		}),
-		Configuration: render(func(w io.Writer) {
-			writeSectionHeading(w, t.configSection, anchorConfig)
-			fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
-			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, typedCfg.PolicyMode)
-			fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, typedCfg.InterpretMode)
-			fmt.Fprintf(w, "| %s | %s |\n", t.language, typedCfg.Language)
-			fmt.Fprintf(w, "| grype | %v |\n", typedCfg.GrypeEnabled)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxDepth, typedCfg.Limits.MaxDepth)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxFiles, typedCfg.Limits.MaxFiles)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxTotalSize, typedCfg.Limits.MaxTotalSize, t.unitBytes)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.maxEntrySize, typedCfg.Limits.MaxEntrySize, t.unitBytes)
-			fmt.Fprintf(w, "| %s | %d |\n", t.maxRatio, typedCfg.Limits.MaxRatio)
-			fmt.Fprintf(w, "| %s | %s |\n", t.timeout, typedCfg.Limits.Timeout)
-			fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(typedCfg.SkipExtensions))
-			fmt.Fprintf(w, "| %s | %s |\n", t.generator, vm.report.Generator.Display)
-			fmt.Fprintf(w, "| %s | %s |\n", t.progressLevel, typedCfg.ProgressLevel)
-			fmt.Fprintln(w)
+		RunScope: render(func(w io.Writer) {
+			writeRunScopeSection(w, vm)
 		}),
 		ExtensionFilter: render(func(w io.Writer) {
 			writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
@@ -148,17 +124,6 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		RootMetadata: render(func(w io.Writer) {
 			writeSectionHeading(w, t.rootMetadataSection, anchorRootMetadata)
 			writeRootMetadata(w, typedProj.Summary.RootComponent, t)
-		}),
-		Sandbox: render(func(w io.Writer) {
-			writeSectionHeading(w, t.sandboxSection, anchorSandbox)
-			fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
-			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, typedSB.Name)
-			fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, typedSB.Available)
-			if typedSB.UnsafeOverride {
-				fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
-			}
-			fmt.Fprintln(w)
 		}),
 		Policy: render(func(w io.Writer) {
 			writeSectionHeading(w, t.policySection, anchorPolicy)

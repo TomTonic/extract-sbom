@@ -31,6 +31,8 @@ type translations struct {
 	scanNoPackageIDsLead                   string
 	noScanNoPackageIDs                     string
 	policySection                          string
+	runScopeSection                        string
+	runScopeLead                           string
 	summarySection                         string
 	residualRiskSection                    string
 	processingIssuesSection                string
