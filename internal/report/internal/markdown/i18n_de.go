@@ -109,6 +109,7 @@ func translationsDE() translations {
 		vulnTableEPSS:                          "EPSS",
 		vulnTableRisk:                          "Risiko",
 		vulnTableKEV:                           "KEV",
+		vulnTableDescription:                   "Beschreibung",
 		vulnStatusFoundTemplate:                "Schwachstellenstatus: `found` (%d)",
 		vulnStatusNotAssessableUnavailable:     "Schwachstellenstatus: `not-assessable` (Anreicherung nicht verfügbar oder unvollständig)",
 		vulnStatusNotAssessableNoID:            "Schwachstellenstatus: `not-assessable` (keine PURL/CPE)",
