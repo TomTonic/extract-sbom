@@ -204,8 +204,9 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				}
 			}
 			cfg.EmitProgress(config.ProgressNormal,
-				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → \033[1m%d\033[0m in BOM",
-				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, weakCount, purlCount, finalBOMCount)
+				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → %s in BOM",
+				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, weakCount, purlCount,
+				scan.BoldText(fmt.Sprintf("%d", finalBOMCount)))
 		}
 		if asmErr != nil {
 			addIssue("assembly", asmErr)

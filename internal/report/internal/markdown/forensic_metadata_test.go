@@ -75,7 +75,15 @@ func TestToolProvenanceLineListsAllToolsAndGrypeDB(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
-	data.ToolVersions = ToolVersions{SevenZip: "23.01", Unshield: "1.5.0", Unsquashfs: "4.6"}
+	// Use realistic version strings that match what the external tools emit:
+	// 7-Zip prefixes its own name, unshield uses "Unshield version X", grype
+	// is stored as "grype <version>" by the orchestrator.
+	data.ToolVersions = ToolVersions{
+		SevenZip:   "7-Zip (z) 23.01 (x64)",
+		Unshield:   "Unshield version 1.5.0",
+		Unsquashfs: "unsquashfs version 4.6",
+		Grype:      "grype 0.74.0",
+	}
 	data.Vulnerabilities = &vulnscan.Result{
 		Requested:       true,
 		State:           vulnscan.StateCompleted,
@@ -98,9 +106,9 @@ func TestToolProvenanceLineListsAllToolsAndGrypeDB(t *testing.T) {
 	out := buf.String()
 
 	for _, want := range []string{
-		"7-Zip 23.01",
-		"unshield 1.5.0",
-		"unsquashfs 4.6",
+		"7-Zip (z) 23.01",
+		"Unshield version 1.5.0",
+		"unsquashfs version 4.6",
 		"grype 0.74.0",
 		"Grype DB: schema=`5` built=`2025-01-10T00:00:00Z` updated=`2025-01-14T00:00:00Z`",
 	} {
