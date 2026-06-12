@@ -124,6 +124,7 @@ type translations struct {
 	vulnTableEPSS                          string
 	vulnTableRisk                          string
 	vulnTableKEV                           string
+	vulnTableDescription                   string
 	vulnStatusFoundTemplate                string
 	vulnStatusNotAssessableUnavailable     string
 	vulnStatusNotAssessableNoID            string
