@@ -436,9 +436,12 @@
       "required": [
         "summary",
         "extractionLog",
+        "scans",
         "vulnerabilities",
         "issues",
-        "componentIndex"
+        "componentIndex",
+        "policyDecisions",
+        "suppressionGroups"
       ],
       "properties": {
         "summary": {
@@ -495,6 +498,27 @@
         "scanNoPackagePaths": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "rootComponent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bomRef": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "configProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
         },
             "componentIndexStats": {
               "type": "object",
@@ -595,6 +619,40 @@
               },
               "depth": {
                 "type": "integer"
+              },
+              "sandboxUsed": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "string"
+              },
+              "archiveMeta": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "methods": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "hasEncryptedItem": {
+                    "type": "boolean"
+                  },
+                  "physicalSize": {
+                    "type": "string"
+                  },
+                  "headersSize": {
+                    "type": "string"
+                  },
+                  "solid": {
+                    "type": "string"
+                  },
+                  "blocks": {
+                    "type": "string"
+                  }
+                }
               }
             }
           }
@@ -744,6 +802,9 @@
               "occurrenceCount": {
                 "type": "integer"
               },
+              "vulnUniqueCount": {
+                "type": "integer"
+              },
               "occurrences": {
                 "type": "array",
                 "items": {
@@ -793,10 +854,95 @@
                     },
                     "foundBy": {
                       "type": "string"
+                    },
+                    "vulnCount": {
+                      "type": "integer"
                     }
                   }
                 }
               }
+            }
+          }
+        },
+        "scans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "nodePath",
+              "componentCount"
+            ],
+            "properties": {
+              "sourceRefs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "nodePath": {
+                "type": "string"
+              },
+              "componentCount": {
+                "type": "integer"
+              },
+              "evidencePaths": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "policyDecisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "trigger",
+              "action"
+            ],
+            "properties": {
+              "sourceRef": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "string"
+              },
+              "nodePath": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "suppressionGroups": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fsArtifacts",
+            "lowValue",
+            "weakDups",
+            "purlDups"
+          ],
+          "properties": {
+            "fsArtifacts": {
+              "$ref": "#/$defs/suppressionRowArray"
+            },
+            "lowValue": {
+              "$ref": "#/$defs/suppressionRowArray"
+            },
+            "weakDups": {
+              "$ref": "#/$defs/suppressionRowArray"
+            },
+            "purlDups": {
+              "$ref": "#/$defs/suppressionRowArray"
             }
           }
         }
@@ -909,6 +1055,44 @@
     }
   },
   "$defs": {
+    "suppressionRowArray": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deliveryPath",
+          "componentName",
+          "resolutionStatus"
+        ],
+        "properties": {
+          "sourceRef": {
+            "type": "string"
+          },
+          "deliveryPath": {
+            "type": "string"
+          },
+          "componentName": {
+            "type": "string"
+          },
+          "keptComponentName": {
+            "type": "string"
+          },
+          "keptComponentId": {
+            "type": "string"
+          },
+          "keptAnchorId": {
+            "type": "string"
+          },
+          "resolutionStatus": {
+            "type": "string"
+          },
+          "resolutionReason": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "entityArray": {
       "type": "array",
       "items": {

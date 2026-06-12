@@ -10,7 +10,8 @@ import (
 )
 
 // TestOrderingContractVulnerabilities verifies that HTML vulnerability rows are
-// sorted by vulnerability ID and then bom-ref.
+// sorted by severity rank and then by package name as produced by the JSON v2
+// projection layer consumed by the HTML renderer.
 func TestOrderingContractVulnerabilities(t *testing.T) {
 	t.Parallel()
 
@@ -33,11 +34,12 @@ func TestOrderingContractVulnerabilities(t *testing.T) {
 		},
 	}
 
-	rows := collectVulns(data)
+	rows := buildReportData(data, "en").Vulns
 	got := make([]string, 0, len(rows))
 	for i := range rows {
 		got = append(got, rows[i].ID+"|"+rows[i].Package)
 	}
+	// JSON v2 projection sorts by severity rank (critical < high < medium), then name.
 	want := []string{
 		"CVE-2026-0001|alpha",
 		"CVE-2026-0001|zlib",

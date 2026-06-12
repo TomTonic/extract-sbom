@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
-	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
 // writeScanNoPackageIdentitiesSubsection writes scan targets where Syft
@@ -31,20 +31,15 @@ func writeScanNoPackageIdentitiesSubsection(w io.Writer, proj reportjson.Project
 	}
 }
 
-// uniqueSortedPaths removes empty/duplicate paths and returns a sorted copy.
-func uniqueSortedPaths(paths []string) []string {
-	return paths
-}
-
 // writeExtensionFilterSection documents which file extensions were configured
 // to be skipped and which logical paths were affected.
-func writeExtensionFilterSection(w io.Writer, data ReportData, proj reportjson.ProjectionsV2, t translations) {
+func writeExtensionFilterSection(w io.Writer, skipExtensions []string, proj reportjson.ProjectionsV2, t translations) {
 	fmt.Fprintln(w, t.extensionFilterLead)
 	fmt.Fprintln(w)
 
-	if len(data.Config.SkipExtensions) > 0 {
-		extensions := make([]string, len(data.Config.SkipExtensions))
-		copy(extensions, data.Config.SkipExtensions)
+	if len(skipExtensions) > 0 {
+		extensions := make([]string, len(skipExtensions))
+		copy(extensions, skipExtensions)
 		sort.Strings(extensions)
 		quoted := make([]string, len(extensions))
 		for i, e := range extensions {
@@ -71,8 +66,8 @@ func writeExtensionFilterSection(w io.Writer, data ReportData, proj reportjson.P
 }
 
 // writeComponentOccurrenceIndex renders the appendix index grouped by package
-// (name+version) and lists concrete component proj.ComponentIndex underneath.
-func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, v *vulnscan.Result, t translations) {
+// (name+version) and lists concrete component occurrences underneath.
+func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	fmt.Fprintf(w, "%s\n\n", t.componentIndexLead)
 
 	if len(proj.ComponentIndex) == 0 {
@@ -81,7 +76,6 @@ func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, v
 	}
 	groups := proj.ComponentIndex
 
-	// Split package groups into with-PURL and without-PURL sections.
 	var withPURL, withoutPURL []reportjson.PackageOccurrenceGroupV2
 	for i := range groups {
 		if len(groups[i].PURLs) > 0 {
@@ -91,29 +85,30 @@ func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, v
 		}
 	}
 
-	// Write with-PURL subsection.
+	enrichmentDone := proj.Summary.VulnerabilityEnrichmentState == "completed"
+
 	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithPURLSubsection, proj.Summary.ComponentIndexStats.IndexedWithPURL), anchorComponentsWithPURL)
 	if len(withPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
 		for i := range withPURL {
-			writePackageGroupEntry(w, withPURL[i], v, t)
+			writePackageGroupEntry(w, withPURL[i], t, enrichmentDone)
 		}
 	}
 
-	// Write without-PURL subsection.
 	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithoutPURLSubsection, proj.Summary.ComponentIndexStats.IndexedWithoutPURL), anchorComponentsWithoutPURL)
 	if len(withoutPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
 	} else {
 		for i := range withoutPURL {
-			writePackageGroupEntry(w, withoutPURL[i], v, t)
+			writePackageGroupEntry(w, withoutPURL[i], t, enrichmentDone)
 		}
 	}
 }
 
-// writePackageGroupEntry renders one package group and its nested proj.ComponentIndex.
-func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroupV2, v *vulnscan.Result, t translations) {
+// writePackageGroupEntry renders one package group and its nested occurrences.
+// enrichmentDone controls whether vulnerability status lines are emitted.
+func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroupV2, t translations, enrichmentDone bool) {
 	title := strings.TrimSpace(group.PackageName)
 	if title == "" {
 		title = t.noneValue
@@ -132,19 +127,33 @@ func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroup
 		}
 	}
 
-	sharedVulnLines, perOccurrenceVulnLines := []string{}, make(map[string][]string)
+	perOccurrenceVuln := false
+	if enrichmentDone && len(group.Occurrences) > 0 {
+		allFound, anyFound := true, false
+		for _, occ := range group.Occurrences {
+			if occ.VulnCount > 0 {
+				anyFound = true
+			} else {
+				allFound = false
+			}
+		}
+		if allFound && anyFound {
+			fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.vulnStatusFoundTemplate, group.VulnUniqueCount))
+		} else if anyFound {
+			perOccurrenceVuln = true
+		}
+	}
 
 	for i := range group.Occurrences {
-		writeOccurrenceListEntry(w, group.Occurrences[i], t, perOccurrenceVulnLines[group.Occurrences[i].ObjectID])
+		writeOccurrenceListEntry(w, group.Occurrences[i], t, perOccurrenceVuln)
 	}
-	writeVulnerabilityLines(w, sharedVulnLines, "")
 	fmt.Fprintln(w)
 }
 
-// writeOccurrenceListEntry renders one normalized occurrence as nested list
-// item inside a package-group entry.
-func writeOccurrenceListEntry(w io.Writer, occ reportjson.OccurrenceRowV2, t translations, vulnLines []string) {
-	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, occ.ObjectID, occ.ObjectID)
+// writeOccurrenceListEntry renders one normalized occurrence as a nested list
+// item inside a package-group entry. renderVulnStatus controls per-occurrence vuln lines.
+func writeOccurrenceListEntry(w io.Writer, occ reportjson.OccurrenceRowV2, t translations, renderVulnStatus bool) {
+	fmt.Fprintf(w, "- %s: <a id=\"%s\"></a>`%s`\n", t.componentIDLabel, domain.OccurrenceAnchorID(occ.ObjectID), occ.ObjectID)
 	for _, dp := range occ.DeliveryPaths {
 		fmt.Fprintf(w, "  - %s: `%s`\n", t.deliveryPath, dp)
 	}
@@ -161,12 +170,12 @@ func writeOccurrenceListEntry(w io.Writer, occ reportjson.OccurrenceRowV2, t tra
 	if occ.FoundBy != "" {
 		fmt.Fprintf(w, "  - %s: `%s`\n", t.foundBy, occ.FoundBy)
 	}
-	writeVulnerabilityLines(w, vulnLines, "  ")
-}
-
-func writeVulnerabilityLines(w io.Writer, lines []string, indent string) {
-	for _, line := range lines {
-		fmt.Fprintf(w, "%s%s\n", indent, line)
+	if renderVulnStatus {
+		if occ.VulnCount > 0 {
+			fmt.Fprintf(w, "  - %s\n", fmt.Sprintf(t.vulnStatusFoundTemplate, occ.VulnCount))
+		} else {
+			fmt.Fprintf(w, "  - %s\n", t.vulnStatusNone)
+		}
 	}
 }
 

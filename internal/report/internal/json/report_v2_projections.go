@@ -1,12 +1,14 @@
 package json
 
 import (
-
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/TomTonic/extract-sbom/internal/assembly"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
+	"github.com/TomTonic/extract-sbom/internal/scan"
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
@@ -15,7 +17,8 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
 	occurrences, occurrenceStats := domain.CollectComponentOccurrences(data.BOM)
 	packageGroups := domain.BuildPackageOccurrenceGroups(occurrences)
 
-	componentIndexRows := buildComponentIndexProjectionRows(packageGroups, index)
+	vulnSetByBOMRef := buildVulnIDSetByBOMRef(data.Vulnerabilities)
+	componentIndexRows := buildComponentIndexProjectionRows(packageGroups, index, vulnSetByBOMRef)
 	if len(componentIndexRows) == 0 {
 		componentIndexRows = buildComponentFallbackProjectionRows(entities.Components)
 	}
@@ -50,16 +53,21 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
                 noPkgs = make([]string, 0)
         }
 
-return ProjectionsV2{
+	scanRows := buildScanProjectionRows(data.Scans, entities)
+	policyRows := buildPolicyDecisionProjectionRows(entities)
+	suppressionGroups := buildSuppressionGroupsProjection(data.Suppressions, entities.Suppressions, componentIndexRows)
+	rootComponent := buildRootComponent(data)
+
+	return ProjectionsV2{
 		Summary: ProjectionSummaryV2{
-			Nodes:                        len(entities.Nodes),
-			ScanTasks:                    len(entities.ScanTasks),
-			Components:                   len(entities.Components),
-			PackageGroups:                len(entities.PackageGroups),
-			Vulnerabilities:              len(entities.Vulnerabilities),
-			Suppressions:                 len(entities.Suppressions),
-			PolicyDecisions:              len(entities.PolicyDecisions),
-			Issues:                       len(entities.Issues),
+			Nodes:           len(entities.Nodes),
+			ScanTasks:       len(entities.ScanTasks),
+			Components:      len(entities.Components),
+			PackageGroups:   len(entities.PackageGroups),
+			Vulnerabilities: len(entities.Vulnerabilities),
+			Suppressions:    len(entities.Suppressions),
+			PolicyDecisions: len(entities.PolicyDecisions),
+			Issues:          len(entities.Issues),
 			ComponentIndexStats: ComponentIndexStatsV2{
 				TotalComponents:               occurrenceStats.TotalComponents,
 				MissingDeliveryPath:           occurrenceStats.MissingDeliveryPath,
@@ -76,13 +84,17 @@ return ProjectionsV2{
 			},
 			VulnerabilityEnrichmentState: vulnerabilityStateValue(data.Vulnerabilities),
 			VulnerabilityRequested:       vulnerabilityRequestedValue(data.Vulnerabilities),
-                        ExtensionFilteredPaths:       extPaths,
-                        ScanNoPackagePaths:           noPkgs,
+			ExtensionFilteredPaths:       extPaths,
+			ScanNoPackagePaths:           noPkgs,
+			RootComponent:                rootComponent,
 		},
-		ExtractionLog:   buildExtractionProjectionRows(data.Tree, index),
-		Vulnerabilities: buildVulnerabilityProjectionRows(data.Vulnerabilities, packageGroups, index),
-		Issues:          buildIssueProjectionRows(entities),
-		ComponentIndex:  componentIndexRows,
+		ExtractionLog:     buildExtractionProjectionRows(data.Tree, index),
+		Scans:             scanRows,
+		Vulnerabilities:   buildVulnerabilityProjectionRows(data.Vulnerabilities, packageGroups, index, bomNamesByRef(data)),
+		Issues:            buildIssueProjectionRows(entities),
+		ComponentIndex:    componentIndexRows,
+		PolicyDecisions:   policyRows,
+		SuppressionGroups: suppressionGroups,
 	}
 }
 
@@ -95,13 +107,28 @@ func buildExtractionProjectionRows(tree *extract.ExtractionNode, index entityInd
 			return
 		}
 		row := ExtractionLogRowV2{
-			SourceRefs: sourceRefsOrNil(index.nodeByPath[node.Path]),
-			Path:       node.Path,
-			Status:     node.Status.String(),
-			Format:     node.Format.Format.String(),
-			Tool:       node.Tool,
-			Detail:     node.StatusDetail,
-			Depth:      depth,
+			SourceRefs:  sourceRefsOrNil(index.nodeByPath[node.Path]),
+			Path:        node.Path,
+			Status:      node.Status.String(),
+			Format:      node.Format.Format.String(),
+			Tool:        node.Tool,
+			Detail:      node.StatusDetail,
+			Depth:       depth,
+			SandboxUsed: node.SandboxUsed,
+		}
+		if node.Duration > 0 {
+			row.Duration = node.Duration.Round(time.Millisecond).String()
+		}
+		if node.ArchiveMeta != nil {
+			row.ArchiveMeta = &ExtractionArchiveMetaV2{
+				Type:             node.ArchiveMeta.Type,
+				Methods:          append([]string(nil), node.ArchiveMeta.Methods...),
+				HasEncryptedItem: node.ArchiveMeta.HasEncryptedItem,
+				PhysicalSize:     node.ArchiveMeta.PhysicalSize,
+				HeadersSize:      node.ArchiveMeta.HeadersSize,
+				Solid:            node.ArchiveMeta.Solid,
+				Blocks:           node.ArchiveMeta.Blocks,
+			}
 		}
 		rows = append(rows, row)
 		for _, child := range node.Children {
@@ -112,8 +139,159 @@ func buildExtractionProjectionRows(tree *extract.ExtractionNode, index entityInd
 	return rows
 }
 
+// buildScanProjectionRows maps scan results into display rows.
+func buildScanProjectionRows(scans []scan.ScanResult, entities entitiesV2) []ScanRowV2 {
+	scanEntityByPath := make(map[string]string, len(entities.ScanTasks))
+	for i := range entities.ScanTasks {
+		scanEntityByPath[entities.ScanTasks[i].NodePath] = entities.ScanTasks[i].ID
+	}
+
+	rows := make([]ScanRowV2, 0, len(scans))
+	for i := range scans {
+		compCount := 0
+		if scans[i].BOM != nil && scans[i].BOM.Components != nil {
+			compCount = len(*scans[i].BOM.Components)
+		}
+		evidencePaths := scan.FlattenEvidencePaths(scans[i])
+		if evidencePaths == nil {
+			evidencePaths = []string{}
+		}
+		row := ScanRowV2{
+			SourceRefs:     sourceRefsOrNil(scanEntityByPath[scans[i].NodePath]),
+			NodePath:       scans[i].NodePath,
+			ComponentCount: compCount,
+			EvidencePaths:  evidencePaths,
+		}
+		if scans[i].Error != nil {
+			row.Error = scans[i].Error.Error()
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// buildPolicyDecisionProjectionRows converts policy decision entities into projection rows.
+func buildPolicyDecisionProjectionRows(entities entitiesV2) []PolicyDecisionRowV2 {
+	rows := make([]PolicyDecisionRowV2, 0, len(entities.PolicyDecisions))
+	for i := range entities.PolicyDecisions {
+		rows = append(rows, PolicyDecisionRowV2{
+			SourceRef: entities.PolicyDecisions[i].ID,
+			Trigger:   entities.PolicyDecisions[i].Trigger,
+			NodePath:  entities.PolicyDecisions[i].NodePath,
+			Action:    entities.PolicyDecisions[i].Action,
+			Detail:    entities.PolicyDecisions[i].Detail,
+		})
+	}
+	return rows
+}
+
+// buildSuppressionGroupsProjection groups suppression records by reason, sorts them
+// deterministically, and resolves kept-component anchors from the component index.
+func buildSuppressionGroupsProjection(records []assembly.SuppressionRecord, suppressionEntities []suppressionEntityV2, componentIndex []PackageOccurrenceGroupV2) SuppressionGroupsV2 {
+	componentToAnchor := make(map[string]string)
+	for _, group := range componentIndex {
+		for _, occ := range group.Occurrences {
+			for _, ref := range occ.SourceRefs {
+				componentToAnchor[ref] = group.AnchorID
+			}
+		}
+	}
+
+	fsArtifacts := make([]SuppressionRowV2, 0)
+	lowValue := make([]SuppressionRowV2, 0)
+	weakDups := make([]SuppressionRowV2, 0)
+	purlDups := make([]SuppressionRowV2, 0)
+
+	for i := range records {
+		var entity suppressionEntityV2
+		if i < len(suppressionEntities) {
+			entity = suppressionEntities[i]
+		}
+		row := SuppressionRowV2{
+			SourceRef:         entity.ID,
+			DeliveryPath:      records[i].DeliveryPath,
+			ComponentName:     records[i].Component.Name,
+			KeptComponentName: entity.KeptComponentName,
+			KeptComponentID:   entity.KeptComponentID,
+			KeptAnchorID:      componentToAnchor[entity.KeptComponentID],
+			ResolutionStatus:  entity.ResolutionStatus,
+			ResolutionReason:  entity.ResolutionReason,
+		}
+		switch records[i].Reason {
+		case assembly.SuppressionFSArtifact:
+			fsArtifacts = append(fsArtifacts, row)
+		case assembly.SuppressionLowValueFile:
+			lowValue = append(lowValue, row)
+		case assembly.SuppressionWeakDuplicate:
+			weakDups = append(weakDups, row)
+		case assembly.SuppressionPURLDuplicate:
+			purlDups = append(purlDups, row)
+		}
+	}
+
+	sortSuppressionRows(fsArtifacts)
+	sortSuppressionRows(lowValue)
+	sortSuppressionRows(weakDups)
+	sortSuppressionRows(purlDups)
+
+	return SuppressionGroupsV2{
+		FSArtifacts: fsArtifacts,
+		LowValue:    lowValue,
+		WeakDups:    weakDups,
+		PURLDups:    purlDups,
+	}
+}
+
+func sortSuppressionRows(rows []SuppressionRowV2) {
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].DeliveryPath != rows[j].DeliveryPath {
+			return rows[i].DeliveryPath < rows[j].DeliveryPath
+		}
+		return rows[i].ComponentName < rows[j].ComponentName
+	})
+}
+
+// buildRootComponent extracts the assembled BOM's root component metadata for projection,
+// augmented with operator-supplied config properties.
+func buildRootComponent(data ReportData) *BOMRootComponentV2 {
+	hasProps := len(data.Config.RootMetadata.Properties) > 0
+	hasBOM := data.BOM != nil && data.BOM.Metadata != nil && data.BOM.Metadata.Component != nil
+	if !hasBOM && !hasProps {
+		return nil
+	}
+	rc := &BOMRootComponentV2{}
+	if hasBOM {
+		comp := data.BOM.Metadata.Component
+		rc.BOMRef = comp.BOMRef
+		rc.Name = comp.Name
+		rc.Version = comp.Version
+	}
+	if hasProps {
+		rc.ConfigProperties = make(map[string]string, len(data.Config.RootMetadata.Properties))
+		for k, v := range data.Config.RootMetadata.Properties {
+			rc.ConfigProperties[k] = v
+		}
+	}
+	return rc
+}
+
+// bomNamesByRef builds a BOMRef→Name lookup from the assembled BOM for use as a
+// fallback when a component doesn't appear in the occurrence index (e.g. missing delivery path).
+func bomNamesByRef(data ReportData) map[string]string {
+	if data.BOM == nil || data.BOM.Components == nil {
+		return nil
+	}
+	m := make(map[string]string, len(*data.BOM.Components))
+	for _, c := range *data.BOM.Components {
+		if c.BOMRef != "" {
+			m[c.BOMRef] = c.Name
+		}
+	}
+	return m
+}
+
 // buildVulnerabilityProjectionRows builds highly grouped and enriched vulnerability rows.
-func buildVulnerabilityProjectionRows(v *vulnscan.Result, packageGroups []domain.PackageOccurrenceGroup, index entityIndexV2) []VulnerabilityRowV2 {
+func buildVulnerabilityProjectionRows(v *vulnscan.Result, packageGroups []domain.PackageOccurrenceGroup, index entityIndexV2, bomNames map[string]string) []VulnerabilityRowV2 {
 	if v == nil || len(v.MatchesByBOMRef) == 0 {
 		return []VulnerabilityRowV2{}
 	}
@@ -136,6 +314,9 @@ func buildVulnerabilityProjectionRows(v *vulnscan.Result, packageGroups []domain
 	for compID, matches := range v.MatchesByBOMRef {
 		occ := byID[compID]
 		packageName := strings.TrimSpace(occ.PackageName)
+		if packageName == "" {
+			packageName = strings.TrimSpace(bomNames[compID])
+		}
 		packageVersion := strings.TrimSpace(occ.Version)
 		packageAnchorID := anchorByOccurrence[compID]
 		for i := range matches {
@@ -266,26 +447,49 @@ func buildIssueProjectionRows(entities entitiesV2) []IssueRowV2 {
 	return rows
 }
 
-// buildComponentIndexProjectionRows maps domain occurrence grouping into rows.
-func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, index entityIndexV2) []PackageOccurrenceGroupV2 {
+// buildVulnIDSetByBOMRef maps each BOMRef to the set of unique vulnerability IDs matched against it.
+func buildVulnIDSetByBOMRef(v *vulnscan.Result) map[string]map[string]struct{} {
+	if v == nil || len(v.MatchesByBOMRef) == 0 {
+		return nil
+	}
+	m := make(map[string]map[string]struct{}, len(v.MatchesByBOMRef))
+	for ref, matches := range v.MatchesByBOMRef {
+		set := make(map[string]struct{}, len(matches))
+		for i := range matches {
+			set[matches[i].VulnerabilityID] = struct{}{}
+		}
+		m[ref] = set
+	}
+	return m
+}
+
+// buildComponentIndexProjectionRows maps domain occurrence grouping into rows,
+// annotating each occurrence with its vulnerability count.
+func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, index entityIndexV2, vulnSetByBOMRef map[string]map[string]struct{}) []PackageOccurrenceGroupV2 {
 	rows := make([]PackageOccurrenceGroupV2, 0, len(groups))
 	for i := range groups {
 		groupRefs := make([]string, 0, len(groups[i].Occurrences))
 		occRows := make([]OccurrenceRowV2, 0, len(groups[i].Occurrences))
+		groupUniqueIDs := make(map[string]struct{})
 
 		for j := range groups[i].Occurrences {
-			compID := index.componentByRef[groups[i].Occurrences[j].ObjectID]
+			bomRef := groups[i].Occurrences[j].ObjectID
+			compID := index.componentByRef[bomRef]
 			if compID != "" {
 				groupRefs = append(groupRefs, compID)
 			}
+			vulnCount := len(vulnSetByBOMRef[bomRef])
+			for id := range vulnSetByBOMRef[bomRef] {
+				groupUniqueIDs[id] = struct{}{}
+			}
 			occRows = append(occRows, OccurrenceRowV2{
-				SourceRefs: sourceRefsOrNil(compID),
-
+				SourceRefs:     sourceRefsOrNil(compID),
 				ObjectID:       groups[i].Occurrences[j].ObjectID,
 				DeliveryPaths:  groups[i].Occurrences[j].DeliveryPaths,
 				EvidencePaths:  groups[i].Occurrences[j].EvidencePaths,
 				EvidenceSource: groups[i].Occurrences[j].EvidenceSource,
 				FoundBy:        groups[i].Occurrences[j].FoundBy,
+				VulnCount:      vulnCount,
 			})
 		}
 		groupRefs = domain.SortedUniqueStrings(groupRefs)
@@ -296,6 +500,7 @@ func buildComponentIndexProjectionRows(groups []domain.PackageOccurrenceGroup, i
 			Version:         groups[i].Version,
 			PURLs:           groups[i].PURLs,
 			OccurrenceCount: len(groups[i].Occurrences),
+			VulnUniqueCount: len(groupUniqueIDs),
 			Occurrences:     occRows,
 		})
 	}

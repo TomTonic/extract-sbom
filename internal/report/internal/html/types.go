@@ -75,18 +75,6 @@ type htmlNode struct {
 	Detail string
 }
 
-type extractionStats struct {
-	Total            int
-	Extracted        int
-	Failed           int
-	Skipped          int
-	ToolMissing      int
-	SecurityBlocked  int
-	Pending          int
-	SyftNative       int
-	Other            int
-	TotalFileEntries int
-}
 
 const htmlReportCSS = `
 body{font-family:system-ui,sans-serif;margin:0;padding:1rem 2rem;color:#1a1a1a;background:#fff}

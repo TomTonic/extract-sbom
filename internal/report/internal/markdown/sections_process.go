@@ -5,17 +5,15 @@ import (
 	"io"
 	"strings"
 
-	"github.com/TomTonic/extract-sbom/internal/policy"
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
 
 // writePolicyDecisions lists policy-engine decisions captured during runtime.
-func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translations) {
+func writePolicyDecisions(w io.Writer, decisions []reportjson.PolicyDecisionRowV2, t translations) {
 	if len(decisions) == 0 {
 		fmt.Fprintf(w, "- %s\n", t.noPolicyDecisions)
 		return
 	}
-
 	for _, d := range decisions {
 		fmt.Fprintf(w, "- **%s** %s `%s`: %s -> %s\n", d.Trigger, t.policyDecisionAt, d.NodePath, d.Detail, d.Action)
 	}
@@ -23,40 +21,91 @@ func writePolicyDecisions(w io.Writer, decisions []policy.Decision, t translatio
 
 // writeProcessingIssues prints a bounded table of pipeline/extraction/scan
 // issues for auditable troubleshooting.
-func writeProcessingIssues(w io.Writer, data ReportData, proj reportjson.ProjectionsV2, t translations) {
-        fmt.Fprintf(w, "- %s: %d\n", t.processingPipelineLabel, len(proj.Issues))
-        
-        var extractionIssues []reportjson.ExtractionLogRowV2
-        var extFailed, extBlocked, extMissing int
-        for _, row := range proj.ExtractionLog {
-        	if row.Status != "success" && row.Status != "skipped" {
-        		extractionIssues = append(extractionIssues, row)
-        		switch row.Status {
-        		case "failed": extFailed++
-        		case "blocked": extBlocked++
-        		case "tool_missing": extMissing++
-        		}
-        	}
-        }
-        fmt.Fprintf(w, "- %s: %d\n", t.processingExtractionFailedLabel, extFailed)
-        fmt.Fprintf(w, "- %s: %d\n", t.processingSecurityBlockedLabel, extBlocked)
-        fmt.Fprintf(w, "- %s: %d\n", t.processingToolMissingLabel, extMissing)
+func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
+	var extractionIssues []reportjson.ExtractionLogRowV2
+	for _, row := range proj.ExtractionLog {
+		switch row.Status {
+		case "failed", "security-blocked", "tool-missing":
+			extractionIssues = append(extractionIssues, row)
+		}
+	}
 
-        if len(proj.Issues) == 0 && len(extractionIssues) == 0 {
-                fmt.Fprintf(w, "\n- %s\n", t.noProcessingIssues)
-                return
-        }
+	if len(proj.Issues) == 0 && len(extractionIssues) == 0 {
+		fmt.Fprintf(w, "- %s\n", t.noProcessingIssues)
+		return
+	}
 
-        fmt.Fprintln(w)
-        fmt.Fprintf(w, "| Stage | Message |\n|---|---|\n")
-        
-        for _, issue := range proj.Issues {
-        	fmt.Fprintf(w, "| %s | %s |\n", escapeMarkdownCell(issue.Stage), escapeMarkdownCell(issue.Message))
-        }
-        
-        for _, extIssue := range extractionIssues {
-        	fmt.Fprintf(w, "| extraction | %s (%s) %s |\n", escapeMarkdownCell(extIssue.Path), escapeMarkdownCell(extIssue.Status), escapeMarkdownCell(extIssue.Detail))
-        }
+	fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		t.processingSourceHeader, t.processingLocationHeader, t.processingClassHeader,
+		t.processingStatusHeader, t.processingDetectedHeader, t.processingToolHeader,
+		t.processingArchiveTypeHeader, t.processingArchiveMethodHeader,
+		t.processingEncryptedHeader, t.processingPhysicalSizeHeader, t.processingDetailHeader)
+	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|---|---|---|")
+
+	for _, issue := range proj.Issues {
+		fmt.Fprintf(w, "| %s | %s | %s | - | - | - | - | - | - | - | %s |\n",
+			escapeMarkdownCell(t.processingPipelineLabel),
+			escapeMarkdownCell(issue.Stage),
+			escapeMarkdownCell(t.processingPipelineLabel+"-error"),
+			escapeMarkdownCell(issue.Message))
+	}
+	for _, row := range extractionIssues {
+		class := extractionStatusClass(row.Status, t)
+		archiveType, archiveMethod, encrypted, physicalSize := extractionArchiveCols(row)
+		detected := ""
+		if row.Depth > 0 {
+			detected = fmt.Sprintf("%d", row.Depth)
+		}
+		fmt.Fprintf(w, "| extraction | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			escapeMarkdownCell(row.Path),
+			escapeMarkdownCell(class),
+			escapeMarkdownCell(row.ResolutionStatus),
+			escapeMarkdownCell(detected),
+			escapeMarkdownCell(row.Tool),
+			escapeMarkdownCell(archiveType),
+			escapeMarkdownCell(archiveMethod),
+			escapeMarkdownCell(encrypted),
+			escapeMarkdownCell(physicalSize),
+			escapeMarkdownCell(row.Detail))
+	}
+}
+
+func extractionStatusClass(status string, t translations) string {
+	switch status {
+	case "failed":
+		return t.processingExtractionFailedLabel
+	case "security-blocked":
+		return t.processingSecurityBlockedLabel
+	case "tool-missing":
+		return t.processingToolMissingLabel
+	default:
+		return status
+	}
+}
+
+func extractionArchiveCols(row reportjson.ExtractionLogRowV2) (archiveType, archiveMethod, encrypted, physicalSize string) {
+	if row.ArchiveMeta == nil {
+		return "-", "-", "-", "-"
+	}
+	m := row.ArchiveMeta
+	archiveType = m.Type
+	if archiveType == "" {
+		archiveType = "-"
+	}
+	archiveMethod = strings.Join(m.Methods, ", ")
+	if archiveMethod == "" {
+		archiveMethod = "-"
+	}
+	if m.HasEncryptedItem {
+		encrypted = "true"
+	} else {
+		encrypted = "false"
+	}
+	physicalSize = m.PhysicalSize
+	if physicalSize == "" {
+		physicalSize = "-"
+	}
+	return
 }
 
 func escapeMarkdownCell(value string) string {

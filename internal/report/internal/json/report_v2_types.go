@@ -329,11 +329,14 @@ type entitiesV2 struct {
 // ProjectionsV2 holds renderer-oriented view models pre-computed from the entity layer.
 // Renderers should consume these projections instead of processing raw or entity data directly.
 type ProjectionsV2 struct {
-	Summary         ProjectionSummaryV2        `json:"summary"`
-	ExtractionLog   []ExtractionLogRowV2       `json:"extractionLog"`
-	Vulnerabilities []VulnerabilityRowV2       `json:"vulnerabilities"`
-	Issues          []IssueRowV2               `json:"issues"`
-	ComponentIndex  []PackageOccurrenceGroupV2 `json:"componentIndex"`
+	Summary          ProjectionSummaryV2        `json:"summary"`
+	ExtractionLog    []ExtractionLogRowV2       `json:"extractionLog"`
+	Scans            []ScanRowV2                `json:"scans"`
+	Vulnerabilities  []VulnerabilityRowV2       `json:"vulnerabilities"`
+	Issues           []IssueRowV2               `json:"issues"`
+	ComponentIndex   []PackageOccurrenceGroupV2 `json:"componentIndex"`
+	PolicyDecisions  []PolicyDecisionRowV2      `json:"policyDecisions"`
+	SuppressionGroups SuppressionGroupsV2       `json:"suppressionGroups"`
 }
 
 // ProjectionSummaryV2 holds strongly-typed aggregated counters.
@@ -350,8 +353,59 @@ type ProjectionSummaryV2 struct {
 	ExtensionFilteredPaths []string              `json:"extensionFilteredPaths"`
 	ScanNoPackagePaths     []string              `json:"scanNoPackagePaths"`
 
-	VulnerabilityEnrichmentState string `json:"vulnerabilityEnrichmentState"`
-	VulnerabilityRequested       bool   `json:"vulnerabilityRequested"`
+	VulnerabilityEnrichmentState string              `json:"vulnerabilityEnrichmentState"`
+	VulnerabilityRequested       bool                `json:"vulnerabilityRequested"`
+	RootComponent                *BOMRootComponentV2 `json:"rootComponent,omitempty"`
+}
+
+// ScanRowV2 is one scan-task projection row with component count and flattened evidence paths.
+type ScanRowV2 struct {
+	SourceRefs     []string `json:"sourceRefs,omitempty"`
+	NodePath       string   `json:"nodePath"`
+	ComponentCount int      `json:"componentCount"`
+	EvidencePaths  []string `json:"evidencePaths,omitempty"`
+	Error          string   `json:"error,omitempty"`
+}
+
+// PolicyDecisionRowV2 is one policy-decision projection row.
+type PolicyDecisionRowV2 struct {
+	SourceRef string `json:"sourceRef,omitempty"`
+	Trigger   string `json:"trigger"`
+	NodePath  string `json:"nodePath,omitempty"`
+	Action    string `json:"action"`
+	Detail    string `json:"detail,omitempty"`
+}
+
+// SuppressionRowV2 is one suppressed-component projection row with resolved kept-component info.
+// KeptAnchorID links to the kept component's entry in the component index when resolution succeeded.
+type SuppressionRowV2 struct {
+	SourceRef         string `json:"sourceRef,omitempty"`
+	DeliveryPath      string `json:"deliveryPath"`
+	ComponentName     string `json:"componentName"`
+	KeptComponentName string `json:"keptComponentName,omitempty"`
+	KeptComponentID   string `json:"keptComponentId,omitempty"`
+	KeptAnchorID      string `json:"keptAnchorId,omitempty"`
+	ResolutionStatus  string `json:"resolutionStatus"`
+	ResolutionReason  string `json:"resolutionReason,omitempty"`
+}
+
+// SuppressionGroupsV2 holds suppression rows pre-grouped by suppression reason.
+// Rows within each group are sorted deterministically by delivery path then component name.
+type SuppressionGroupsV2 struct {
+	FSArtifacts []SuppressionRowV2 `json:"fsArtifacts"`
+	LowValue    []SuppressionRowV2 `json:"lowValue"`
+	WeakDups    []SuppressionRowV2 `json:"weakDups"`
+	PURLDups    []SuppressionRowV2 `json:"purlDups"`
+}
+
+// BOMRootComponentV2 holds derived root-component metadata from the assembled BOM
+// and operator-supplied config properties. BOM fields come from the CycloneDX metadata
+// component; ConfigProperties carries the operator key/value pairs from the config.
+type BOMRootComponentV2 struct {
+	BOMRef           string            `json:"bomRef,omitempty"`
+	Name             string            `json:"name,omitempty"`
+	Version          string            `json:"version,omitempty"`
+	ConfigProperties map[string]string `json:"configProperties,omitempty"`
 }
 
 // ComponentIndexStatsV2 holds strongly-typed component index statistics.
@@ -370,18 +424,33 @@ type ComponentIndexStatsV2 struct {
 	IndexedWithoutEvidence        int `json:"indexedWithoutEvidence"`
 }
 
+// ExtractionArchiveMetaV2 holds best-effort archive inspection metadata from 7-Zip.
+// All fields are optional; absent fields indicate the metadata was not available.
+type ExtractionArchiveMetaV2 struct {
+	Type             string   `json:"type,omitempty"`
+	Methods          []string `json:"methods,omitempty"`
+	HasEncryptedItem bool     `json:"hasEncryptedItem,omitempty"`
+	PhysicalSize     string   `json:"physicalSize,omitempty"`
+	HeadersSize      string   `json:"headersSize,omitempty"`
+	Solid            string   `json:"solid,omitempty"`
+	Blocks           string   `json:"blocks,omitempty"`
+}
+
 // ExtractionLogRowV2 represents a single extraction event in the log.
 type ExtractionLogRowV2 struct {
 	SourceRefs       []string `json:"sourceRefs,omitempty"`
 	ResolutionStatus string   `json:"resolutionStatus,omitempty"`
 	ResolutionReason string   `json:"resolutionReason,omitempty"`
 
-	Path   string `json:"path"`
-	Status string `json:"status"`
-	Format string `json:"format"`
-	Tool   string `json:"tool"`
-	Detail string `json:"detail"`
-	Depth  int    `json:"depth"`
+	Path        string                    `json:"path"`
+	Status      string                    `json:"status"`
+	Format      string                    `json:"format"`
+	Tool        string                    `json:"tool"`
+	Detail      string                    `json:"detail"`
+	Depth       int                       `json:"depth"`
+	SandboxUsed string                    `json:"sandboxUsed,omitempty"`
+	Duration    string                    `json:"duration,omitempty"`
+	ArchiveMeta *ExtractionArchiveMetaV2  `json:"archiveMeta,omitempty"`
 }
 
 // VulnerabilityRowV2 represents an aggregated vulnerability display row.
@@ -428,6 +497,7 @@ type PackageOccurrenceGroupV2 struct {
 	Version         string            `json:"version"`
 	PURLs           []string          `json:"purls"`
 	OccurrenceCount int               `json:"occurrenceCount"`
+	VulnUniqueCount int               `json:"vulnUniqueCount"`
 	Occurrences     []OccurrenceRowV2 `json:"occurrences"`
 }
 
@@ -442,6 +512,7 @@ type OccurrenceRowV2 struct {
 	EvidencePaths  []string `json:"evidencePaths"`
 	EvidenceSource string   `json:"evidenceSource"`
 	FoundBy        string   `json:"foundBy"`
+	VulnCount      int      `json:"vulnCount"`
 }
 
 // integrityV2 holds the results of cross-reference validation over the entity and projection layers.

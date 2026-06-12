@@ -10,28 +10,6 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/vulnscan"
 )
 
-func TestUniqueSortedPathsEmpty(t *testing.T) {
-	t.Parallel()
-	if got := uniqueSortedPaths(nil); got != nil {
-		t.Fatalf("uniqueSortedPaths(nil) = %v, want nil", got)
-	}
-}
-
-func TestUniqueSortedPathsDedupsAndSorts(t *testing.T) {
-	t.Parallel()
-	input := []string{"b/path", "a/path", "", "b/path", "c/path", ""}
-	got := uniqueSortedPaths(input)
-	want := []string{"a/path", "b/path", "c/path"}
-	if len(got) != len(want) {
-		t.Fatalf("len = %d, want %d", len(got), len(want))
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("[%d] = %q, want %q", i, got[i], want[i])
-		}
-	}
-}
-
 // TestGenerateHumanComponentIndexUsesFinalBOMRefs verifies that the human
 // report exposes final component occurrence IDs from the assembled SBOM and
 // orders entries by delivery path rather than by object ID.
