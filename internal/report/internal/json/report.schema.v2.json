@@ -491,6 +491,18 @@
             "vulnerabilityRequested": {
               "type": "boolean"
             },
+            "archiveCount": {
+              "type": "integer"
+            },
+            "fileCount": {
+              "type": "integer"
+            },
+            "affectedPackageCount": {
+              "type": "integer"
+            },
+            "uniqueVulnerabilityCount": {
+              "type": "integer"
+            },
         "extensionFilteredPaths": {
           "type": "array",
           "items": { "type": "string" }

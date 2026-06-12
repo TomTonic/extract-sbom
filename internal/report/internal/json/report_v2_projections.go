@@ -23,40 +23,42 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
 		componentIndexRows = buildComponentFallbackProjectionRows(entities.Components)
 	}
 
-	        extPaths := make([]string, 0)
-        var walkTree func(node *extract.ExtractionNode)
-        walkTree = func(node *extract.ExtractionNode) {
-                if node == nil {
-                        return
-                }
-                if node.Status == extract.StatusSkipped && strings.Contains(strings.ToLower(node.StatusDetail), "extension") {
-                        extPaths = append(extPaths, node.Path)
-                }
-                for _, child := range node.Children {
-                        walkTree(child)
-                }
-        }
-        walkTree(data.Tree)
-        extPaths = domain.SortedUniqueNonEmptyStrings(extPaths)
-        if extPaths == nil {
-                extPaths = make([]string, 0)
-        }
+	extPaths := make([]string, 0)
+	var walkTree func(node *extract.ExtractionNode)
+	walkTree = func(node *extract.ExtractionNode) {
+		if node == nil {
+			return
+		}
+		if node.Status == extract.StatusSkipped && strings.Contains(strings.ToLower(node.StatusDetail), "extension") {
+			extPaths = append(extPaths, node.Path)
+		}
+		for _, child := range node.Children {
+			walkTree(child)
+		}
+	}
+	walkTree(data.Tree)
+	extPaths = domain.SortedUniqueNonEmptyStrings(extPaths)
+	if extPaths == nil {
+		extPaths = make([]string, 0)
+	}
 
-        noPkgs := make([]string, 0)
-        for _, sr := range data.Scans {
-                if sr.BOM != nil && sr.BOM.Components != nil && len(*sr.BOM.Components) == 0 {
-                        noPkgs = append(noPkgs, sr.NodePath)
-                }
-        }
-        noPkgs = domain.SortedUniqueNonEmptyStrings(noPkgs)
-        if noPkgs == nil {
-                noPkgs = make([]string, 0)
-        }
+	noPkgs := make([]string, 0)
+	for _, sr := range data.Scans {
+		if sr.BOM != nil && sr.BOM.Components != nil && len(*sr.BOM.Components) == 0 {
+			noPkgs = append(noPkgs, sr.NodePath)
+		}
+	}
+	noPkgs = domain.SortedUniqueNonEmptyStrings(noPkgs)
+	if noPkgs == nil {
+		noPkgs = make([]string, 0)
+	}
 
 	scanRows := buildScanProjectionRows(data.Scans, entities)
 	policyRows := buildPolicyDecisionProjectionRows(entities)
 	suppressionGroups := buildSuppressionGroupsProjection(data.Suppressions, entities.Suppressions, componentIndexRows)
 	rootComponent := buildRootComponent(data)
+	archiveCount, fileCount := countTreeArchivesAndFiles(data.Tree)
+	affectedPackages, uniqueVulns := countVulnerabilityCoverage(data.Vulnerabilities)
 
 	return ProjectionsV2{
 		Summary: ProjectionSummaryV2{
@@ -87,6 +89,10 @@ func buildProjectionsV2(data ReportData, entities entitiesV2, index entityIndexV
 			ExtensionFilteredPaths:       extPaths,
 			ScanNoPackagePaths:           noPkgs,
 			RootComponent:                rootComponent,
+			ArchiveCount:                 archiveCount,
+			FileCount:                    fileCount,
+			AffectedPackageCount:         affectedPackages,
+			UniqueVulnerabilityCount:     uniqueVulns,
 		},
 		ExtractionLog:     buildExtractionProjectionRows(data.Tree, index),
 		Scans:             scanRows,
@@ -288,6 +294,45 @@ func bomNamesByRef(data ReportData) map[string]string {
 		}
 	}
 	return m
+}
+
+// countTreeArchivesAndFiles walks the extraction tree, counting expanded
+// containers (nodes with children) as archives and leaf nodes as files.
+func countTreeArchivesAndFiles(tree *extract.ExtractionNode) (archives, files int) {
+	var walk func(node *extract.ExtractionNode)
+	walk = func(node *extract.ExtractionNode) {
+		if node == nil {
+			return
+		}
+		if len(node.Children) > 0 {
+			archives++
+		} else {
+			files++
+		}
+		for _, child := range node.Children {
+			walk(child)
+		}
+	}
+	walk(tree)
+	return archives, files
+}
+
+// countVulnerabilityCoverage returns the number of distinct components with at
+// least one match and the number of distinct vulnerability IDs across all matches.
+func countVulnerabilityCoverage(v *vulnscan.Result) (affectedPackages, uniqueVulns int) {
+	if v == nil || len(v.MatchesByBOMRef) == 0 {
+		return 0, 0
+	}
+	ids := make(map[string]struct{})
+	for _, matches := range v.MatchesByBOMRef {
+		if len(matches) > 0 {
+			affectedPackages++
+		}
+		for i := range matches {
+			ids[matches[i].VulnerabilityID] = struct{}{}
+		}
+	}
+	return affectedPackages, len(ids)
 }
 
 // buildVulnerabilityProjectionRows builds highly grouped and enriched vulnerability rows.
@@ -544,11 +589,11 @@ func buildComponentFallbackProjectionRows(components []componentEntityV2) []Pack
 			purls = append(purls, components[i].PURL)
 		}
 		rows = append(rows, PackageOccurrenceGroupV2{
-			SourceRefs:  []string{components[i].ID},
-			AnchorID:    components[i].ID,
-			PackageName: components[i].Name,
-			Version:     components[i].Version,
-			PURLs:       purls,
+			SourceRefs:      []string{components[i].ID},
+			AnchorID:        components[i].ID,
+			PackageName:     components[i].Name,
+			Version:         components[i].Version,
+			PURLs:           purls,
 			OccurrenceCount: 1, // Fallback assumption
 			Occurrences: []OccurrenceRowV2{
 				{

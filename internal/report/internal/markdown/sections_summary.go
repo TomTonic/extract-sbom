@@ -41,7 +41,11 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 
 	writeAnchoredHeading(w, 3, t.summaryAnalysisSection, anchorSummaryAnalysis)
 
-	analysis := fmt.Sprintf(t.summaryAnalysisProseTemplate, proj.Summary.Nodes, proj.Summary.ScanTasks, proj.Summary.ComponentIndexStats.IndexedComponents, proj.Summary.PackageGroups)
+	analysis := fmt.Sprintf(t.summaryAnalysisProseTemplate,
+		proj.Summary.Nodes,
+		proj.Summary.ComponentIndexStats.IndexedComponents,
+		proj.Summary.ComponentIndexStats.IndexedWithPURL,
+		proj.Summary.ComponentIndexStats.IndexedWithoutPURL)
 	fmt.Fprintf(w, "%s\n\n", analysis)
 	fmt.Fprintf(w, "%s\n", fmt.Sprintf(t.summaryAnalysisMethodRef, sectionLink(t.methodOverviewSection, anchorMethodOverview)))
 	fmt.Fprintln(w)
@@ -50,11 +54,19 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 
 	foundVulnStr := t.findingVulnNoMatches
 	if proj.Summary.Vulnerabilities > 0 {
-		foundVulnStr = fmt.Sprintf(t.findingVulnMatchesTemplate, proj.Summary.Vulnerabilities, sectionLink(t.summaryVulnSection, anchorSummaryVuln))
+		foundVulnStr = fmt.Sprintf(t.findingVulnMatchesTemplate,
+			proj.Summary.Vulnerabilities,
+			proj.Summary.AffectedPackageCount,
+			proj.Summary.UniqueVulnerabilityCount,
+			sectionLink(t.summaryVulnSection, anchorSummaryVuln))
 	}
 	fmt.Fprintf(w, "- %s\n\n", foundVulnStr)
 
-	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingDeliveryCompositionTemplate, proj.Summary.PackageGroups, proj.Summary.ComponentIndexStats.IndexedComponents))
+	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingDeliveryCompositionTemplate,
+		proj.Summary.ArchiveCount,
+		proj.Summary.FileCount,
+		proj.Summary.ComponentIndexStats.IndexedComponents,
+		proj.Summary.PackageGroups))
 
 	var extFailed, extMissing int
 	for _, r := range proj.ExtractionLog {
@@ -72,26 +84,36 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	}
 
 	if extMissing > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingToolMissingTemplate, extMissing))
+		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingToolMissingTemplate,
+			extMissing,
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"), 3)))
 	}
 
 	idx := proj.Summary.ComponentIndexStats
-	val := t.noneValue
-	if idx.IndexedComponents > 0 {
-		val = fmt.Sprintf("%d", idx.IndexedWithPURL)
-	}
-	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPURLCoverageTemplate, anchorComponentsWithPURL, val))
+	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPURLCoverageTemplate,
+		idx.IndexedWithPURL,
+		idx.IndexedComponents,
+		anchorComponentsWithPURL,
+		idx.IndexedWithoutPURL,
+		anchorComponentsWithoutPURL))
 
 	if len(proj.Summary.ScanNoPackagePaths) > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingNoPackageIdentityTemplate, sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs), len(proj.Summary.ScanNoPackagePaths)))
+		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingNoPackageIdentityTemplate,
+			len(proj.Summary.ScanNoPackagePaths),
+			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
+			joinPathExamples(proj.Summary.ScanNoPackagePaths, 3)))
 	}
 
 	if proj.Summary.PolicyDecisions > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPolicyDecisionsTemplate, sectionLink(t.policySection, anchorPolicy), proj.Summary.PolicyDecisions))
+		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPolicyDecisionsTemplate,
+			proj.Summary.PolicyDecisions,
+			sectionLink(t.policySection, anchorPolicy)))
 	}
 
 	if len(proj.Issues) > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingProcessingIssuesTemplate, sectionLink(t.processingIssuesSection, anchorProcessingErrors), len(proj.Issues)))
+		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingProcessingIssuesTemplate,
+			len(proj.Issues),
+			sectionLink(t.processingIssuesSection, anchorProcessingErrors)))
 	}
 
 	writeAnchoredHeading(w, 3, t.summaryVulnSection, anchorSummaryVuln)
