@@ -13,7 +13,6 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	sections := vm.sections
 	proj := vm.report.Projections
 	cfg := vm.report.Config
-	inp := vm.report.Input
 	sb := vm.report.Runtime.Sandbox
 
 	fmt.Fprint(w, buildHumanHeaderBlock(vm))
@@ -49,14 +48,9 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	writeSuppressionReport(w, proj.SuppressionGroups, t)
 	fmt.Fprintln(w)
 
-	// Input identification.
+	// Input identification and run provenance.
 	writeSectionHeading(w, t.inputSection, anchorInputFile)
-	fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
-	fmt.Fprintf(w, "|---|---|\n")
-	fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, inp.Filename)
-	fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, inp.Size, t.unitBytes)
-	fmt.Fprintf(w, "| SHA-256 | `%s` |\n", inp.SHA256)
-	fmt.Fprintf(w, "| SHA-512 | `%s` |\n", inp.SHA512)
+	writeInputSection(w, vm.report, t)
 	fmt.Fprintln(w)
 
 	// Configuration snapshot.
@@ -134,7 +128,7 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 func buildHumanHeaderBlock(vm markdownReportViewModel) string {
 	t := vm.translations
 	gen := vm.report.Generator
-	rt := vm.report.Runtime.ToolVersions
+	run := vm.report.Run
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", t.title)
@@ -143,10 +137,54 @@ func buildHumanHeaderBlock(vm markdownReportViewModel) string {
 	if gen.Version != "" {
 		genLink = "[" + gen.Version + "](https://github.com/TomTonic/extract-sbom/releases/tag/" + gen.Version + ")"
 	}
-	fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.reportHeaderGeneratorVersionTemplate, gen.Time, genLink, ""))
+	// "Report generated" must reflect when the analysis actually ran, not when
+	// the binary was built; "based on" carries the build revision for traceability.
+	generatedAt := run.EndTime
+	if generatedAt == "" {
+		generatedAt = gen.Time
+	}
+	fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.reportHeaderGeneratorVersionTemplate, generatedAt, genLink, emptyDash(gen.Revision)))
 
-	if rt.Grype != "" {
-		fmt.Fprintf(&b, "%s %s\n\n", t.reportHeaderToolsLabel, rt.Grype)
+	if tools := buildToolProvenanceLine(vm); tools != "" {
+		fmt.Fprintf(&b, "%s %s\n\n", t.reportHeaderToolsLabel, tools)
 	}
 	return b.String()
+}
+
+// buildToolProvenanceLine renders a single line listing the versions of every
+// external tool used, including Grype scanner and vulnerability-database
+// provenance, so the scan can be reproduced and audited.
+func buildToolProvenanceLine(vm markdownReportViewModel) string {
+	rt := vm.report.Runtime.ToolVersions
+	gp := vm.report.Projections.Summary.GrypeProvenance
+	t := vm.translations
+
+	var parts []string
+	if rt.SevenZip != "" {
+		parts = append(parts, "7-Zip "+rt.SevenZip)
+	}
+	if rt.Unshield != "" {
+		parts = append(parts, "unshield "+rt.Unshield)
+	}
+	if rt.Unsquashfs != "" {
+		parts = append(parts, "unsquashfs "+rt.Unsquashfs)
+	}
+	grype := rt.Grype
+	if grype == "" {
+		grype = gp.Version
+	}
+	if grype != "" {
+		parts = append(parts, "grype "+grype)
+	}
+
+	line := strings.Join(parts, " | ")
+	if gp.DBSchema != "" || gp.DBBuilt != "" || gp.DBUpdated != "" {
+		db := fmt.Sprintf(t.vulnGrypeDBTemplate, emptyDash(gp.DBSchema), emptyDash(gp.DBBuilt), emptyDash(gp.DBUpdated))
+		if line != "" {
+			line += " — " + db
+		} else {
+			line = db
+		}
+	}
+	return line
 }

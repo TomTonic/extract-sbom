@@ -72,7 +72,6 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 	t := vm.translations
 	typedProj := vm.report.Projections
 	typedCfg := vm.report.Config
-	typedInp := vm.report.Input
 	typedSB := vm.report.Runtime.Sandbox
 
 	render := func(fn func(io.Writer)) string {
@@ -119,12 +118,7 @@ func buildHumanTemplateSections(vm markdownReportViewModel) humanTemplateSection
 		}),
 		Input: render(func(w io.Writer) {
 			writeSectionHeading(w, t.inputSection, anchorInputFile)
-			fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
-			fmt.Fprintf(w, "|---|---|\n")
-			fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, typedInp.Filename)
-			fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, typedInp.Size, t.unitBytes)
-			fmt.Fprintf(w, "| SHA-256 | `%s` |\n", typedInp.SHA256)
-			fmt.Fprintf(w, "| SHA-512 | `%s` |\n", typedInp.SHA512)
+			writeInputSection(w, vm.report, t)
 			fmt.Fprintln(w)
 		}),
 		Configuration: render(func(w io.Writer) {

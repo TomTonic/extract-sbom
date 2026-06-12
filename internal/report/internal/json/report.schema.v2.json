@@ -503,6 +503,24 @@
             "uniqueVulnerabilityCount": {
               "type": "integer"
             },
+            "grypeProvenance": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "type": "string"
+                },
+                "dbSchema": {
+                  "type": "string"
+                },
+                "dbBuilt": {
+                  "type": "string"
+                },
+                "dbUpdated": {
+                  "type": "string"
+                }
+              }
+            },
         "extensionFilteredPaths": {
           "type": "array",
           "items": { "type": "string" }

@@ -367,6 +367,20 @@ type ProjectionSummaryV2 struct {
 	// distinct vulnerability IDs across all matches.
 	AffectedPackageCount     int `json:"affectedPackageCount"`
 	UniqueVulnerabilityCount int `json:"uniqueVulnerabilityCount"`
+
+	// GrypeProvenance records the Grype scanner and database versions used for
+	// vulnerability enrichment, for supply-chain reproducibility. Empty when
+	// enrichment did not run.
+	GrypeProvenance GrypeProvenanceV2 `json:"grypeProvenance"`
+}
+
+// GrypeProvenanceV2 captures the Grype scanner and vulnerability-database
+// provenance so a scan can be reproduced and audited.
+type GrypeProvenanceV2 struct {
+	Version   string `json:"version,omitempty"`
+	DBSchema  string `json:"dbSchema,omitempty"`
+	DBBuilt   string `json:"dbBuilt,omitempty"`
+	DBUpdated string `json:"dbUpdated,omitempty"`
 }
 
 // ScanRowV2 is one scan-task projection row with component count and flattened evidence paths.

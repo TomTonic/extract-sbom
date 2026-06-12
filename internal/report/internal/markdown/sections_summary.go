@@ -86,7 +86,7 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	if extMissing > 0 {
 		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingToolMissingTemplate,
 			extMissing,
-			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"), 3)))
+			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"))))
 	}
 
 	idx := proj.Summary.ComponentIndexStats
@@ -101,7 +101,7 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingNoPackageIdentityTemplate,
 			len(proj.Summary.ScanNoPackagePaths),
 			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
-			joinPathExamples(proj.Summary.ScanNoPackagePaths, 3)))
+			joinPathExamples(proj.Summary.ScanNoPackagePaths)))
 	}
 
 	if proj.Summary.PolicyDecisions > 0 {
