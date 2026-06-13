@@ -11,11 +11,11 @@ import (
 // writePolicyDecisions lists policy-engine decisions captured during runtime.
 func writePolicyDecisions(w io.Writer, decisions []reportjson.PolicyDecisionRowV2, t translations) {
 	if len(decisions) == 0 {
-		fmt.Fprintf(w, "- %s\n", t.noPolicyDecisions)
+		fmt.Fprintf(w, "- %s\n", t.NoPolicyDecisions)
 		return
 	}
 	for _, d := range decisions {
-		fmt.Fprintf(w, "- **%s** %s `%s`: %s -> %s\n", d.Trigger, t.policyDecisionAt, d.NodePath, d.Detail, d.Action)
+		fmt.Fprintf(w, "- **%s** %s `%s`: %s -> %s\n", d.Trigger, t.PolicyDecisionAt, d.NodePath, d.Detail, d.Action)
 	}
 }
 
@@ -31,22 +31,22 @@ func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t transla
 	}
 
 	if len(proj.Issues) == 0 && len(extractionIssues) == 0 {
-		fmt.Fprintf(w, "- %s\n", t.noProcessingIssues)
+		fmt.Fprintf(w, "- %s\n", t.NoProcessingIssues)
 		return
 	}
 
 	fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
-		t.processingSourceHeader, t.processingLocationHeader, t.processingClassHeader,
-		t.processingStatusHeader, t.processingDetectedHeader, t.processingToolHeader,
-		t.processingArchiveTypeHeader, t.processingArchiveMethodHeader,
-		t.processingEncryptedHeader, t.processingPhysicalSizeHeader, t.processingDetailHeader)
+		t.ProcessingSourceHeader, t.ProcessingLocationHeader, t.ProcessingClassHeader,
+		t.ProcessingStatusHeader, t.ProcessingDetectedHeader, t.ProcessingToolHeader,
+		t.ProcessingArchiveTypeHeader, t.ProcessingArchiveMethodHeader,
+		t.ProcessingEncryptedHeader, t.ProcessingPhysicalSizeHeader, t.ProcessingDetailHeader)
 	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|---|---|---|")
 
 	for _, issue := range proj.Issues {
 		fmt.Fprintf(w, "| %s | %s | %s | - | - | - | - | - | - | - | %s |\n",
-			escapeMarkdownCell(t.processingPipelineLabel),
+			escapeMarkdownCell(t.ProcessingPipelineLabel),
 			escapeMarkdownCell(issue.Stage),
-			escapeMarkdownCell(t.processingPipelineLabel+"-error"),
+			escapeMarkdownCell(t.ProcessingPipelineLabel+"-error"),
 			escapeMarkdownCell(issue.Message))
 	}
 	for i := range extractionIssues {
@@ -77,26 +77,26 @@ func extractionStatusClass(status, detail string, t translations) string {
 		lower := strings.ToLower(detail)
 		switch {
 		case strings.Contains(lower, "per-extraction timeout"):
-			return t.processingTimeoutLabel
+			return t.ProcessingTimeoutLabel
 		case strings.Contains(lower, "no matching password"):
-			return t.processingPasswordRequiredLabel
+			return t.ProcessingPasswordRequiredLabel
 		case strings.Contains(lower, "can not open the file as archive") ||
 			strings.Contains(lower, "is not archive") ||
 			strings.Contains(lower, "does not match the detected archive format"):
-			return t.processingFormatMismatchLabel
+			return t.ProcessingFormatMismatchLabel
 		case strings.Contains(lower, "unexpected end of archive") ||
 			strings.Contains(lower, "headers error") ||
 			strings.Contains(lower, "unconfirmed start of archive") ||
 			strings.Contains(lower, "truncated/corrupt") ||
 			strings.Contains(lower, "invalid tar header"):
-			return t.processingCorruptLabel
+			return t.ProcessingCorruptLabel
 		default:
-			return t.processingExtractionFailedLabel
+			return t.ProcessingExtractionFailedLabel
 		}
 	case "security-blocked":
-		return t.processingSecurityBlockedLabel
+		return t.ProcessingSecurityBlockedLabel
 	case "tool-missing":
-		return t.processingToolMissingLabel
+		return t.ProcessingToolMissingLabel
 	default:
 		return status
 	}

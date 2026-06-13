@@ -1,7 +1,7 @@
 package html
 
 import (
-	"reflect"
+	"strings"
 	"testing"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -34,18 +34,19 @@ func TestOrderingContractVulnerabilities(t *testing.T) {
 		},
 	}
 
-	rows := buildReportData(data, "en").Vulns
-	got := make([]string, 0, len(rows))
-	for i := range rows {
-		got = append(got, rows[i].ID+"|"+rows[i].Package)
+	rows := buildPage(data, "en").Vuln.Rows
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 vulnerability rows, got %d", len(rows))
 	}
 	// JSON v2 projection sorts by severity rank (critical < high < medium), then name.
-	want := []string{
-		"CVE-2026-0001|alpha",
-		"CVE-2026-0001|zlib",
-		"CVE-2026-0002|zlib",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("HTML vulnerability ordering = %v, want %v", got, want)
+	wantID := []string{"CVE-2026-0001", "CVE-2026-0001", "CVE-2026-0002"}
+	wantName := []string{"alpha", "zlib", "zlib"}
+	for i := range rows {
+		if rows[i].ID != wantID[i] {
+			t.Errorf("row %d ID = %q, want %q", i, rows[i].ID, wantID[i])
+		}
+		if !strings.Contains(rows[i].Name, wantName[i]) {
+			t.Errorf("row %d Name = %q, want it to contain %q", i, rows[i].Name, wantName[i])
+		}
 	}
 }

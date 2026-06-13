@@ -82,35 +82,35 @@ func writeRunScopeSection(w io.Writer, vm markdownReportViewModel) {
 	cfg := vm.report.Config
 	sb := vm.report.Runtime.Sandbox
 
-	writeAnchoredHeading(w, 2, t.runScopeSection, anchorRunScope)
-	fmt.Fprintln(w, t.runScopeLead)
+	writeAnchoredHeading(w, 2, t.RunScopeSection, anchorRunScope)
+	fmt.Fprintln(w, t.RunScopeLead)
 	fmt.Fprintln(w)
 
 	// Input & run provenance subsection.
-	writeAnchoredHeading(w, 3, t.inputSection, anchorInputFile)
+	writeAnchoredHeading(w, 3, t.InputSection, anchorInputFile)
 	writeInputSection(w, vm.report, t)
 	fmt.Fprintln(w)
 
 	// Configuration snapshot subsection.
-	writeAnchoredHeading(w, 3, t.configSection, anchorConfig)
-	fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
+	writeAnchoredHeading(w, 3, t.ConfigSection, anchorConfig)
+	fmt.Fprintf(w, "| %s | %s |\n", t.Setting, t.Value)
 	fmt.Fprintln(w, "|---|---|")
-	fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, configMarkDefault(cfg.PolicyMode, configDefaultPolicyMode))
-	fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, configMarkDefault(cfg.InterpretMode, configDefaultInterpretMode))
-	fmt.Fprintf(w, "| %s | %s |\n", t.language, configMarkDefault(cfg.Language, configDefaultLanguage))
+	fmt.Fprintf(w, "| %s | %s |\n", t.PolicyMode, configMarkDefault(cfg.PolicyMode, configDefaultPolicyMode))
+	fmt.Fprintf(w, "| %s | %s |\n", t.InterpretMode, configMarkDefault(cfg.InterpretMode, configDefaultInterpretMode))
+	fmt.Fprintf(w, "| %s | %s |\n", t.Language, configMarkDefault(cfg.Language, configDefaultLanguage))
 	fmt.Fprintf(w, "| sbom-format | %s |\n", configMarkDefault(cfg.SBOMFormat, configDefaultSBOMFormat))
 	fmt.Fprintf(w, "| report-selection | %s |\n", configMarkDefault(cfg.ReportSelection, configDefaultReportSelection))
 	fmt.Fprintf(w, "| grype | %s |\n", configMarkDefaultBool(cfg.GrypeEnabled, false))
 	fmt.Fprintf(w, "| unsafe | %s |\n", configMarkDefaultBool(cfg.Unsafe, false))
 	fmt.Fprintf(w, "| parallel-scanners | %d |\n", cfg.ParallelScanners)
-	fmt.Fprintf(w, "| %s | %s |\n", t.maxDepth, configMarkDefaultInt(cfg.Limits.MaxDepth, configDefaultMaxDepth))
-	fmt.Fprintf(w, "| %s | %s |\n", t.maxFiles, configMarkDefaultInt(cfg.Limits.MaxFiles, configDefaultMaxFiles))
-	fmt.Fprintf(w, "| %s | %s |\n", t.maxTotalSize, configMarkDefaultBytes(cfg.Limits.MaxTotalSize, configDefaultMaxTotalSize, t.unitBytes))
-	fmt.Fprintf(w, "| %s | %s |\n", t.maxEntrySize, configMarkDefaultBytes(cfg.Limits.MaxEntrySize, configDefaultMaxEntrySize, t.unitBytes))
-	fmt.Fprintf(w, "| %s | %s |\n", t.maxRatio, configMarkDefaultInt(cfg.Limits.MaxRatio, configDefaultMaxRatio))
-	fmt.Fprintf(w, "| %s | %s |\n", t.timeout, configMarkDefault(cfg.Limits.Timeout, configDefaultTimeout))
+	fmt.Fprintf(w, "| %s | %s |\n", t.MaxDepth, configMarkDefaultInt(cfg.Limits.MaxDepth, configDefaultMaxDepth))
+	fmt.Fprintf(w, "| %s | %s |\n", t.MaxFiles, configMarkDefaultInt(cfg.Limits.MaxFiles, configDefaultMaxFiles))
+	fmt.Fprintf(w, "| %s | %s |\n", t.MaxTotalSize, configMarkDefaultBytes(cfg.Limits.MaxTotalSize, configDefaultMaxTotalSize, t.UnitBytes))
+	fmt.Fprintf(w, "| %s | %s |\n", t.MaxEntrySize, configMarkDefaultBytes(cfg.Limits.MaxEntrySize, configDefaultMaxEntrySize, t.UnitBytes))
+	fmt.Fprintf(w, "| %s | %s |\n", t.MaxRatio, configMarkDefaultInt(cfg.Limits.MaxRatio, configDefaultMaxRatio))
+	fmt.Fprintf(w, "| %s | %s |\n", t.Timeout, configMarkDefault(cfg.Limits.Timeout, configDefaultTimeout))
 	skipExtsIsDefault := slices.Equal(cfg.SkipExtensions, configDefaultSkipExtensions)
-	fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(cfg.SkipExtensions, skipExtsIsDefault))
+	fmt.Fprintf(w, "| %s | %s |\n", t.SkipExtensions, configSkipExtensionsDisplay(cfg.SkipExtensions, skipExtsIsDefault))
 	fmt.Fprintln(w)
 
 	// Sandbox subsection.
@@ -125,23 +125,23 @@ func writeRunScopeSection(w io.Writer, vm markdownReportViewModel) {
 	//                                 with --unsafe and completed in passthrough.
 	//   - !BwrapFound && !Unsafe:     bwrap unavailable and not overridden; the
 	//                                 run could not extract tool-backed formats.
-	writeAnchoredHeading(w, 3, t.sandboxSection, anchorSandbox)
+	writeAnchoredHeading(w, 3, t.SandboxSection, anchorSandbox)
 	switch {
 	case sb.BwrapFound:
-		fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
+		fmt.Fprintf(w, "| %s | %s |\n", t.Setting, t.Value)
 		fmt.Fprintln(w, "|---|---|")
-		fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, sb.Name)
-		fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, sb.Available)
-		fmt.Fprintf(w, "| %s | %s |\n", t.sandboxIsolationLabel, t.sandboxActiveValue)
+		fmt.Fprintf(w, "| %s | %s |\n", t.SandboxName, sb.Name)
+		fmt.Fprintf(w, "| %s | %v |\n", t.SandboxAvail, sb.Available)
+		fmt.Fprintf(w, "| %s | %s |\n", t.SandboxIsolationLabel, t.SandboxActiveValue)
 		fmt.Fprintln(w)
 		// When bwrap is available it is always used; a --unsafe flag is ignored.
 		// Surface that so the reader is not misled into thinking isolation was off.
 		if sb.UnsafeOverride {
-			fmt.Fprintf(w, "%s\n\n", t.sandboxUnsafeIgnoredNote)
+			fmt.Fprintf(w, "%s\n\n", t.SandboxUnsafeIgnoredNote)
 		}
 	case sb.UnsafeOverride:
-		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrapUnsafe)
+		fmt.Fprintf(w, "%s\n\n", t.SandboxNoBwrapUnsafe)
 	default:
-		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrapDenied)
+		fmt.Fprintf(w, "%s\n\n", t.SandboxNoBwrapDenied)
 	}
 }

@@ -1,4 +1,4 @@
-package markdown
+package html
 
 import (
 	"fmt"
@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	domain "github.com/TomTonic/extract-sbom/internal/report/internal/domain"
+	i18npkg "github.com/TomTonic/extract-sbom/internal/report/internal/i18n"
 )
 
-// vulnDescriptionMaxRunes bounds how much of a vulnerability description is shown
-// inline in the summary table, keeping the wide table readable.
+// vulnDescriptionMaxRunes bounds inline vulnerability descriptions, mirroring the
+// Markdown renderer so both outputs truncate identically.
 const vulnDescriptionMaxRunes = 100
 
-// emptyDash returns v unchanged, or "-" when v is empty.
+// emptyDash returns v, or "-" when v is blank.
 func emptyDash(v string) string {
 	if strings.TrimSpace(v) == "" {
 		return "-"
@@ -20,8 +21,15 @@ func emptyDash(v string) string {
 	return v
 }
 
-// truncateText shortens s to at most limit runes, appending an ellipsis when
-// content was cut. Empty input renders as "-".
+// valueOrDash returns value, or "-" when value is blank.
+func valueOrDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "-"
+	}
+	return value
+}
+
+// truncateText shortens s to at most limit runes, appending an ellipsis when cut.
 func truncateText(s string, limit int) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -34,8 +42,18 @@ func truncateText(s string, limit int) string {
 	return string(runes[:limit]) + "…"
 }
 
-// formatEPSS formats EPSS and percentile values as human-readable text.
-func formatEPSS(epss *float64, percentile *float64) string {
+func formatNumber(v float64) string {
+	return strconv.FormatFloat(v, 'f', 1, 64)
+}
+
+func formatSeverity(severity string, cvss *float64) string {
+	if cvss == nil {
+		return strings.ToUpper(domain.NormalizeSeverity(severity))
+	}
+	return fmt.Sprintf("%s (%s)", strings.ToUpper(domain.NormalizeSeverity(severity)), formatNumber(*cvss))
+}
+
+func formatEPSS(epss, percentile *float64) string {
 	if epss == nil {
 		return "-"
 	}
@@ -46,7 +64,6 @@ func formatEPSS(epss *float64, percentile *float64) string {
 	return fmt.Sprintf("%s (%s)", p, formatPercentileRank((*percentile)*100))
 }
 
-// formatRisk formats risk values.
 func formatRisk(risk *float64) string {
 	if risk == nil {
 		return "-"
@@ -54,28 +71,13 @@ func formatRisk(risk *float64) string {
 	return formatNumber(*risk)
 }
 
-// formatKEV formats the KEV indicator used by grype-like output.
-func formatKEV(kev bool, t translations) string {
+func formatKEV(kev bool, t i18npkg.Bundle) string {
 	if kev {
 		return t.VulnKEVYes
 	}
 	return t.VulnKEVNo
 }
 
-// formatNumber renders v with a single decimal place.
-func formatNumber(v float64) string {
-	return strconv.FormatFloat(v, 'f', 1, 64)
-}
-
-// formatSeverity renders severity and appends CVSS score in parentheses.
-func formatSeverity(severity string, cvss *float64) string {
-	if cvss == nil {
-		return strings.ToUpper(domain.NormalizeSeverity(severity))
-	}
-	return fmt.Sprintf("%s (%s)", strings.ToUpper(domain.NormalizeSeverity(severity)), formatNumber(*cvss))
-}
-
-// formatPercentileRank renders percentile values as ordinal ranks, e.g. 99th.
 func formatPercentileRank(pct float64) string {
 	whole := int(pct + 0.5)
 	if whole <= 0 {
