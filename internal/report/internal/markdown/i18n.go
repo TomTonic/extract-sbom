@@ -113,6 +113,7 @@ type translations struct {
 	vulnSummaryHeading                     string
 	findingVulnMatchesTemplate             string
 	findingVulnNoMatches                   string
+	findingVulnNotRequested               string
 	findingDeliveryCompositionTemplate     string
 	findingExtractionStatusSuccessTemplate string
 	findingExtractionStatusFailureTemplate string
@@ -146,7 +147,6 @@ type translations struct {
 	methodBulletEvidence                   string
 	methodBulletDedup                      string
 	methodBulletTrust                      string
-	methodMoreDetails                      string
 	appendixLead                           string
 	summaryKeyFindingsSection              string
 	summaryAnalysisSection                 string

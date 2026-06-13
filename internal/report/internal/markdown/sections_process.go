@@ -127,6 +127,15 @@ func extractionArchiveCols(row *reportjson.ExtractionLogRowV2) (archiveType, arc
 	return
 }
 
+// escapeMarkdownText escapes angle brackets in user-supplied strings that are
+// rendered directly into Markdown headings or inline prose (not table cells).
+// Use escapeMarkdownCell for table values instead.
+func escapeMarkdownText(value string) string {
+	value = strings.ReplaceAll(value, "<", "&lt;")
+	value = strings.ReplaceAll(value, ">", "&gt;")
+	return value
+}
+
 func escapeMarkdownCell(value string) string {
 	value = strings.ReplaceAll(value, "|", "\\|")
 	value = strings.ReplaceAll(value, "\n", " ")

@@ -100,6 +100,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	// Step 3: Resolve sandbox.
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/8: resolving sandbox")
+	bwrapFound := sandbox.NewBwrapSandbox().Available()
 	sb, resolveErr := sandbox.Resolve(cfg)
 	addIssue("sandbox-resolve", resolveErr)
 	sandboxName := sb.Name()
@@ -267,6 +268,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		rd.SandboxInfo.UnsafeOvr = cfg.Unsafe
 		rd.SandboxInfo.Name = sandboxName
 		rd.SandboxInfo.Available = sandboxAvailable
+		rd.SandboxInfo.BwrapFound = bwrapFound
 		rd.ProcessingIssues = processingIssues
 		rd.StartTime = startTime
 		rd.EndTime = endTime

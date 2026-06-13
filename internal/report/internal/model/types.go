@@ -55,6 +55,11 @@ type SandboxSummary struct {
 	// UnsafeOvr is true when the user explicitly disabled sandbox isolation with
 	// --unsafe. This is independent from Available.
 	UnsafeOvr bool
+	// BwrapFound reports whether bwrap was detected on the system at run time,
+	// regardless of whether it was actually used. This distinguishes "bwrap
+	// bypassed intentionally on Linux" (BwrapFound=true, UnsafeOvr=true) from
+	// "bwrap simply not available, e.g. macOS" (BwrapFound=false, UnsafeOvr=true).
+	BwrapFound bool
 }
 
 // ProcessingIssue captures a non-nil error encountered in a pipeline stage.

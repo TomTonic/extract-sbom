@@ -7,6 +7,7 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 
+	"github.com/TomTonic/extract-sbom/internal/config"
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/identify"
 	"github.com/TomTonic/extract-sbom/internal/policy"
@@ -14,7 +15,7 @@ import (
 )
 
 // TestGenerateHumanIncludesGeneratorBuildInfo verifies that build metadata
-// for the generator is visible in the human-readable report.
+// for the generator is visible in the report header (not in the configuration table).
 func TestGenerateHumanIncludesGeneratorBuildInfo(t *testing.T) {
 	t.Parallel()
 
@@ -26,8 +27,16 @@ func TestGenerateHumanIncludesGeneratorBuildInfo(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "| extract-sbom build | v1.2.3 rev 0123456789ab 2026-04-11T12:34:56Z dirty |") {
-		t.Fatal("report does not contain generator build info")
+	// Build info lives in the report header line, not in the Configuration table.
+	if !strings.Contains(output, "**extract-sbom version:**") {
+		t.Fatal("report header does not contain extract-sbom version")
+	}
+	if !strings.Contains(output, "v1.2.3") {
+		t.Fatal("report does not contain generator version v1.2.3")
+	}
+	// Build info must NOT appear as a separate configuration table row any more.
+	if strings.Contains(output, "| extract-sbom build |") {
+		t.Fatal("generator build row should no longer appear in the configuration table")
 	}
 }
 
@@ -125,13 +134,14 @@ func TestGenerateHumanGermanTranslation(t *testing.T) {
 	}
 }
 
-// TestGenerateHumanWithUnsafeShowsWarning verifies that the report
-// clearly warns when --unsafe mode was used.
+// TestGenerateHumanWithUnsafeShowsWarning verifies that the report warns when
+// --unsafe was used AND bwrap was available (i.e. the user deliberately bypassed it).
 func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
 	data.SandboxInfo.UnsafeOvr = true
+	data.SandboxInfo.BwrapFound = true // bwrap present but bypassed → WARNING expected
 
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
@@ -140,11 +150,30 @@ func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
 	output := buf.String()
 
 	if !strings.Contains(output, "WARNING") {
-		t.Error("unsafe mode report does not contain WARNING")
+		t.Error("unsafe mode report does not contain WARNING when bwrap was available")
 	}
-
 	if !strings.Contains(output, "Unsafe mode active") || !strings.Contains(output, "no sandbox isolation") {
 		t.Error("unsafe mode report does not explain the risk")
+	}
+}
+
+// TestGenerateHumanWithUnsafeNoWarningWhenBwrapAbsent verifies that no WARNING
+// is emitted when --unsafe is set but bwrap was never available (e.g. macOS).
+func TestGenerateHumanWithUnsafeNoWarningWhenBwrapAbsent(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.SandboxInfo.UnsafeOvr = true
+	data.SandboxInfo.BwrapFound = false // bwrap absent → no WARNING
+
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdown error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "WARNING") {
+		t.Error("report should not emit WARNING when bwrap was not available on this platform")
 	}
 }
 
@@ -229,6 +258,8 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 		"- [Residual Risk and Limitations](#residual-risk-and-limitations)",
 		"- [Appendix](#appendix)",
 		"- [Component Occurrence Index](#component-occurrence-index)",
+		"    - [Components with PURL](#components-with-purl)",
+		"    - [Components without PURL](#components-without-purl)",
 		"- [Component Normalization](#component-normalization)",
 		"- [Input File](#input-file)",
 		"- [Configuration](#configuration)",
@@ -474,5 +505,218 @@ func TestGenerateHumanIncludesNestedExtractionEvidenceAndPolicyDetails(t *testin
 		if !strings.Contains(output, fragment) {
 			t.Fatalf("report output missing %q", fragment)
 		}
+	}
+}
+
+// TestEscapeMarkdownText verifies that angle brackets in user-supplied strings
+// are escaped to HTML entities when rendered in headings.
+func TestEscapeMarkdownText(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ in, want string }{
+		{"plain text", "plain text"},
+		{"TODO: <Produktname>", "TODO: &lt;Produktname&gt;"},
+		{"<script>alert(1)</script>", "&lt;script&gt;alert(1)&lt;/script&gt;"},
+		{"a > b < c", "a &gt; b &lt; c"},
+	}
+	for _, tc := range cases {
+		got := escapeMarkdownText(tc.in)
+		if got != tc.want {
+			t.Errorf("escapeMarkdownText(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestPackageHeadingEscapesAngleBrackets verifies that a package with angle
+// brackets in its name is rendered as an escaped H4 heading (not raw HTML).
+func TestPackageHeadingEscapesAngleBrackets(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{{
+		BOMRef:     "extract-sbom:ABCD_1234",
+		Name:       "TODO: <Produktname>",
+		Version:    "1.0.0.1",
+		PackageURL: "pkg:generic/todo/produktname@1.0.0.1",
+		Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "native/rsDomus.dll"}},
+	}}}
+
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "#### TODO: <Produktname>") {
+		t.Error("unescaped angle brackets must not appear in H4 heading")
+	}
+	if !strings.Contains(output, "#### TODO: &lt;Produktname&gt;") {
+		t.Error("escaped heading TODO: &lt;Produktname&gt; missing from report")
+	}
+}
+
+// TestConfigDefaultMarkers verifies that configuration values matching the
+// defaults are annotated with "(default)" in the Configuration table.
+func TestConfigDefaultMarkers(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData() // uses config.DefaultConfig()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	for _, want := range []string{
+		"| Policy mode | strict (default) |",
+		"| Interpretation mode | installer-semantic (default) |",
+		"| Language | en (default) |",
+		"| grype | false (default) |",
+		"| Max depth | 6 (default) |",
+		"| Max files | 200000 (default) |",
+		"| Timeout | 1m0s (default) |",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("configuration table missing %q", want)
+		}
+	}
+	if strings.Contains(output, "| extract-sbom build |") {
+		t.Error("generator build row should not appear in configuration table")
+	}
+	if strings.Contains(output, "| Progress |") {
+		t.Error("progress row should not appear in configuration table")
+	}
+}
+
+// TestConfigNonDefaultValuesHaveNoMarker verifies that explicitly-set non-default
+// values do not get the "(default)" annotation.
+func TestConfigNonDefaultValuesHaveNoMarker(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Config.PolicyMode = config.PolicyPartial // non-default
+	data.Config.Language = "de"                   // non-default
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "| Policy mode | partial (default) |") {
+		t.Error("non-default value 'partial' should not be marked as default")
+	}
+	if strings.Contains(output, "| Language | de (default) |") {
+		t.Error("non-default value 'de' should not be marked as default")
+	}
+}
+
+// TestVulnSummaryNoTableWhenNotRequested verifies that when grype was not
+// requested the Vulnerability Summary shows only the informational line and
+// no empty table.
+func TestVulnSummaryNoTableWhenNotRequested(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "Vulnerability enrichment: not requested") {
+		t.Error("expected 'Vulnerability enrichment: not requested' in report")
+	}
+	if strings.Contains(output, "| Vulnerability | Severity |") {
+		t.Error("empty vulnerability table must not appear when grype was not requested")
+	}
+}
+
+// TestKeyFindingsNotRequestedWhenGrypeOff verifies that the Key Findings bullet
+// does not falsely claim "scan complete" when grype was not requested.
+func TestKeyFindingsVulnNotRequested(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "Vulnerability scan complete") {
+		t.Error("Key Findings should not say 'scan complete' when grype was not requested")
+	}
+	if !strings.Contains(output, "Vulnerability scan not requested") {
+		t.Error("Key Findings should say 'scan not requested' when grype was not requested")
+	}
+}
+
+// TestMethodAtAGlanceLinksDocumentAndBullets verifies the restructured section:
+// lead contains a Markdown link to SCAN_APPROACH.md, bullets embed deep links,
+// and the old "Deep links into SCAN_APPROACH.md:" paragraph is gone.
+func TestMethodAtAGlanceLinksDocumentAndBullets(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "[SCAN_APPROACH.md](https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md)") {
+		t.Error("Method section lead should link to SCAN_APPROACH.md")
+	}
+	if strings.Contains(output, "Deep links into SCAN_APPROACH.md:") {
+		t.Error("old 'Deep links into SCAN_APPROACH.md:' paragraph should be removed")
+	}
+	if !strings.Contains(output, "[Two phases]") {
+		t.Error("Two phases link should appear embedded in a bullet")
+	}
+	if !strings.Contains(output, "[Deduplication]") {
+		t.Error("Deduplication link should appear embedded in a bullet")
+	}
+}
+
+// TestComponentIndexSortedAlphabetically verifies that the Component Occurrence
+// Index is sorted by (package name, version) case-insensitively.
+func TestComponentIndexSortedAlphabetically(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.BOM = &cdx.BOM{Components: &[]cdx.Component{
+		{
+			BOMRef: "extract-sbom:ZZZ", Name: "zlib", Version: "1.0",
+			PackageURL: "pkg:generic/zlib@1.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "z/zlib.so"}},
+		},
+		{
+			BOMRef: "extract-sbom:MMM", Name: "mongoose", Version: "7.14",
+			PackageURL: "pkg:generic/mongoose@7.14",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "m/mongoose.so"}},
+		},
+		{
+			BOMRef: "extract-sbom:AAA", Name: "alpha", Version: "2.0",
+			PackageURL: "pkg:generic/alpha@2.0",
+			Properties: &[]cdx.Property{{Name: "extract-sbom:delivery-path", Value: "a/alpha.so"}},
+		},
+	}}
+
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	alphaIdx := strings.Index(output, "#### alpha 2.0")
+	mongooseIdx := strings.Index(output, "#### mongoose 7.14")
+	zlibIdx := strings.Index(output, "#### zlib 1.0")
+
+	if alphaIdx == -1 || mongooseIdx == -1 || zlibIdx == -1 {
+		t.Fatal("one or more package headings missing")
+	}
+	if !(alphaIdx < mongooseIdx && mongooseIdx < zlibIdx) {
+		t.Errorf("component index not sorted alphabetically: alpha=%d mongoose=%d zlib=%d",
+			alphaIdx, mongooseIdx, zlibIdx)
 	}
 }

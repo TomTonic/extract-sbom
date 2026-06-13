@@ -83,6 +83,8 @@ func reportSections(t translations) []reportSection {
 		{title: t.residualRiskSection, anchor: anchorResidualRisk, level: 0},
 		{title: t.appendixSection, anchor: anchorAppendix, level: 0},
 		{title: t.componentIndexSection, anchor: anchorComponentIndex, level: 1},
+		{title: t.componentIndexWithPURLSubsection, anchor: anchorComponentsWithPURL, level: 2},
+		{title: t.componentIndexWithoutPURLSubsection, anchor: anchorComponentsWithoutPURL, level: 2},
 		{title: t.componentNormalizationSection, anchor: anchorSuppression, level: 1},
 		{title: t.extensionFilterSection, anchor: anchorExtensionFilter, level: 1},
 		{title: t.rootMetadataSection, anchor: anchorRootMetadata, level: 1},

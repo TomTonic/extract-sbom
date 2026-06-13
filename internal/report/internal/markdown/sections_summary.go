@@ -7,26 +7,24 @@ import (
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
 
-// writeMethodOverview writes a concise explanation of pipeline method and
-// links to the detailed scan-approach document.
+// writeMethodOverview writes a concise explanation of pipeline method.
+// The lead paragraph links to the full SCAN_APPROACH.md document; individual
+// deep links are embedded inline in the relevant bullets.
 func writeMethodOverview(w io.Writer, t translations) {
-	fmt.Fprintln(w, t.methodLead)
+	docLink := fmt.Sprintf("[SCAN_APPROACH.md](%s)", scanApproachGitHubURL)
+	fmt.Fprintf(w, "%s\n", fmt.Sprintf(t.methodLead, docLink))
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "- %s\n", t.methodBulletTwoPhases)
+	fmt.Fprintf(w, "- %s — %s, %s\n",
+		t.methodBulletTwoPhases,
+		scanApproachLink(t.linkTwoPhases, "3-two-phases"),
+		scanApproachLink(t.linkScanDetail, "7-how-the-scan-phase-works-in-detail"))
 	fmt.Fprintf(w, "- %s\n", t.methodBulletEvidence)
-	fmt.Fprintf(w, "- %s\n", t.methodBulletDedup)
+	fmt.Fprintf(w, "- %s — %s, %s\n",
+		t.methodBulletDedup,
+		scanApproachLink(t.linkDeduplication, "81-how-deduplication-works"),
+		scanApproachLink(t.linkFinalSBOMBuild, "8-how-the-final-sbom-is-built"))
 	fmt.Fprintf(w, "- %s\n", t.methodBulletTrust)
 	fmt.Fprintln(w)
-	fmt.Fprintf(
-		w,
-		"%s %s, %s, %s, %s, %s\n",
-		t.methodMoreDetails,
-		scanApproachLink(t.linkTwoPhases, "3-two-phases"),
-		scanApproachLink(t.linkScanDetail, "7-how-the-scan-phase-works-in-detail"),
-		scanApproachLink(t.linkFinalSBOMBuild, "8-how-the-final-sbom-is-built"),
-		scanApproachLink(t.linkDeduplication, "81-how-deduplication-works"),
-		scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability"),
-	)
 }
 
 // writeSummary renders the executive summary with sub-sections for analysis
@@ -52,13 +50,17 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 
 	writeAnchoredHeading(w, 3, t.summaryKeyFindingsSection, anchorSummaryKeyFindings)
 
-	foundVulnStr := t.findingVulnNoMatches
-	if proj.Summary.Vulnerabilities > 0 {
+	var foundVulnStr string
+	if !proj.Summary.VulnerabilityRequested {
+		foundVulnStr = t.findingVulnNotRequested
+	} else if proj.Summary.Vulnerabilities > 0 {
 		foundVulnStr = fmt.Sprintf(t.findingVulnMatchesTemplate,
 			proj.Summary.Vulnerabilities,
 			proj.Summary.AffectedPackageCount,
 			proj.Summary.UniqueVulnerabilityCount,
 			sectionLink(t.summaryVulnSection, anchorSummaryVuln))
+	} else {
+		foundVulnStr = t.findingVulnNoMatches
 	}
 	fmt.Fprintf(w, "- %s\n\n", foundVulnStr)
 
