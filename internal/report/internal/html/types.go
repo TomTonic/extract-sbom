@@ -1,4 +1,6 @@
-// Package html implements the active self-contained HTML report renderer.
+// Package html implements the self-contained HTML report renderer. It mirrors
+// the content of the Markdown report (sharing the i18n catalog) while presenting
+// it with HTML-native affordances: tables and collapsible <details> sections.
 package html
 
 import (
@@ -13,166 +15,301 @@ type ToolVersions = model.ToolVersions
 // ReportData aliases the shared report snapshot contract from model.
 type ReportData = model.ReportData
 
-// htmlReportData is the template data structure for the HTML report. It bundles
-// the localized label set (M) with the report values. All string fields hold
-// plain text; the html/template engine performs context-aware escaping when
-// the template is executed.
-type htmlReportData struct {
-	M           htmlMessages
-	Generated   string
-	Generator   string
-	Tools       string
-	InputFile   string
-	InputSize   int64
-	InputSHA256 string
-	Duration    string
-	SBOMPath    string
-	SandboxName string
-	Language    string
+// page is the top-level template model for the HTML report.
+type page struct {
+	Lang       string
+	Title      string
+	Meta       htmltmpl.HTML
+	Tools      htmltmpl.HTML
+	TOC        []tocItem
+	TOCHeading string
+	EndNote    string
 
-	ExtractionTotal     int
-	ExtractionExtracted int
-	ExtractionFailed    int
-	ExtractionSkipped   int
+	// Summary
+	SummaryHeading  string
+	SummaryAnchor   string
+	SummaryLead     htmltmpl.HTML
+	AnalysisHeading string
+	AnalysisAnchor  string
+	AnalysisParas   []htmltmpl.HTML
+	Vuln            vulnSection
 
-	ComponentCount int
-	VulnCount      int
-	IssueCount     int
+	// Run & Scope
+	RunScopeHeading string
+	RunScopeAnchor  string
+	RunScopeLead    string
+	InputHeading    string
+	InputAnchor     string
+	InputRows       []kv
+	ConfigHeading   string
+	ConfigAnchor    string
+	ConfigRows      []kv
+	SandboxHeading  string
+	SandboxAnchor   string
+	Sandbox         sandboxSection
 
-	// VulnState is the enrichment outcome classification used to render the
-	// Vulnerabilities summary cell: "not-requested", "unavailable", or
-	// "assessed". See htmlVulnState.
-	VulnState string
+	// Method At A Glance
+	Method methodSection
 
-	Vulns     []htmlVuln
-	Issues    []htmlIssue
-	ExtrNodes []htmlNode
+	// Processing Errors
+	Processing processingSection
+
+	// Residual Risk
+	ResidualHeading string
+	ResidualAnchor  string
+	ResidualText    string
+	ResidualBullets []htmltmpl.HTML
+
+	// Appendix
+	AppendixHeading string
+	AppendixAnchor  string
+	AppendixLead    string
+	ComponentIndex  componentIndexSection
+	Normalization   normalizationSection
+	ExtensionFilter extensionFilterSection
+	RootMetadata    rootMetadataSection
+	Policy          policySection
+	ScanLog         scanLogSection
+	Extraction      extractionSection
 }
 
-// htmlVuln is one vulnerability-table row.
-type htmlVuln struct {
+// kv is a generic key/value table row with plain-text cells.
+type kv struct{ K, V string }
+
+// tocItem is one Table-of-Contents entry. Level controls indentation (0..2).
+type tocItem struct {
+	Title  string
+	Anchor string
+	Level  int
+}
+
+// vulnSection holds the Vulnerability Summary. StateLine/FindingLine are
+// pre-rendered HTML because the shared catalog templates carry inline code spans.
+type vulnSection struct {
+	Heading     string
+	Anchor      string
+	Requested   bool
+	SummaryLine string
+	StateLine   htmltmpl.HTML
+	FindingLine htmltmpl.HTML
+	Headers     []string
+	Rows        []vulnRow
+}
+
+// vulnRow is one row in the vulnerability table. Name and NameAnchor are plain
+// strings; the template renders the (optional) anchor link with context-aware
+// auto-escaping so an untrusted package name cannot inject markup.
+type vulnRow struct {
 	ID          string
 	Severity    string
 	SeverityCSS string
-	Package     string
-	Version     string
+	Name        string
+	NameAnchor  string
+	Installed   string
+	FixedIn     string
+	EPSS        string
+	Risk        string
+	KEV         string
 	Description string
 }
 
-// htmlIssue is one processing-issue table row.
-type htmlIssue struct {
-	Stage   string
-	Message string
+// sandboxSection renders either a status table (bwrap present) or explanatory
+// prose (bwrap absent). Exactly one of Rows / Prose is populated.
+type sandboxSection struct {
+	Rows  []kv
+	Note  htmltmpl.HTML
+	Prose htmltmpl.HTML
 }
 
-// htmlNode is one extraction-log table row.
-type htmlNode struct {
-	Depth  int
-	Path   string
-	Status string
-	Format string
-	Tool   string
-	Detail string
+// methodSection holds the Method At A Glance content.
+type methodSection struct {
+	Heading string
+	Anchor  string
+	Lead    htmltmpl.HTML
+	Bullets []htmltmpl.HTML
 }
 
-const htmlReportCSS = `
-body{font-family:system-ui,sans-serif;margin:0;padding:1rem 2rem;color:#1a1a1a;background:#fff}
-h1{font-size:1.6rem;margin-bottom:0.3rem;border-bottom:2px solid #333;padding-bottom:0.3rem}
-h2{font-size:1.2rem;margin-top:1.5rem;margin-bottom:0.5rem;border-bottom:1px solid #ccc}
-.meta{color:#555;font-size:0.85rem;margin-bottom:1rem}
-table{border-collapse:collapse;width:100%;margin-bottom:1rem;font-size:0.9rem}
-th{background:#f0f0f0;text-align:left;padding:0.4rem 0.6rem;border:1px solid #ccc}
-td{padding:0.35rem 0.6rem;border:1px solid #ddd;vertical-align:top}
-tr:nth-child(even){background:#f9f9f9}
-.badge{display:inline-block;padding:0.15rem 0.4rem;border-radius:3px;font-size:0.8rem;font-weight:bold;color:#fff}
-.critical{background:#c0392b}.high{background:#e67e22}.medium{background:#f1c40f;color:#333}
-.low{background:#2980b9}.negligible{background:#7f8c8d}.unknown-sev{background:#7f8c8d}
-.ok{color:#27ae60;font-weight:bold}.err{color:#c0392b;font-weight:bold}.muted{color:#888;font-style:italic}
-details>summary{cursor:pointer;padding:0.3rem 0}
-details summary h2{display:inline;margin:0}
-code{background:#f4f4f4;padding:0.1rem 0.3rem;border-radius:2px;font-size:0.85rem}
-.d0{padding-left:0}.d1{padding-left:1rem}.d2{padding-left:2rem}
-.d3{padding-left:3rem}.d4{padding-left:4rem}.d5{padding-left:5rem}
-`
+// processingSection holds the Processing Errors table, or an empty marker.
+type processingSection struct {
+	Heading   string
+	Anchor    string
+	Empty     bool
+	EmptyText string
+	Headers   []string
+	Rows      [][]string
+}
 
-const htmlReportTemplateText = `<!DOCTYPE html>
-<html lang="{{.Language}}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{.M.ReportTitle}}</title>
-<style>` + htmlReportCSS + `</style>
-</head>
-<body>
-<h1>{{.M.ReportTitle}}</h1>
-<div class="meta">{{.M.GeneratedLabel}}: {{.Generated}} &nbsp;|&nbsp; {{.M.GeneratorLabel}}: {{.Generator}}</div>
+// componentIndexSection holds the appendix Component Occurrence Index.
+type componentIndexSection struct {
+	Heading           string
+	Anchor            string
+	Lead              htmltmpl.HTML
+	Empty             bool
+	EmptyText         string
+	WithPURLTitle     string
+	WithPURLAnchor    string
+	WithPURL          []packageGroup
+	WithoutPURLTitle  string
+	WithoutPURLAnchor string
+	WithoutPURL       []packageGroup
+}
 
-<h2>{{.M.SummaryHeading}}</h2>
-<table>
-<tr><th>{{.M.FieldHeading}}</th><th>{{.M.ValueHeading}}</th></tr>
-<tr><td>{{.M.InputFileLabel}}</td><td>{{.InputFile}}</td></tr>
-<tr><td>{{.M.InputSizeLabel}}</td><td>{{.InputSize}} {{.M.BytesUnit}}</td></tr>
-<tr><td>{{.M.SHA256Label}}</td><td><code>{{.InputSHA256}}</code></td></tr>
-<tr><td>{{.M.DurationLabel}}</td><td>{{.Duration}}</td></tr>
-<tr><td>{{.M.SBOMOutputLabel}}</td><td>{{if .SBOMPath}}{{.SBOMPath}}{{else}}&#8212;{{end}}</td></tr>
-<tr><td>{{.M.SandboxLabel}}</td><td>{{.SandboxName}}</td></tr>
-<tr><td>{{.M.ToolsLabel}}</td><td>{{if .Tools}}{{.Tools}}{{else}}&#8212;{{end}}</td></tr>
-<tr><td>{{.M.ComponentsLabel}}</td><td>{{.ComponentCount}}</td></tr>
-<tr><td>{{.M.VulnsLabel}}</td><td>{{if eq .VulnState "not-requested"}}<span class="muted">{{.M.VulnNotRequested}}</span>{{else if eq .VulnState "unavailable"}}<span class="err">{{.M.VulnUnavailable}}</span>{{else if gt .VulnCount 0}}<span class="badge high">{{.VulnCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
-<tr><td>{{.M.IssuesLabel}}</td><td>{{if gt .IssueCount 0}}<span class="badge err">{{.IssueCount}}</span>{{else}}<span class="ok">0</span>{{end}}</td></tr>
-</table>
+// packageGroup is one collapsible package entry with its occurrences.
+type packageGroup struct {
+	AnchorID    string
+	Title       string
+	Name        string
+	Version     string
+	PURLs       []string
+	VulnLine    string
+	Occurrences []occurrence
+	Labels      occurrenceLabels
+}
 
-<h2>{{.M.ExtractionHeading}}</h2>
-<table>
-<tr><th>{{.M.StatusHeading}}</th><th>{{.M.CountHeading}}</th></tr>
-<tr><td>{{.M.ExtractedLabel}}</td><td>{{.ExtractionExtracted}}</td></tr>
-<tr><td>{{.M.FailedLabel}}</td><td>{{if gt .ExtractionFailed 0}}<span class="err">{{.ExtractionFailed}}</span>{{else}}0{{end}}</td></tr>
-<tr><td>{{.M.SkippedLabel}}</td><td>{{.ExtractionSkipped}}</td></tr>
-<tr><td>{{.M.TotalNodesLabel}}</td><td>{{.ExtractionTotal}}</td></tr>
-</table>
+// occurrence is one concrete component occurrence under a package group.
+type occurrence struct {
+	AnchorID      string
+	ObjectID      string
+	DeliveryPaths []string
+	Evidence      []string
+	FoundBy       string
+	VulnLine      string
+}
 
-{{if .Vulns}}
-<details open>
-<summary><h2>{{.M.VulnTableHeading}} ({{len .Vulns}} {{.M.VulnMatchesWord}})</h2></summary>
-<table>
-<tr><th>{{.M.IDHeading}}</th><th>{{.M.SeverityHeading}}</th><th>{{.M.PackageHeading}}</th><th>{{.M.VersionHeading}}</th><th>{{.M.DescriptionHeading}}</th></tr>
-{{range .Vulns}}<tr>
-<td>{{.ID}}</td>
-<td><span class="badge {{.SeverityCSS}}">{{.Severity}}</span></td>
-<td>{{.Package}}</td>
-<td>{{.Version}}</td>
-<td>{{.Description}}</td>
-</tr>{{end}}
-</table>
-</details>
-{{end}}
+// occurrenceLabels carries the localized field labels for an occurrence so the
+// template can render them without re-resolving the bundle.
+type occurrenceLabels struct {
+	ComponentID  string
+	DeliveryPath string
+	EvidencePath string
+	FoundBy      string
+}
 
-{{if .Issues}}
-<details open>
-<summary><h2>{{.M.IssuesHeading}} ({{len .Issues}})</h2></summary>
-<table>
-<tr><th>{{.M.StageHeading}}</th><th>{{.M.MessageHeading}}</th></tr>
-{{range .Issues}}<tr><td>{{.Stage}}</td><td>{{.Message}}</td></tr>{{end}}
-</table>
-</details>
-{{end}}
+// normalizationSection holds the Component Normalization appendix block.
+type normalizationSection struct {
+	Heading      string
+	Anchor       string
+	Lead         htmltmpl.HTML
+	EmptyText    string
+	Empty        bool
+	SummaryTable headerKV
+	Groups       []suppressionGroup
+}
 
-{{if .ExtrNodes}}
-<details>
-<summary><h2>{{.M.ExtractionLogHeading}}</h2></summary>
-<table>
-<tr><th>{{.M.PathHeading}}</th><th>{{.M.FormatHeading}}</th><th>{{.M.StatusHeading}}</th><th>{{.M.ToolHeading}}</th><th>{{.M.DetailHeading}}</th></tr>
-{{range .ExtrNodes}}<tr>
-<td class="d{{.Depth}}">{{.Path}}</td>
-<td>{{.Format}}</td>
-<td>{{.Status}}</td>
-<td>{{.Tool}}</td>
-<td>{{.Detail}}</td>
-</tr>{{end}}
-</table>
-</details>
-{{end}}
-</body>
-</html>`
+// headerKV is a key/value table with a header row.
+type headerKV struct {
+	Headers []string
+	Rows    []kv
+}
 
-var reportTemplate = htmltmpl.Must(htmltmpl.New("html-report").Parse(htmlReportTemplateText))
+// suppressionGroup is one collapsible suppression-reason block.
+type suppressionGroup struct {
+	AnchorID    string
+	Title       string
+	Operational []htmltmpl.HTML
+	Headers     []string
+	Rows        []suppRow
+	Truncated   string
+}
+
+// suppRow is one suppression-table row. The "suppressed by" cell is modeled as
+// data (kept component link/code or an italic reason) so the template can
+// auto-escape the untrusted component name.
+type suppRow struct {
+	DeliveryPath string
+	Name         string
+	KeptName     string
+	KeptAnchor   string
+	Reason       string
+}
+
+// extensionFilterSection documents skipped extensions and affected paths.
+type extensionFilterSection struct {
+	Heading         string
+	Anchor          string
+	Lead            string
+	ExtensionsLabel string
+	Extensions      string
+	SkippedLabel    string
+	SkippedPaths    []string
+	EmptyText       string
+	Empty           bool
+}
+
+// rootMetadataSection holds the Root SBOM Metadata table.
+type rootMetadataSection struct {
+	Heading string
+	Anchor  string
+	Headers []string
+	Rows    [][]string
+}
+
+// policySection holds the Policy Decisions table.
+type policySection struct {
+	Heading   string
+	Anchor    string
+	Empty     bool
+	EmptyText string
+	Headers   []string
+	Rows      [][]string
+}
+
+// scanLogSection holds the Package Scan Log and the no-package-identity list.
+type scanLogSection struct {
+	Heading        string
+	Anchor         string
+	Lead           string
+	Headers        []string
+	Rows           []scanRow
+	NoPkgHeading   string
+	NoPkgAnchor    string
+	NoPkgLead      string
+	NoPkgPaths     []string
+	NoPkgEmpty     bool
+	NoPkgEmptyText string
+}
+
+// scanRow is one package-scan-log row.
+type scanRow struct {
+	NodePath string
+	Count    string
+	Evidence []string
+	Error    string
+}
+
+// extractionSection holds the Extraction Log table.
+type extractionSection struct {
+	Heading string
+	Anchor  string
+	Headers []string
+	Rows    []extractionRow
+}
+
+// extractionRow is one extraction-log row; Depth drives indentation of Path.
+type extractionRow struct {
+	Depth   int
+	Path    string
+	Format  string
+	Status  string
+	Tool    string
+	Sandbox string
+	Detail  string
+}
+
+// severityCSSClass maps a normalized severity to a CSS badge class.
+func severityCSSClass(sev string) string {
+	switch sev {
+	case "critical":
+		return "critical"
+	case "high":
+		return "high"
+	case "medium":
+		return "medium"
+	case "low":
+		return "low"
+	case "negligible":
+		return "negligible"
+	default:
+		return "unknown-sev"
+	}
+}

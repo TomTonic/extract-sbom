@@ -14,67 +14,67 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	proj := vm.report.Projections
 
 	fmt.Fprint(w, buildHumanHeaderBlock(vm))
-	fmt.Fprintf(w, "## %s\n\n", t.tableOfContentsSection)
+	fmt.Fprintf(w, "## %s\n\n", t.TableOfContentsSection)
 	writeTableOfContents(w, sections)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.summarySection, anchorSummary)
+	writeSectionHeading(w, t.SummarySection, anchorSummary)
 	writeSummary(w, proj, t)
 	fmt.Fprintln(w)
 
 	writeRunScopeSection(w, vm)
 
-	writeSectionHeading(w, t.methodOverviewSection, anchorMethodOverview)
+	writeSectionHeading(w, t.MethodOverviewSection, anchorMethodOverview)
 	writeMethodOverview(w, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.processingIssuesSection, anchorProcessingErrors)
+	writeSectionHeading(w, t.ProcessingIssuesSection, anchorProcessingErrors)
 	writeProcessingIssues(w, proj, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.residualRiskSection, anchorResidualRisk)
+	writeSectionHeading(w, t.ResidualRiskSection, anchorResidualRisk)
 	writeResidualRisk(w, proj, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.appendixSection, anchorAppendix)
-	fmt.Fprintln(w, t.appendixLead)
+	writeSectionHeading(w, t.AppendixSection, anchorAppendix)
+	fmt.Fprintln(w, t.AppendixLead)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.componentIndexSection, anchorComponentIndex)
+	writeSectionHeading(w, t.ComponentIndexSection, anchorComponentIndex)
 	writeComponentOccurrenceIndex(w, proj, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.componentNormalizationSection, anchorSuppression)
+	writeSectionHeading(w, t.ComponentNormalizationSection, anchorSuppression)
 	writeSuppressionReport(w, proj.SuppressionGroups, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.extensionFilterSection, anchorExtensionFilter)
+	writeSectionHeading(w, t.ExtensionFilterSection, anchorExtensionFilter)
 	writeExtensionFilterSection(w, vm.report.Config.SkipExtensions, proj, t)
 	fmt.Fprintln(w)
 
-	writeSectionHeading(w, t.rootMetadataSection, anchorRootMetadata)
+	writeSectionHeading(w, t.RootMetadataSection, anchorRootMetadata)
 	writeRootMetadata(w, proj.Summary.RootComponent, t)
 
 	// Policy decisions.
-	writeSectionHeading(w, t.policySection, anchorPolicy)
+	writeSectionHeading(w, t.PolicySection, anchorPolicy)
 	writePolicyDecisions(w, proj.PolicyDecisions, t)
 	fmt.Fprintln(w)
 
 	// Scan results.
-	writeSectionHeading(w, t.scanSection, anchorScan)
-	fmt.Fprintln(w, t.scanSectionLead)
+	writeSectionHeading(w, t.ScanSection, anchorScan)
+	fmt.Fprintln(w, t.ScanSectionLead)
 	fmt.Fprintln(w)
 	for _, row := range proj.Scans {
 		switch {
 		case row.Error != "":
-			fmt.Fprintf(w, "- **%s**: %s %s\n", row.NodePath, t.scanError, row.Error)
+			fmt.Fprintf(w, "- **%s**: %s %s\n", row.NodePath, t.ScanError, row.Error)
 		case row.ComponentCount > 0:
-			fmt.Fprintf(w, "- **%s**: %d %s\n", row.NodePath, row.ComponentCount, t.componentsFound)
+			fmt.Fprintf(w, "- **%s**: %d %s\n", row.NodePath, row.ComponentCount, t.ComponentsFound)
 			for _, ep := range row.EvidencePaths {
-				fmt.Fprintf(w, "  - %s: `%s`\n", t.scanTaskEvidenceLabel, ep)
+				fmt.Fprintf(w, "  - %s: `%s`\n", t.ScanTaskEvidenceLabel, ep)
 			}
 		default:
-			fmt.Fprintf(w, "- **%s**: %s\n", row.NodePath, t.noComponents)
+			fmt.Fprintf(w, "- **%s**: %s\n", row.NodePath, t.NoComponents)
 		}
 	}
 	fmt.Fprintln(w)
@@ -82,11 +82,11 @@ func renderCanonicalHumanMarkdown(w io.Writer, vm markdownReportViewModel) error
 	fmt.Fprintln(w)
 
 	// Extraction log.
-	writeSectionHeading(w, t.extractionSection, anchorExtraction)
+	writeSectionHeading(w, t.ExtractionSection, anchorExtraction)
 	writeExtractionLog(w, proj.ExtractionLog, t)
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", t.endOfReport)
+	fmt.Fprintf(w, "%s\n", t.EndOfReport)
 	return nil
 }
 
@@ -96,7 +96,7 @@ func buildHumanHeaderBlock(vm markdownReportViewModel) string {
 	run := vm.report.Run
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", t.title)
+	fmt.Fprintf(&b, "# %s\n\n", t.Title)
 
 	genLink := ""
 	if gen.Version != "" {
@@ -108,10 +108,10 @@ func buildHumanHeaderBlock(vm markdownReportViewModel) string {
 	if generatedAt == "" {
 		generatedAt = gen.Time
 	}
-	fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.reportHeaderGeneratorVersionTemplate, generatedAt, genLink, emptyDash(gen.Revision)))
+	fmt.Fprintf(&b, "%s\n\n", fmt.Sprintf(t.ReportHeaderGeneratorVersionTemplate, generatedAt, genLink, emptyDash(gen.Revision)))
 
 	if tools := buildToolProvenanceLine(vm); tools != "" {
-		fmt.Fprintf(&b, "%s %s\n\n", t.reportHeaderToolsLabel, tools)
+		fmt.Fprintf(&b, "%s %s\n\n", t.ReportHeaderToolsLabel, tools)
 	}
 	return b.String()
 }
@@ -144,7 +144,7 @@ func buildToolProvenanceLine(vm markdownReportViewModel) string {
 
 	line := strings.Join(parts, " | ")
 	if gp.DBSchema != "" || gp.DBBuilt != "" || gp.DBUpdated != "" {
-		db := fmt.Sprintf(t.vulnGrypeDBTemplate, emptyDash(gp.DBSchema), emptyDash(gp.DBBuilt), emptyDash(gp.DBUpdated))
+		db := fmt.Sprintf(t.VulnGrypeDBTemplate, emptyDash(gp.DBSchema), emptyDash(gp.DBBuilt), emptyDash(gp.DBUpdated))
 		if line != "" {
 			line += " — " + db
 		} else {

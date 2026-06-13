@@ -13,20 +13,20 @@ func writeRootMetadata(w io.Writer, root *reportjson.BOMRootComponentV2, t trans
 	fmt.Fprintln(w, "### Root Component Metadata")
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "| %s | %s | %s |\n", t.field, t.value, t.source)
+	fmt.Fprintf(w, "| %s | %s | %s |\n", t.Field, t.Value, t.Source)
 	fmt.Fprintln(w, "|---|---|---|")
 
 	if root == nil {
 		return
 	}
 	if root.BOMRef != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.objectID, escapeMarkdownCell(root.BOMRef), escapeMarkdownCell(t.derived))
+		fmt.Fprintf(w, "| %s | %s | %s |\n", t.ObjectID, escapeMarkdownCell(root.BOMRef), escapeMarkdownCell(t.Derived))
 	}
 	if root.Name != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.packageName, escapeMarkdownCell(root.Name), escapeMarkdownCell(t.derived))
+		fmt.Fprintf(w, "| %s | %s | %s |\n", t.PackageName, escapeMarkdownCell(root.Name), escapeMarkdownCell(t.Derived))
 	}
 	if root.Version != "" {
-		fmt.Fprintf(w, "| %s | %s | %s |\n", t.version, escapeMarkdownCell(root.Version), escapeMarkdownCell(t.derived))
+		fmt.Fprintf(w, "| %s | %s | %s |\n", t.Version, escapeMarkdownCell(root.Version), escapeMarkdownCell(t.Derived))
 	}
 	if len(root.ConfigProperties) > 0 {
 		keys := make([]string, 0, len(root.ConfigProperties))
@@ -35,7 +35,7 @@ func writeRootMetadata(w io.Writer, root *reportjson.BOMRootComponentV2, t trans
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			fmt.Fprintf(w, "| %s | %s | %s |\n", escapeMarkdownCell(k), escapeMarkdownCell(root.ConfigProperties[k]), escapeMarkdownCell(t.suppliedBy))
+			fmt.Fprintf(w, "| %s | %s | %s |\n", escapeMarkdownCell(k), escapeMarkdownCell(root.ConfigProperties[k]), escapeMarkdownCell(t.SuppliedBy))
 		}
 	}
 	fmt.Fprintln(w)
@@ -48,53 +48,53 @@ func writeInputSection(w io.Writer, report reportjson.ReportV2, t translations) 
 	inp := report.Input
 	run := report.Run
 
-	fmt.Fprintf(w, "| %s | %s |\n", t.field, t.value)
+	fmt.Fprintf(w, "| %s | %s |\n", t.Field, t.Value)
 	fmt.Fprintf(w, "|---|---|\n")
-	fmt.Fprintf(w, "| %s | `%s` |\n", t.filename, inp.Filename)
-	fmt.Fprintf(w, "| %s | %d %s |\n", t.filesize, inp.Size, t.unitBytes)
+	fmt.Fprintf(w, "| %s | `%s` |\n", t.Filename, inp.Filename)
+	fmt.Fprintf(w, "| %s | %d %s |\n", t.Filesize, inp.Size, t.UnitBytes)
 	fmt.Fprintf(w, "| SHA-256 | `%s` |\n", inp.SHA256)
 	fmt.Fprintf(w, "| SHA-512 | `%s` |\n", inp.SHA512)
 	if run.RunID != "" {
-		fmt.Fprintf(w, "| %s | `%s` |\n", t.runIDLabel, run.RunID)
+		fmt.Fprintf(w, "| %s | `%s` |\n", t.RunIDLabel, run.RunID)
 	}
 	if run.StartTime != "" {
-		fmt.Fprintf(w, "| %s | %s |\n", t.runStartedLabel, run.StartTime)
+		fmt.Fprintf(w, "| %s | %s |\n", t.RunStartedLabel, run.StartTime)
 	}
 	if run.EndTime != "" {
-		fmt.Fprintf(w, "| %s | %s |\n", t.runEndedLabel, run.EndTime)
+		fmt.Fprintf(w, "| %s | %s |\n", t.RunEndedLabel, run.EndTime)
 	}
 	if run.Duration != "" {
-		fmt.Fprintf(w, "| %s | %s |\n", t.duration, run.Duration)
+		fmt.Fprintf(w, "| %s | %s |\n", t.Duration, run.Duration)
 	}
 }
 
 func reportSections(t translations) []reportSection {
 	return []reportSection{
-		{title: t.summarySection, anchor: anchorSummary, level: 0},
-		{title: t.summaryAnalysisSection, anchor: anchorSummaryAnalysis, level: 1},
-		{title: t.summaryVulnSection, anchor: anchorSummaryVuln, level: 1},
-		{title: t.runScopeSection, anchor: anchorRunScope, level: 0},
-		{title: t.inputSection, anchor: anchorInputFile, level: 1},
-		{title: t.configSection, anchor: anchorConfig, level: 1},
-		{title: t.sandboxSection, anchor: anchorSandbox, level: 1},
-		{title: t.methodOverviewSection, anchor: anchorMethodOverview, level: 0},
-		{title: t.processingIssuesSection, anchor: anchorProcessingErrors, level: 0},
-		{title: t.residualRiskSection, anchor: anchorResidualRisk, level: 0},
-		{title: t.appendixSection, anchor: anchorAppendix, level: 0},
-		{title: t.componentIndexSection, anchor: anchorComponentIndex, level: 1},
-		{title: t.componentIndexWithPURLSubsection, anchor: anchorComponentsWithPURL, level: 2},
-		{title: t.componentIndexWithoutPURLSubsection, anchor: anchorComponentsWithoutPURL, level: 2},
-		{title: t.componentNormalizationSection, anchor: anchorSuppression, level: 1},
-		{title: t.suppressionReasonFSArtifact, anchor: anchorSuppressionFSArtifacts, level: 2},
-		{title: t.suppressionReasonLowValueFile, anchor: anchorSuppressionLowValue, level: 2},
-		{title: t.suppressionReasonWeakDuplicate, anchor: anchorSuppressionWeakDups, level: 2},
-		{title: t.suppressionReasonPURLDuplicate, anchor: anchorSuppressionPURLDups, level: 2},
-		{title: t.extensionFilterSection, anchor: anchorExtensionFilter, level: 1},
-		{title: t.rootMetadataSection, anchor: anchorRootMetadata, level: 1},
-		{title: t.policySection, anchor: anchorPolicy, level: 1},
-		{title: t.scanSection, anchor: anchorScan, level: 1},
-		{title: t.scanNoPackageIDsSection, anchor: anchorScanNoPackageIDs, level: 1},
-		{title: t.extractionSection, anchor: anchorExtraction, level: 1},
+		{title: t.SummarySection, anchor: anchorSummary, level: 0},
+		{title: t.SummaryAnalysisSection, anchor: anchorSummaryAnalysis, level: 1},
+		{title: t.SummaryVulnSection, anchor: anchorSummaryVuln, level: 1},
+		{title: t.RunScopeSection, anchor: anchorRunScope, level: 0},
+		{title: t.InputSection, anchor: anchorInputFile, level: 1},
+		{title: t.ConfigSection, anchor: anchorConfig, level: 1},
+		{title: t.SandboxSection, anchor: anchorSandbox, level: 1},
+		{title: t.MethodOverviewSection, anchor: anchorMethodOverview, level: 0},
+		{title: t.ProcessingIssuesSection, anchor: anchorProcessingErrors, level: 0},
+		{title: t.ResidualRiskSection, anchor: anchorResidualRisk, level: 0},
+		{title: t.AppendixSection, anchor: anchorAppendix, level: 0},
+		{title: t.ComponentIndexSection, anchor: anchorComponentIndex, level: 1},
+		{title: t.ComponentIndexWithPURLSubsection, anchor: anchorComponentsWithPURL, level: 2},
+		{title: t.ComponentIndexWithoutPURLSubsection, anchor: anchorComponentsWithoutPURL, level: 2},
+		{title: t.ComponentNormalizationSection, anchor: anchorSuppression, level: 1},
+		{title: t.SuppressionReasonFSArtifact, anchor: anchorSuppressionFSArtifacts, level: 2},
+		{title: t.SuppressionReasonLowValueFile, anchor: anchorSuppressionLowValue, level: 2},
+		{title: t.SuppressionReasonWeakDuplicate, anchor: anchorSuppressionWeakDups, level: 2},
+		{title: t.SuppressionReasonPURLDuplicate, anchor: anchorSuppressionPURLDups, level: 2},
+		{title: t.ExtensionFilterSection, anchor: anchorExtensionFilter, level: 1},
+		{title: t.RootMetadataSection, anchor: anchorRootMetadata, level: 1},
+		{title: t.PolicySection, anchor: anchorPolicy, level: 1},
+		{title: t.ScanSection, anchor: anchorScan, level: 1},
+		{title: t.ScanNoPackageIDsSection, anchor: anchorScanNoPackageIDs, level: 1},
+		{title: t.ExtractionSection, anchor: anchorExtraction, level: 1},
 	}
 }
 

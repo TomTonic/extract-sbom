@@ -13,18 +13,18 @@ import (
 // deep links are embedded inline in the relevant bullets.
 func writeMethodOverview(w io.Writer, t translations) {
 	docLink := fmt.Sprintf("[SCAN_APPROACH.md](%s)", scanApproachGitHubURL)
-	fmt.Fprintf(w, "%s\n", fmt.Sprintf(t.methodLead, docLink))
+	fmt.Fprintf(w, "%s\n", fmt.Sprintf(t.MethodLead, docLink))
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "- %s — %s, %s\n",
-		t.methodBulletTwoPhases,
-		scanApproachLink(t.linkTwoPhases, "3-two-phases"),
-		scanApproachLink(t.linkScanDetail, "7-how-the-scan-phase-works-in-detail"))
-	fmt.Fprintf(w, "- %s\n", t.methodBulletEvidence)
+		t.MethodBulletTwoPhases,
+		scanApproachLink(t.LinkTwoPhases, "3-two-phases"),
+		scanApproachLink(t.LinkScanDetail, "7-how-the-scan-phase-works-in-detail"))
+	fmt.Fprintf(w, "- %s\n", t.MethodBulletEvidence)
 	fmt.Fprintf(w, "- %s — %s, %s\n",
-		t.methodBulletDedup,
-		scanApproachLink(t.linkDeduplication, "81-how-deduplication-works"),
-		scanApproachLink(t.linkFinalSBOMBuild, "8-how-the-final-sbom-is-built"))
-	fmt.Fprintf(w, "- %s\n", t.methodBulletTrust)
+		t.MethodBulletDedup,
+		scanApproachLink(t.LinkDeduplication, "81-how-deduplication-works"),
+		scanApproachLink(t.LinkFinalSBOMBuild, "8-how-the-final-sbom-is-built"))
+	fmt.Fprintf(w, "- %s\n", t.MethodBulletTrust)
 	fmt.Fprintln(w)
 }
 
@@ -34,16 +34,16 @@ func writeMethodOverview(w io.Writer, t translations) {
 // with inline deep links to the sections that substantiate each claim.
 func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	if proj.Summary.VulnerabilityRequested {
-		fmt.Fprintln(w, t.summaryLead)
+		fmt.Fprintln(w, t.SummaryLead)
 	} else {
-		fmt.Fprintln(w, t.summaryLeadNoVuln)
+		fmt.Fprintln(w, t.SummaryLeadNoVuln)
 	}
 	fmt.Fprintln(w)
 
-	writeAnchoredHeading(w, 3, t.summaryAnalysisSection, anchorSummaryAnalysis)
+	writeAnchoredHeading(w, 3, t.SummaryAnalysisSection, anchorSummaryAnalysis)
 	writeAnalysisOverview(w, proj, t)
 
-	writeAnchoredHeading(w, 3, t.summaryVulnSection, anchorSummaryVuln)
+	writeAnchoredHeading(w, 3, t.SummaryVulnSection, anchorSummaryVuln)
 	writeVulnerabilitySummary(w, proj, t)
 }
 
@@ -60,17 +60,17 @@ func writeAnalysisOverview(w io.Writer, proj reportjson.ProjectionsV2, t transla
 	idx := proj.Summary.ComponentIndexStats
 
 	// Paragraph 1 — the inventory narrative (the most important paragraph).
-	composition := fmt.Sprintf(t.overviewCompositionTemplate,
+	composition := fmt.Sprintf(t.OverviewCompositionTemplate,
 		proj.Summary.Nodes,
 		anchorExtraction,
 		proj.Summary.ArchiveCount,
 		proj.Summary.FileCount)
-	inventory := fmt.Sprintf(t.overviewInventoryTemplate,
+	inventory := fmt.Sprintf(t.OverviewInventoryTemplate,
 		anchorSuppression,
 		idx.IndexedComponents,
 		anchorComponentIndex,
 		proj.Summary.PackageGroups)
-	purl := fmt.Sprintf(t.overviewPURLTemplate,
+	purl := fmt.Sprintf(t.OverviewPURLTemplate,
 		idx.IndexedWithPURL,
 		anchorComponentsWithPURL,
 		idx.IndexedWithoutPURL,
@@ -81,15 +81,15 @@ func writeAnalysisOverview(w io.Writer, proj reportjson.ProjectionsV2, t transla
 	var resultSentences []string
 	switch {
 	case !proj.Summary.VulnerabilityRequested:
-		resultSentences = append(resultSentences, t.findingVulnNotRequested)
+		resultSentences = append(resultSentences, t.FindingVulnNotRequested)
 	case proj.Summary.Vulnerabilities > 0:
-		resultSentences = append(resultSentences, fmt.Sprintf(t.overviewVulnMatchesTemplate,
+		resultSentences = append(resultSentences, fmt.Sprintf(t.OverviewVulnMatchesTemplate,
 			proj.Summary.Vulnerabilities,
 			proj.Summary.AffectedPackageCount,
 			proj.Summary.UniqueVulnerabilityCount,
-			sectionLink(t.summaryVulnSection, anchorSummaryVuln)))
+			sectionLink(t.SummaryVulnSection, anchorSummaryVuln)))
 	default:
-		resultSentences = append(resultSentences, t.overviewVulnNone)
+		resultSentences = append(resultSentences, t.OverviewVulnNone)
 	}
 
 	var extFailed, extMissing int
@@ -102,39 +102,39 @@ func writeAnalysisOverview(w io.Writer, proj reportjson.ProjectionsV2, t transla
 		}
 	}
 	if extFailed > 0 {
-		resultSentences = append(resultSentences, fmt.Sprintf(t.findingExtractionStatusFailureTemplate, extFailed))
+		resultSentences = append(resultSentences, fmt.Sprintf(t.FindingExtractionStatusFailureTemplate, extFailed))
 	} else {
-		resultSentences = append(resultSentences, t.findingExtractionStatusSuccessTemplate)
+		resultSentences = append(resultSentences, t.FindingExtractionStatusSuccessTemplate)
 	}
 	fmt.Fprintf(w, "%s\n\n", strings.Join(resultSentences, " "))
 
 	// Paragraph 3 — conditional caveats, only emitted when at least one applies.
 	var caveats []string
 	if extMissing > 0 {
-		caveats = append(caveats, fmt.Sprintf(t.findingToolMissingTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.FindingToolMissingTemplate,
 			extMissing,
 			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"))))
 	}
 	if len(proj.Summary.ScanNoPackagePaths) > 0 {
-		caveats = append(caveats, fmt.Sprintf(t.findingNoPackageIdentityTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.FindingNoPackageIdentityTemplate,
 			len(proj.Summary.ScanNoPackagePaths),
-			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
+			sectionLink(t.ScanNoPackageIDsSection, anchorScanNoPackageIDs),
 			joinPathExamples(proj.Summary.ScanNoPackagePaths)))
 	}
 	if proj.Summary.PolicyDecisions > 0 {
-		caveats = append(caveats, fmt.Sprintf(t.findingPolicyDecisionsTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.FindingPolicyDecisionsTemplate,
 			proj.Summary.PolicyDecisions,
-			sectionLink(t.policySection, anchorPolicy)))
+			sectionLink(t.PolicySection, anchorPolicy)))
 	}
 	if len(proj.Issues) > 0 {
-		caveats = append(caveats, fmt.Sprintf(t.findingProcessingIssuesTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.FindingProcessingIssuesTemplate,
 			len(proj.Issues),
-			sectionLink(t.processingIssuesSection, anchorProcessingErrors)))
+			sectionLink(t.ProcessingIssuesSection, anchorProcessingErrors)))
 	}
 	if len(caveats) > 0 {
 		fmt.Fprintf(w, "%s\n\n", strings.Join(caveats, " "))
 	}
 
 	// Paragraph 4 — methodology pointer.
-	fmt.Fprintf(w, "%s\n\n", fmt.Sprintf(t.summaryAnalysisMethodRef, sectionLink(t.methodOverviewSection, anchorMethodOverview)))
+	fmt.Fprintf(w, "%s\n\n", fmt.Sprintf(t.SummaryAnalysisMethodRef, sectionLink(t.MethodOverviewSection, anchorMethodOverview)))
 }

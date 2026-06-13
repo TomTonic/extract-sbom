@@ -14,15 +14,15 @@ func writeExtractionLog(w io.Writer, rows []reportjson.ExtractionLogRowV2, t tra
 	for i := range rows {
 		row := &rows[i]
 		indent := strings.Repeat("  ", row.Depth)
-		fmt.Fprintf(w, "%s- **%s** [%s] %s=%s", indent, row.Path, row.Format, t.status, row.Status)
+		fmt.Fprintf(w, "%s- **%s** [%s] %s=%s", indent, row.Path, row.Format, t.Status, row.Status)
 		if row.Tool != "" {
-			fmt.Fprintf(w, " %s=%s", t.tool, row.Tool)
+			fmt.Fprintf(w, " %s=%s", t.Tool, row.Tool)
 		}
 		if row.SandboxUsed != "" {
-			fmt.Fprintf(w, " %s=%s", t.extractionSandboxLabel, row.SandboxUsed)
+			fmt.Fprintf(w, " %s=%s", t.ExtractionSandboxLabel, row.SandboxUsed)
 		}
 		if row.Duration != "" {
-			fmt.Fprintf(w, " %s=%s", t.duration, row.Duration)
+			fmt.Fprintf(w, " %s=%s", t.Duration, row.Duration)
 		}
 		if meta := formatExtractionArchiveMeta(row.ArchiveMeta); meta != "" {
 			fmt.Fprintf(w, " %s", meta)
@@ -69,10 +69,10 @@ func formatExtractionArchiveMeta(meta *reportjson.ExtractionArchiveMetaV2) strin
 // writeResidualRisk writes the explicit limitations statement required for
 // auditability when extraction/scan coverage is partial.
 func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
-	fmt.Fprintln(w, t.residualRiskText)
+	fmt.Fprintln(w, t.ResidualRiskText)
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "- %s\n", t.residualRiskProfileLead)
-	fmt.Fprintf(w, "- %s\n", t.residualRiskAbsenceHint)
+	fmt.Fprintf(w, "- %s\n", t.ResidualRiskProfileLead)
+	fmt.Fprintf(w, "- %s\n", t.ResidualRiskAbsenceHint)
 
 	idx := proj.Summary.ComponentIndexStats
 
@@ -95,43 +95,43 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 		}
 	}
 
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskPURLCoverage,
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskPURLCoverage,
 		idx.IndexedWithPURL, idx.IndexedComponents, idx.IndexedWithoutPURL))
 
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskEvidenceCoverage,
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskEvidenceCoverage,
 		idx.IndexedWithEvidencePath, idx.IndexedWithEvidenceSourceOnly, idx.IndexedWithoutEvidence))
 
 	if len(proj.Summary.ScanNoPackagePaths) > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskNoComponentTasks,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskNoComponentTasks,
 			len(proj.Summary.ScanNoPackagePaths),
 			proj.Summary.ScanTasks,
 			joinPathExamples(proj.Summary.ScanNoPackagePaths)))
 	}
 	if idx.FilteredLowValueFileArtifacts > 0 || idx.FilteredContainerNodes > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskFileArtifactCoverage,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskFileArtifactCoverage,
 			idx.FilteredLowValueFileArtifacts+idx.FilteredContainerNodes))
 	}
 	if len(proj.Summary.ExtensionFilteredPaths) > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtensionFilter,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskExtensionFilter,
 			len(proj.Summary.ExtensionFilteredPaths),
-			sectionLink(t.extensionFilterSection, anchorExtensionFilter)))
+			sectionLink(t.ExtensionFilterSection, anchorExtensionFilter)))
 	}
 	if extFailed > 0 || extBlocked > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskExtractionGap,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskExtractionGap,
 			extFailed+extBlocked,
 			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "failed", "security-blocked"))))
 	}
 	if extMissing > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskToolGap,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskToolGap,
 			extMissing,
 			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"))))
 	}
 	if scnErrors > 0 {
-		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskScanGap,
+		fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskScanGap,
 			scnErrors,
 			joinPathExamples(scanIssuePaths(proj.Issues))))
 	}
-	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
+	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.ResidualRiskMoreDetails, scanApproachLink(t.LinkPackageDetectionReliability, "6-package-detection-reliability")))
 }
 
 func configSkipExtensionsDisplay(exts []string, isDefault bool) string {
