@@ -564,7 +564,11 @@ func TestPackageHeadingEscapesAngleBrackets(t *testing.T) {
 func TestConfigDefaultMarkers(t *testing.T) {
 	t.Parallel()
 
-	data := makeTestReportData() // uses config.DefaultConfig()
+	data := makeTestReportData()
+	// CLI default for --policy is "partial", matching the flag definition in main.go.
+	// config.DefaultConfig() returns PolicyStrict (struct zero value), so we set the
+	// CLI default explicitly here to test that the renderer marks it correctly.
+	data.Config.PolicyMode = config.PolicyPartial
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
@@ -572,7 +576,7 @@ func TestConfigDefaultMarkers(t *testing.T) {
 	output := buf.String()
 
 	for _, want := range []string{
-		"| Policy mode | strict (default) |",
+		"| Policy mode | partial (default) |",
 		"| Interpretation mode | installer-semantic (default) |",
 		"| Language | en (default) |",
 		"| sbom-format | cyclonedx-json (default) |",
@@ -601,16 +605,16 @@ func TestConfigNonDefaultValuesHaveNoMarker(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
-	data.Config.PolicyMode = config.PolicyPartial // non-default
-	data.Config.Language = "de"                   // non-default
+	data.Config.PolicyMode = config.PolicyStrict // non-default (CLI default is "partial")
+	data.Config.Language = "de"                  // non-default
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
 	}
 	output := buf.String()
 
-	if strings.Contains(output, "| Policy mode | partial (default) |") {
-		t.Error("non-default value 'partial' should not be marked as default")
+	if strings.Contains(output, "| Policy mode | strict (default) |") {
+		t.Error("non-default value 'strict' should not be marked as default")
 	}
 	if strings.Contains(output, "| Language | de (default) |") {
 		t.Error("non-default value 'de' should not be marked as default")

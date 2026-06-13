@@ -228,7 +228,7 @@ main()
 - `--output-dir`: target directory for SBOM + report
 - `--work-dir`: base directory for temporary extraction work (default: system temp dir)
 - `--format`: SBOM output format — `cyclonedx-json` (default), `cyclonedx-xml`, `spdx-json`
-- `--policy`: `strict` (default) | `partial`
+- `--policy`: `partial` (default) | `strict`
 - `--mode`: `installer-semantic` (default) | `physical`
 - `--report`: `markdown` (default) | `json` | `both` | `html` | `sarif` | `all`
 - `--language`: `en` (default) | `de`
