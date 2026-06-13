@@ -76,7 +76,7 @@ func TestReportProcessingErrorsClassTimeout(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	writeExecutableScript(t, filepath.Join(binDir, "7zz"), "#!/bin/sh\necho per-extraction timeout (1s) exceeded 1>&2\nexit 42\n")
+	writeExecutableScript(t, filepath.Join(binDir, "7zz"), "#!/bin/sh\necho 'per-extraction timeout (1s) exceeded' 1>&2\nexit 42\n")
 
 	report := runHumanReportForInput(t, inputPath, func(_ *config.Config) {
 		t.Setenv("PATH", binDir)
