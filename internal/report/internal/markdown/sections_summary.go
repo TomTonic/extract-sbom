@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
 )
@@ -27,8 +28,10 @@ func writeMethodOverview(w io.Writer, t translations) {
 	fmt.Fprintln(w)
 }
 
-// writeSummary renders the executive summary with sub-sections for analysis
-// overview, key findings, and vulnerability summary.
+// writeSummary renders the executive summary with sub-sections for the analysis
+// overview and the vulnerability summary. The overview is the most important
+// paragraph of the whole report: it folds the headline facts into flowing prose
+// with inline deep links to the sections that substantiate each claim.
 func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	if proj.Summary.VulnerabilityRequested {
 		fmt.Fprintln(w, t.summaryLead)
@@ -38,38 +41,56 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	fmt.Fprintln(w)
 
 	writeAnchoredHeading(w, 3, t.summaryAnalysisSection, anchorSummaryAnalysis)
+	writeAnalysisOverview(w, proj, t)
 
-	analysis := fmt.Sprintf(t.summaryAnalysisProseTemplate,
+	writeAnchoredHeading(w, 3, t.summaryVulnSection, anchorSummaryVuln)
+	writeVulnerabilitySummary(w, proj, t)
+}
+
+// writeAnalysisOverview renders the headline narrative as flowing prose. It is
+// composed of four paragraphs:
+//
+//  1. Inventory: what was examined, what survived normalization, and PURL
+//     coverage — each fact carrying an inline deep link to its evidence section.
+//  2. Result: the vulnerability-scan outcome and the extraction status.
+//  3. Caveats: any conditional limitations (missing tools, unidentified
+//     content, policy decisions, processing issues), only when present.
+//  4. Method reference: a pointer to the methodology section.
+func writeAnalysisOverview(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
+	idx := proj.Summary.ComponentIndexStats
+
+	// Paragraph 1 — the inventory narrative (the most important paragraph).
+	composition := fmt.Sprintf(t.overviewCompositionTemplate,
 		proj.Summary.Nodes,
-		proj.Summary.ComponentIndexStats.IndexedComponents,
-		proj.Summary.ComponentIndexStats.IndexedWithPURL,
-		proj.Summary.ComponentIndexStats.IndexedWithoutPURL)
-	fmt.Fprintf(w, "%s\n\n", analysis)
-	fmt.Fprintf(w, "%s\n", fmt.Sprintf(t.summaryAnalysisMethodRef, sectionLink(t.methodOverviewSection, anchorMethodOverview)))
-	fmt.Fprintln(w)
+		anchorExtraction,
+		proj.Summary.ArchiveCount,
+		proj.Summary.FileCount)
+	inventory := fmt.Sprintf(t.overviewInventoryTemplate,
+		anchorSuppression,
+		idx.IndexedComponents,
+		anchorComponentIndex,
+		proj.Summary.PackageGroups)
+	purl := fmt.Sprintf(t.overviewPURLTemplate,
+		idx.IndexedWithPURL,
+		anchorComponentsWithPURL,
+		idx.IndexedWithoutPURL,
+		anchorComponentsWithoutPURL)
+	fmt.Fprintf(w, "%s %s %s\n\n", composition, inventory, purl)
 
-	writeAnchoredHeading(w, 3, t.summaryKeyFindingsSection, anchorSummaryKeyFindings)
-
-	var foundVulnStr string
+	// Paragraph 2 — the result narrative (vulnerability outcome + extraction).
+	var resultSentences []string
 	switch {
 	case !proj.Summary.VulnerabilityRequested:
-		foundVulnStr = t.findingVulnNotRequested
+		resultSentences = append(resultSentences, t.findingVulnNotRequested)
 	case proj.Summary.Vulnerabilities > 0:
-		foundVulnStr = fmt.Sprintf(t.findingVulnMatchesTemplate,
+		resultSentences = append(resultSentences, fmt.Sprintf(t.overviewVulnMatchesTemplate,
 			proj.Summary.Vulnerabilities,
 			proj.Summary.AffectedPackageCount,
 			proj.Summary.UniqueVulnerabilityCount,
-			sectionLink(t.summaryVulnSection, anchorSummaryVuln))
+			sectionLink(t.summaryVulnSection, anchorSummaryVuln)))
 	default:
-		foundVulnStr = t.findingVulnNoMatches
+		resultSentences = append(resultSentences, t.overviewVulnNone)
 	}
-	fmt.Fprintf(w, "- %s\n\n", foundVulnStr)
-
-	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingDeliveryCompositionTemplate,
-		proj.Summary.ArchiveCount,
-		proj.Summary.FileCount,
-		proj.Summary.ComponentIndexStats.IndexedComponents,
-		proj.Summary.PackageGroups))
 
 	var extFailed, extMissing int
 	for i := range proj.ExtractionLog {
@@ -81,44 +102,39 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 		}
 	}
 	if extFailed > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingExtractionStatusFailureTemplate, extFailed))
+		resultSentences = append(resultSentences, fmt.Sprintf(t.findingExtractionStatusFailureTemplate, extFailed))
 	} else {
-		fmt.Fprintf(w, "- %s\n\n", t.findingExtractionStatusSuccessTemplate)
+		resultSentences = append(resultSentences, t.findingExtractionStatusSuccessTemplate)
 	}
+	fmt.Fprintf(w, "%s\n\n", strings.Join(resultSentences, " "))
 
+	// Paragraph 3 — conditional caveats, only emitted when at least one applies.
+	var caveats []string
 	if extMissing > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingToolMissingTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.findingToolMissingTemplate,
 			extMissing,
 			joinPathExamples(extractionPathsByStatus(proj.ExtractionLog, "tool-missing"))))
 	}
-
-	idx := proj.Summary.ComponentIndexStats
-	fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPURLCoverageTemplate,
-		idx.IndexedWithPURL,
-		idx.IndexedComponents,
-		anchorComponentsWithPURL,
-		idx.IndexedWithoutPURL,
-		anchorComponentsWithoutPURL))
-
 	if len(proj.Summary.ScanNoPackagePaths) > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingNoPackageIdentityTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.findingNoPackageIdentityTemplate,
 			len(proj.Summary.ScanNoPackagePaths),
 			sectionLink(t.scanNoPackageIDsSection, anchorScanNoPackageIDs),
 			joinPathExamples(proj.Summary.ScanNoPackagePaths)))
 	}
-
 	if proj.Summary.PolicyDecisions > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingPolicyDecisionsTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.findingPolicyDecisionsTemplate,
 			proj.Summary.PolicyDecisions,
 			sectionLink(t.policySection, anchorPolicy)))
 	}
-
 	if len(proj.Issues) > 0 {
-		fmt.Fprintf(w, "- %s\n\n", fmt.Sprintf(t.findingProcessingIssuesTemplate,
+		caveats = append(caveats, fmt.Sprintf(t.findingProcessingIssuesTemplate,
 			len(proj.Issues),
 			sectionLink(t.processingIssuesSection, anchorProcessingErrors)))
 	}
+	if len(caveats) > 0 {
+		fmt.Fprintf(w, "%s\n\n", strings.Join(caveats, " "))
+	}
 
-	writeAnchoredHeading(w, 3, t.summaryVulnSection, anchorSummaryVuln)
-	writeVulnerabilitySummary(w, proj, t)
+	// Paragraph 4 — methodology pointer.
+	fmt.Fprintf(w, "%s\n\n", fmt.Sprintf(t.summaryAnalysisMethodRef, sectionLink(t.methodOverviewSection, anchorMethodOverview)))
 }

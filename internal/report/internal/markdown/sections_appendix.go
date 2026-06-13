@@ -72,7 +72,6 @@ func reportSections(t translations) []reportSection {
 	return []reportSection{
 		{title: t.summarySection, anchor: anchorSummary, level: 0},
 		{title: t.summaryAnalysisSection, anchor: anchorSummaryAnalysis, level: 1},
-		{title: t.summaryKeyFindingsSection, anchor: anchorSummaryKeyFindings, level: 1},
 		{title: t.summaryVulnSection, anchor: anchorSummaryVuln, level: 1},
 		{title: t.runScopeSection, anchor: anchorRunScope, level: 0},
 		{title: t.inputSection, anchor: anchorInputFile, level: 1},

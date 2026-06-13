@@ -59,7 +59,6 @@ func TestGenerateHumanContainsRequiredSections(t *testing.T) {
 		"## Table of Contents",
 		"## Summary",
 		"### Analysis Overview",
-		"### Key Findings",
 		"### Vulnerability Summary",
 		"## Method At A Glance",
 		"## Processing Errors",
@@ -134,14 +133,15 @@ func TestGenerateHumanGermanTranslation(t *testing.T) {
 	}
 }
 
-// TestGenerateHumanWithUnsafeShowsWarning verifies that the report warns when
-// --unsafe was used AND bwrap was available (i.e. the user deliberately bypassed it).
-func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
+// TestGenerateHumanUnsafeIgnoredWhenBwrapPresent verifies that when bwrap is
+// available the sandbox is reported active and --unsafe is noted as ignored —
+// because an available bwrap is always used, never bypassed by --unsafe.
+func TestGenerateHumanUnsafeIgnoredWhenBwrapPresent(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
 	data.SandboxInfo.UnsafeOvr = true
-	data.SandboxInfo.BwrapFound = true // bwrap present but bypassed → WARNING expected
+	data.SandboxInfo.BwrapFound = true // bwrap present → always used; --unsafe ignored
 
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
@@ -149,22 +149,23 @@ func TestGenerateHumanWithUnsafeShowsWarning(t *testing.T) {
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "WARNING") {
-		t.Error("unsafe mode report does not contain WARNING when bwrap was available")
+	if !strings.Contains(output, "had no effect") {
+		t.Error("report should note that --unsafe had no effect when bwrap was available")
 	}
-	if !strings.Contains(output, "Unsafe mode active") || !strings.Contains(output, "no sandbox isolation") {
-		t.Error("unsafe mode report does not explain the risk")
+	if !strings.Contains(output, "Isolation") {
+		t.Error("report should show the Isolation row when bwrap was available")
 	}
 }
 
-// TestGenerateHumanWithUnsafeNoWarningWhenBwrapAbsent verifies that no WARNING
-// is emitted when --unsafe is set but bwrap was never available (e.g. macOS).
-func TestGenerateHumanWithUnsafeNoWarningWhenBwrapAbsent(t *testing.T) {
+// TestGenerateHumanWithUnsafeRanThroughWhenBwrapAbsent verifies that when bwrap
+// was unavailable but --unsafe authorized the run, the sandbox prose explains
+// the passthrough run and confirms the SBOM is unaffected.
+func TestGenerateHumanWithUnsafeRanThroughWhenBwrapAbsent(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
 	data.SandboxInfo.UnsafeOvr = true
-	data.SandboxInfo.BwrapFound = false // bwrap absent → no WARNING
+	data.SandboxInfo.BwrapFound = false // bwrap absent, --unsafe authorized the run
 
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
@@ -172,8 +173,41 @@ func TestGenerateHumanWithUnsafeNoWarningWhenBwrapAbsent(t *testing.T) {
 	}
 	output := buf.String()
 
-	if strings.Contains(output, "WARNING") {
-		t.Error("report should not emit WARNING when bwrap was not available on this platform")
+	if !strings.Contains(output, "passthrough mode") {
+		t.Error("sandbox prose should explain passthrough mode when bwrap absent but --unsafe set")
+	}
+	if !strings.Contains(output, "authorized with `--unsafe`") {
+		t.Error("sandbox prose should state the run was authorized with --unsafe")
+	}
+	if !strings.Contains(output, "does not change the contents or validity") {
+		t.Error("sandbox prose should reassure that the SBOM is unaffected")
+	}
+	// The wrong legacy claim must be gone.
+	if strings.Contains(output, "No --unsafe override was required") {
+		t.Error("obsolete misleading sandbox sentence must not appear")
+	}
+}
+
+// TestGenerateHumanSandboxDeniedWhenBwrapAbsentNoUnsafe verifies the third state:
+// bwrap unavailable and --unsafe not passed → degraded-extraction prose.
+func TestGenerateHumanSandboxDeniedWhenBwrapAbsentNoUnsafe(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.SandboxInfo.UnsafeOvr = false
+	data.SandboxInfo.BwrapFound = false
+
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdown error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "were skipped") {
+		t.Error("sandbox prose should explain that tool-backed formats were skipped")
+	}
+	if !strings.Contains(output, "`--unsafe`") {
+		t.Error("sandbox prose should mention --unsafe as the remedy")
 	}
 }
 
@@ -251,7 +285,6 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 	for _, link := range []string{
 		"- [Summary](#summary)",
 		"  - [Analysis Overview](#analysis-overview)",
-		"  - [Key Findings](#key-findings)",
 		"  - [Vulnerability Summary](#vulnerability-summary)",
 		"- [Method At A Glance](#method-at-a-glance)",
 		"- [Processing Errors](#processing-errors)",
@@ -292,7 +325,6 @@ func TestGenerateHumanAvoidsDuplicateExplicitAnchorsForNaturalHeadingSlugs(t *te
 	for _, anchor := range []string{
 		"summary",
 		"analysis-overview",
-		"key-findings",
 		"vulnerability-summary",
 		"method-at-a-glance",
 		"processing-errors",
@@ -642,9 +674,10 @@ func TestVulnSummaryNoTableWhenNotRequested(t *testing.T) {
 	}
 }
 
-// TestKeyFindingsNotRequestedWhenGrypeOff verifies that the Key Findings bullet
-// does not falsely claim "scan complete" when grype was not requested.
-func TestKeyFindingsVulnNotRequested(t *testing.T) {
+// TestAnalysisOverviewVulnNotRequested verifies that the Analysis Overview prose
+// states the scan was not requested (instead of falsely claiming completion)
+// when grype was not enabled.
+func TestAnalysisOverviewVulnNotRequested(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData()
@@ -654,11 +687,11 @@ func TestKeyFindingsVulnNotRequested(t *testing.T) {
 	}
 	output := buf.String()
 
-	if strings.Contains(output, "Vulnerability scan complete") {
-		t.Error("Key Findings should not say 'scan complete' when grype was not requested")
+	if strings.Contains(output, "scan completed without matching") {
+		t.Error("overview should not claim scan completion when grype was not requested")
 	}
-	if !strings.Contains(output, "Vulnerability scan not requested") {
-		t.Error("Key Findings should say 'scan not requested' when grype was not requested")
+	if !strings.Contains(output, "No vulnerability scan was requested") {
+		t.Error("overview should state the scan was not requested when grype was off")
 	}
 }
 
@@ -819,12 +852,14 @@ func TestConfigTableHasNewRows(t *testing.T) {
 	}
 }
 
-// TestSandboxProseWhenBwrapAbsent verifies that when bwrap is not available
-// the sandbox section shows explanatory prose instead of a misleading table.
+// TestSandboxProseWhenBwrapAbsent verifies that when bwrap is not available but
+// --unsafe authorized the run, the sandbox section shows explanatory prose
+// instead of a misleading "Available: true" table.
 func TestSandboxProseWhenBwrapAbsent(t *testing.T) {
 	t.Parallel()
 
 	data := makeTestReportData() // BwrapFound=false by default
+	data.SandboxInfo.UnsafeOvr = true
 	var buf bytes.Buffer
 	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
 		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
@@ -924,5 +959,66 @@ func TestTOCContainsSuppressionSubsections(t *testing.T) {
 		if !strings.Contains(output, link) {
 			t.Errorf("ToC missing suppression subsection entry %q", link)
 		}
+	}
+}
+
+// TestAnalysisOverviewEmbeddedDeepLinks verifies that the Analysis Overview prose
+// embeds the four inline deep links (findings a–d): the examined-count links to
+// the extraction log, "deduplication and normalization" links to component
+// normalization, the index is linked, and the PURL/non-PURL counts link to their
+// respective subsections.
+func TestAnalysisOverviewEmbeddedDeepLinks(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	// Isolate the Analysis Overview section so the assertions cannot be satisfied
+	// by links that merely appear elsewhere (e.g. the ToC).
+	start := strings.Index(output, "### Analysis Overview")
+	if start == -1 {
+		t.Fatal("Analysis Overview heading missing")
+	}
+	end := strings.Index(output[start:], "### Vulnerability Summary")
+	if end == -1 {
+		t.Fatal("Vulnerability Summary heading missing after Analysis Overview")
+	}
+	section := output[start : start+end]
+
+	for _, want := range []string{
+		"files and archives](#extraction-log)",                        // a
+		"[deduplication and normalization](#component-normalization)", // b
+		"(#component-occurrence-index)",                               // b
+		"carry a PURL](#components-with-purl)",                        // c
+		"do not](#components-without-purl)",                           // d
+		"[Method At A Glance](#method-at-a-glance)",                   // method ref kept
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("Analysis Overview prose missing embedded link/text %q", want)
+		}
+	}
+}
+
+// TestKeyFindingsSectionRemoved verifies that the standalone Key Findings section
+// is gone — its content now lives in the Analysis Overview prose.
+func TestKeyFindingsSectionRemoved(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "### Key Findings") {
+		t.Error("Key Findings heading must be removed")
+	}
+	if strings.Contains(output, "(#key-findings)") {
+		t.Error("Key Findings ToC/anchor reference must be removed")
 	}
 }
