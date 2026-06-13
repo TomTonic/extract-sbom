@@ -272,7 +272,8 @@
           "required": [
             "name",
             "available",
-            "unsafeOverride"
+            "unsafeOverride",
+            "bwrapFound"
           ],
           "properties": {
             "name": {
@@ -282,6 +283,9 @@
               "type": "boolean"
             },
             "unsafeOverride": {
+              "type": "boolean"
+            },
+            "bwrapFound": {
               "type": "boolean"
             }
           }

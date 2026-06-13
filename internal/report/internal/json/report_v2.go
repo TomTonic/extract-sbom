@@ -117,6 +117,7 @@ func buildJSONReportV2Skeleton(data ReportData, generatedAt time.Time) ReportV2 
 				Name:           data.SandboxInfo.Name,
 				Available:      data.SandboxInfo.Available,
 				UnsafeOverride: data.SandboxInfo.UnsafeOvr,
+				BwrapFound:     data.SandboxInfo.BwrapFound,
 			},
 			ToolVersions: toolVersionsV2{
 				SevenZip:   data.ToolVersions.SevenZip,

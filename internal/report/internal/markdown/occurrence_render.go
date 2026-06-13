@@ -87,6 +87,21 @@ func writeComponentOccurrenceIndex(w io.Writer, proj reportjson.ProjectionsV2, t
 
 	enrichmentDone := proj.Summary.VulnerabilityEnrichmentState == "completed"
 
+	sort.Slice(withPURL, func(i, j int) bool {
+		ni, nj := strings.ToLower(withPURL[i].PackageName), strings.ToLower(withPURL[j].PackageName)
+		if ni != nj {
+			return ni < nj
+		}
+		return strings.ToLower(withPURL[i].Version) < strings.ToLower(withPURL[j].Version)
+	})
+	sort.Slice(withoutPURL, func(i, j int) bool {
+		ni, nj := strings.ToLower(withoutPURL[i].PackageName), strings.ToLower(withoutPURL[j].PackageName)
+		if ni != nj {
+			return ni < nj
+		}
+		return strings.ToLower(withoutPURL[i].Version) < strings.ToLower(withoutPURL[j].Version)
+	})
+
 	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.componentIndexWithPURLSubsection, proj.Summary.ComponentIndexStats.IndexedWithPURL), anchorComponentsWithPURL)
 	if len(withPURL) == 0 {
 		fmt.Fprintf(w, "- %s\n\n", t.noIndexedComponents)
@@ -116,7 +131,7 @@ func writePackageGroupEntry(w io.Writer, group reportjson.PackageOccurrenceGroup
 	if strings.TrimSpace(group.Version) != "" {
 		title += " " + group.Version
 	}
-	writeAnchoredHeading(w, 4, title, group.AnchorID)
+	writeAnchoredHeading(w, 4, escapeMarkdownText(title), group.AnchorID)
 	fmt.Fprintf(w, "- %s: `%s`\n", t.packageName, valueOrDash(group.PackageName))
 	fmt.Fprintf(w, "- %s: `%s`\n", t.version, valueOrDash(group.Version))
 	if len(group.PURLs) == 1 {

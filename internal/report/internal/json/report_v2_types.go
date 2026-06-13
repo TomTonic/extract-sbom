@@ -121,6 +121,7 @@ type sandboxV2 struct {
 	Name           string `json:"name"`
 	Available      bool   `json:"available"`
 	UnsafeOverride bool   `json:"unsafeOverride"`
+	BwrapFound     bool   `json:"bwrapFound"`
 }
 
 // toolVersionsV2 holds version strings for external binaries invoked during extraction and scanning.
