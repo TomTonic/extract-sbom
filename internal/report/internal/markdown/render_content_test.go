@@ -726,7 +726,7 @@ func TestComponentIndexSortedAlphabetically(t *testing.T) {
 	if alphaIdx == -1 || mongooseIdx == -1 || zlibIdx == -1 {
 		t.Fatal("one or more package headings missing")
 	}
-	if !(alphaIdx < mongooseIdx && mongooseIdx < zlibIdx) {
+	if alphaIdx >= mongooseIdx || mongooseIdx >= zlibIdx {
 		t.Errorf("component index not sorted alphabetically: alpha=%d mongoose=%d zlib=%d",
 			alphaIdx, mongooseIdx, zlibIdx)
 	}

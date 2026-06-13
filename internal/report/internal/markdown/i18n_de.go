@@ -98,7 +98,7 @@ func translationsDE() translations {
 		vulnNoMatchedFindings:                  "Schwachstellenbefunde: keine zugeordneten Schwachstellen",
 		findingVulnMatchesTemplate:             "%d Schwachstellentreffer in %d Paketen (%d eindeutige CVEs) — siehe %s.",
 		findingVulnNoMatches:                   "Schwachstellenscan abgeschlossen — keine Treffer.",
-		findingVulnNotRequested:               "Schwachstellenscan nicht angefordert — mit --grype CVE-Abgleich aktivieren.",
+		findingVulnNotRequested:                "Schwachstellenscan nicht angefordert — mit --grype CVE-Abgleich aktivieren.",
 		findingDeliveryCompositionTemplate:     "Das Lieferpaket bestand aus %d Archiven mit insgesamt %d enthaltenen Dateien. Darin wurden %d verschiedene Softwarekomponenten identifiziert. Diese stammen aus insgesamt %d identifizierten Softwarepaketen.",
 		findingExtractionStatusSuccessTemplate: "Es konnten alle Dateien extrahiert werden.",
 		findingExtractionStatusFailureTemplate: "%d Dateien konnten nicht extrahiert werden.",

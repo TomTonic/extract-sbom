@@ -114,7 +114,7 @@ type translations struct {
 	vulnSummaryHeading                     string
 	findingVulnMatchesTemplate             string
 	findingVulnNoMatches                   string
-	findingVulnNotRequested               string
+	findingVulnNotRequested                string
 	findingDeliveryCompositionTemplate     string
 	findingExtractionStatusSuccessTemplate string
 	findingExtractionStatusFailureTemplate string

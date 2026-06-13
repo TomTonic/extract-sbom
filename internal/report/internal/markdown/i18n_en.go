@@ -98,7 +98,7 @@ func translationsEN() translations {
 		vulnNoMatchedFindings:                  "Vulnerability findings: no matched vulnerabilities",
 		findingVulnMatchesTemplate:             "%d vulnerability matches in %d packages (%d unique CVEs) — see %s.",
 		findingVulnNoMatches:                   "Vulnerability scan complete — no matched findings.",
-		findingVulnNotRequested:               "Vulnerability scan not requested — pass --grype to enable CVE matching.",
+		findingVulnNotRequested:                "Vulnerability scan not requested — pass --grype to enable CVE matching.",
 		findingDeliveryCompositionTemplate:     "The delivery package contained %d archives (with %d files in total). Within this, %d distinct software components were identified. These stem from a total of %d identified software packages.",
 		findingExtractionStatusSuccessTemplate: "All files were successfully extracted.",
 		findingExtractionStatusFailureTemplate: "%d files could not be extracted.",
