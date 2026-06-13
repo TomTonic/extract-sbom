@@ -82,12 +82,13 @@ func TestSummaryProseRendersComputedMetrics(t *testing.T) {
 	out := buf.String()
 
 	for _, want := range []string{
-		// delivery composition: 2 indexed components, 1 with PURL / 1 without
-		"2 distinct software components",
-		// PURL coverage finding: "1 of 2 package occurrences"
-		"1 of 2 package occurrences",
-		// vulnerability matches finding: "1 vulnerability matches in 1 packages (1 unique CVEs)"
-		"1 vulnerability matches in 1 packages (1 unique CVEs)",
+		// inventory narrative: 2 indexed package occurrences
+		"2 distinct package occurrences",
+		// PURL coverage embedded links: 1 with PURL / 1 without
+		"[1 carry a PURL](#components-with-purl)",
+		"[1 do not](#components-without-purl)",
+		// vulnerability outcome: "matched 1 findings across 1 packages (1 unique CVEs)"
+		"matched 1 findings across 1 packages (1 unique CVEs)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("summary prose missing computed metric %q", want)

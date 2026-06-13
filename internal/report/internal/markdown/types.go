@@ -54,6 +54,5 @@ const (
 	anchorScanNoPackageIDs       = "content-items-without-package-identities"
 	anchorExtraction             = "extraction-log"
 	anchorSummaryAnalysis        = "analysis-overview"
-	anchorSummaryKeyFindings     = "key-findings"
 	anchorSummaryVuln            = "vulnerability-summary"
 )

@@ -114,21 +114,34 @@ func writeRunScopeSection(w io.Writer, vm markdownReportViewModel) {
 	fmt.Fprintln(w)
 
 	// Sandbox subsection.
+	//
+	// There are three runtime states, distinguished by whether bwrap was found on
+	// the host (BwrapFound) and whether --unsafe was passed (UnsafeOverride):
+	//
+	//   - BwrapFound:                 bwrap is always used when present, so the
+	//                                 sandbox was active. --unsafe, if passed, had
+	//                                 no effect.
+	//   - !BwrapFound && Unsafe:      bwrap unavailable but the run was authorized
+	//                                 with --unsafe and completed in passthrough.
+	//   - !BwrapFound && !Unsafe:     bwrap unavailable and not overridden; the
+	//                                 run could not extract tool-backed formats.
 	writeAnchoredHeading(w, 3, t.sandboxSection, anchorSandbox)
-	if !sb.BwrapFound {
-		// No bwrap on this platform (e.g. macOS) — show explanatory prose instead of
-		// a table that would show "Available: true" for passthrough (misleading).
-		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrap)
-	} else {
+	switch {
+	case sb.BwrapFound:
 		fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
 		fmt.Fprintln(w, "|---|---|")
 		fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, sb.Name)
 		fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, sb.Available)
-		// BwrapFound=true here, so --unsafe override is the only reason the sandbox
-		// would be bypassed; warn when that is the case.
-		if sb.UnsafeOverride {
-			fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
-		}
+		fmt.Fprintf(w, "| %s | %s |\n", t.sandboxIsolationLabel, t.sandboxActiveValue)
 		fmt.Fprintln(w)
+		// When bwrap is available it is always used; a --unsafe flag is ignored.
+		// Surface that so the reader is not misled into thinking isolation was off.
+		if sb.UnsafeOverride {
+			fmt.Fprintf(w, "%s\n\n", t.sandboxUnsafeIgnoredNote)
+		}
+	case sb.UnsafeOverride:
+		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrapUnsafe)
+	default:
+		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrapDenied)
 	}
 }

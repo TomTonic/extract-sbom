@@ -63,9 +63,11 @@ type translations struct {
 	generator                              string
 	sandboxName                            string
 	sandboxAvail                           string
-	sandboxNoBwrap                         string
-	unsafeWarning                          string
-	unsafeActive                           string
+	sandboxIsolationLabel                  string
+	sandboxActiveValue                     string
+	sandboxUnsafeIgnoredNote               string
+	sandboxNoBwrapUnsafe                   string
+	sandboxNoBwrapDenied                   string
 	tableOfContentsSection                 string
 	methodOverviewSection                  string
 	appendixSection                        string
@@ -112,10 +114,12 @@ type translations struct {
 	vulnFindingsTemplate                   string
 	vulnNoMatchedFindings                  string
 	vulnSummaryHeading                     string
-	findingVulnMatchesTemplate             string
-	findingVulnNoMatches                   string
 	findingVulnNotRequested                string
-	findingDeliveryCompositionTemplate     string
+	overviewCompositionTemplate            string
+	overviewInventoryTemplate              string
+	overviewPURLTemplate                   string
+	overviewVulnMatchesTemplate            string
+	overviewVulnNone                       string
 	findingExtractionStatusSuccessTemplate string
 	findingExtractionStatusFailureTemplate string
 	reportHeaderGeneratorVersionTemplate   string
@@ -149,7 +153,6 @@ type translations struct {
 	methodBulletDedup                      string
 	methodBulletTrust                      string
 	appendixLead                           string
-	summaryKeyFindingsSection              string
 	summaryAnalysisSection                 string
 	summaryVulnSection                     string
 	endOfReport                            string
@@ -159,12 +162,10 @@ type translations struct {
 	linkFinalSBOMBuild                     string
 	linkDeduplication                      string
 	linkPackageDetectionReliability        string
-	summaryAnalysisProseTemplate           string
 	summaryAnalysisMethodRef               string
 	findingToolMissingTemplate             string
 	findingExtractionGapTemplate           string
 	findingScanFailedTemplate              string
-	findingPURLCoverageTemplate            string
 	findingNoPackageIdentityTemplate       string
 	findingNoCriticalLimitations           string
 	findingPolicyDecisionsTemplate         string
