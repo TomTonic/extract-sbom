@@ -9,7 +9,7 @@ import (
 // Default values mirrored from config.DefaultConfig() / config.DefaultLimits().
 // Kept here as constants to avoid a cross-package import in the renderer.
 const (
-	configDefaultPolicyMode      = "strict"
+	configDefaultPolicyMode      = "partial"
 	configDefaultInterpretMode   = "installer-semantic"
 	configDefaultLanguage        = "en"
 	configDefaultSBOMFormat      = "cyclonedx-json"
