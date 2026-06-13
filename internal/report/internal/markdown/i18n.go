@@ -172,6 +172,10 @@ type translations struct {
 	processingExtractionFailedLabel        string
 	processingSecurityBlockedLabel         string
 	processingToolMissingLabel             string
+	processingTimeoutLabel                 string
+	processingPasswordRequiredLabel        string
+	processingFormatMismatchLabel          string
+	processingCorruptLabel                 string
 	processingScanErrorsLabel              string
 	processingSourceHeader                 string
 	processingLocationHeader               string
