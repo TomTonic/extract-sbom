@@ -51,15 +51,16 @@ func writeSummary(w io.Writer, proj reportjson.ProjectionsV2, t translations) {
 	writeAnchoredHeading(w, 3, t.summaryKeyFindingsSection, anchorSummaryKeyFindings)
 
 	var foundVulnStr string
-	if !proj.Summary.VulnerabilityRequested {
+	switch {
+	case !proj.Summary.VulnerabilityRequested:
 		foundVulnStr = t.findingVulnNotRequested
-	} else if proj.Summary.Vulnerabilities > 0 {
+	case proj.Summary.Vulnerabilities > 0:
 		foundVulnStr = fmt.Sprintf(t.findingVulnMatchesTemplate,
 			proj.Summary.Vulnerabilities,
 			proj.Summary.AffectedPackageCount,
 			proj.Summary.UniqueVulnerabilityCount,
 			sectionLink(t.summaryVulnSection, anchorSummaryVuln))
-	} else {
+	default:
 		foundVulnStr = t.findingVulnNoMatches
 	}
 	fmt.Fprintf(w, "- %s\n\n", foundVulnStr)
