@@ -115,8 +115,10 @@ JSON
 		t.Fatalf("read JSON report: %v", err)
 	}
 	outMachine := string(rawMachine)
+	// The default JSON report is the v2 schema; vulnerability provenance lives
+	// under raw.vulnerabilitiesRaw.
 	for _, want := range []string{
-		`"vulnerabilities": {`,
+		`"vulnerabilitiesRaw": {`,
 		`"state": "completed"`,
 		`"requested": true`,
 		`"grypeVersion": "0.111.0"`,

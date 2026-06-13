@@ -277,11 +277,15 @@ type Config struct {
 	MarkdownRenderEngine string          // writer | template-wrapper | template-document
 	MarkdownTemplateFile string          // path to text/template file used by template renderers
 	GrypeEnabled         bool            // GrypeEnabled enables optional Grype vulnerability enrichment when true.
-	RootMetadata         RootMetadata
-	Unsafe               bool
-	Limits               Limits
-	ProgressFn           ProgressReporter // optional runtime progress sink
-	ParallelScanners     int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
+	// LegacyJSON selects the deprecated v1 JSON report schema. By default the
+	// JSON report is emitted in the canonical v2 schema; set this only when a
+	// downstream consumer still requires the legacy v1 layout.
+	LegacyJSON       bool
+	RootMetadata     RootMetadata
+	Unsafe           bool
+	Limits           Limits
+	ProgressFn       ProgressReporter // optional runtime progress sink
+	ParallelScanners int              // number of concurrent Syft scan workers (default: GOMAXPROCS, capped at 16)
 	// Passwords is the ordered list of candidate passwords to try when an
 	// encrypted archive is encountered during extraction. Passwords are tried
 	// in the order given; the first that successfully unlocks the archive is

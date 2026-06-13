@@ -409,23 +409,27 @@ func TestRunNestedZIPReportContainsExtractionLogAndScans(t *testing.T) {
 		t.Fatalf("cannot read JSON report: %v", err)
 	}
 
+	// The default JSON report is the v2 schema; the raw extraction tree and scan
+	// snapshots live under "raw".
 	var parsed struct {
-		Extraction struct {
-			Path string `json:"path"`
-		} `json:"extraction"`
-		Scans []struct {
-			NodePath string `json:"nodePath"`
-		} `json:"scans"`
+		Raw struct {
+			Extraction struct {
+				Path string `json:"Path"`
+			} `json:"extractionTreeRaw"`
+			Scans []struct {
+				NodePath string `json:"nodePath"`
+			} `json:"scansRaw"`
+		} `json:"raw"`
 	}
 	if err := json.Unmarshal(machine, &parsed); err != nil {
 		t.Fatalf("invalid JSON report JSON: %v", err)
 	}
-	if parsed.Extraction.Path != "nested-with-jar.zip" {
-		t.Fatalf("machine extraction root path = %q, want %q", parsed.Extraction.Path, "nested-with-jar.zip")
+	if parsed.Raw.Extraction.Path != "nested-with-jar.zip" {
+		t.Fatalf("machine extraction root path = %q, want %q", parsed.Raw.Extraction.Path, "nested-with-jar.zip")
 	}
 
 	nodePaths := make(map[string]bool)
-	for _, s := range parsed.Scans {
+	for _, s := range parsed.Raw.Scans {
 		nodePaths[s.NodePath] = true
 	}
 	for _, want := range []string{

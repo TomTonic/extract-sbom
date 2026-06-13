@@ -87,8 +87,16 @@ func GenerateHTML(data ReportData, language string, w io.Writer) error {
 	return htmlpkg.Generate(data, language, w)
 }
 
-// GenerateJSON writes a structured JSON audit report to the writer.
+// GenerateJSON writes the canonical (v2) structured JSON audit report to the
+// writer. This is the default JSON output.
 func GenerateJSON(data ReportData, w io.Writer) error {
+	return jsonpkg.GenerateV2(data, w)
+}
+
+// GenerateJSONLegacy writes the deprecated v1 JSON audit report schema. It is
+// emitted only when explicitly requested (for example via --legacy-json) for
+// downstream consumers that have not migrated to the v2 schema.
+func GenerateJSONLegacy(data ReportData, w io.Writer) error {
 	return jsonpkg.Generate(data, w)
 }
 

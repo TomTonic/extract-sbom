@@ -356,7 +356,11 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				fatalErr = fmt.Errorf("create JSON report: %w", ferr)
 			}
 		} else {
-			if werr := report.GenerateJSON(buildReportData(), f); werr != nil {
+			genJSON := report.GenerateJSON
+			if cfg.LegacyJSON {
+				genJSON = report.GenerateJSONLegacy
+			}
+			if werr := genJSON(buildReportData(), f); werr != nil {
 				if cerr := f.Close(); cerr != nil {
 					addIssue("close-report-json", cerr)
 					if fatalErr == nil {

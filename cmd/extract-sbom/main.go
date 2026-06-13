@@ -70,6 +70,7 @@ func rootCmd() *cobra.Command {
 		passwords               []string
 		passwordFile            string
 		grype                   bool
+		legacyJSON              bool
 		unsafe                  bool
 		maxDepth                int
 		maxFiles                int
@@ -172,6 +173,7 @@ Configuration can be set via:
 	cmd.Flags().StringVar(&delivDate, "root-delivery-date", "", "Delivery date (YYYY-MM-DD) for the SBOM root component")
 	cmd.Flags().StringArrayVar(&rootProps, "root-property", nil, "Additional root metadata as key=value (repeatable)")
 	cmd.Flags().BoolVar(&grype, "grype", false, "Enable optional Grype vulnerability enrichment for the report")
+	cmd.Flags().BoolVar(&legacyJSON, "legacy-json", false, "Emit the deprecated v1 JSON report schema instead of the default v2")
 	cmd.Flags().BoolVar(&unsafe, "unsafe", false, "Allow unsandboxed extraction (MUST never be silent)")
 	cmd.Flags().IntVar(&maxDepth, "max-depth", defaults.Limits.MaxDepth, "Maximum extraction recursion depth")
 	cmd.Flags().IntVar(&maxFiles, "max-files", defaults.Limits.MaxFiles, "Maximum total extracted file count")
@@ -252,6 +254,7 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 		}
 	}
 	cfg.GrypeEnabled = v.GetBool("grype")
+	cfg.LegacyJSON = v.GetBool("legacy-json")
 	cfg.RootMetadata.Manufacturer = v.GetString("root-manufacturer")
 	cfg.RootMetadata.Name = v.GetString("root-name")
 	cfg.RootMetadata.Version = v.GetString("root-version")

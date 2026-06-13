@@ -57,7 +57,8 @@ func TestFacadeGeneratorsProduceOutput(t *testing.T) {
 			return GenerateMarkdownWithEngine(data, "en", w, "", "")
 		}, "alpha"},
 		{"html", func(w *strings.Builder) error { return GenerateHTML(data, "en", w) }, "<html"},
-		{"json", func(w *strings.Builder) error { return GenerateJSON(data, w) }, "\"schemaVersion\""},
+		{"json", func(w *strings.Builder) error { return GenerateJSON(data, w) }, "\"extract-sbom-report\""},
+		{"json-legacy", func(w *strings.Builder) error { return GenerateJSONLegacy(data, w) }, "\"schemaVersion\""},
 		{"sarif", func(w *strings.Builder) error { return GenerateSARIF(data, w) }, "\"version\""},
 	}
 
@@ -76,5 +77,33 @@ func TestFacadeGeneratorsProduceOutput(t *testing.T) {
 				t.Errorf("%s output missing %q", tc.name, tc.want)
 			}
 		})
+	}
+}
+
+// TestGenerateJSONDefaultsToV2 verifies that the default JSON report is the
+// canonical v2 schema, and that the legacy v1 schema is produced only via the
+// explicit GenerateJSONLegacy entry point.
+func TestGenerateJSONDefaultsToV2(t *testing.T) {
+	t.Parallel()
+
+	data := minimalReportData()
+
+	var v2 strings.Builder
+	if err := GenerateJSON(data, &v2); err != nil {
+		t.Fatalf("GenerateJSON error: %v", err)
+	}
+	if !strings.Contains(v2.String(), `"version": "2.0.0"`) {
+		t.Error("default JSON report is not the v2 schema (missing version 2.0.0)")
+	}
+	if strings.Contains(v2.String(), `"schemaVersion": "1.0.0"`) {
+		t.Error("default JSON report must not be the legacy v1 schema")
+	}
+
+	var v1 strings.Builder
+	if err := GenerateJSONLegacy(data, &v1); err != nil {
+		t.Fatalf("GenerateJSONLegacy error: %v", err)
+	}
+	if !strings.Contains(v1.String(), `"schemaVersion": "1.0.0"`) {
+		t.Error("legacy JSON report is not the v1 schema (missing schemaVersion 1.0.0)")
 	}
 }

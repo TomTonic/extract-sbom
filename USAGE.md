@@ -470,11 +470,18 @@ is not relevant.
 Output format for the audit report.
 
 - `markdown`: Markdown file (`*.report.md`), readable for manual review.
-- `json`: JSON file (`*.report.json`), structured for tooling/CI integration.
+- `json`: JSON file (`*.report.json`), structured for tooling/CI integration. Emitted in the canonical **v2** schema by default (see `--legacy-json`).
 - `both`: both `human` + `machine` formats written.
 - `html`: standalone HTML file (`*.report.html`) with embedded CSS, severity-colored vulnerability table, and collapsible extraction log — no external dependencies, suitable for sharing with auditors.
 - `sarif`: SARIF 2.1.0 JSON file (`*.sarif.json`) — one result per vulnerability match, severity mapped to SARIF levels (`error` for critical/high, `warning` for medium, `note` for low/negligible). Use with `--grype` to populate results. Designed for GitHub/GitLab security scanning integration.
 - `all`: all three of `human`, `machine`, and `html` written simultaneously.
+
+**`--legacy-json` (default: false)**
+
+Emit the deprecated **v1** JSON report schema instead of the default v2 schema.
+Use only for downstream consumers that have not yet migrated to v2; in v2 the
+vulnerability provenance moved to `.raw.vulnerabilitiesRaw`, the extraction tree
+to `.raw.extractionTreeRaw`, and scan snapshots to `.raw.scansRaw`.
 
 **`--grype`**
 

@@ -168,25 +168,30 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 		t.Fatalf("reading JSON report: %v", err)
 	}
 
+	// The default JSON report is the v2 schema; vulnerability provenance lives
+	// under raw.vulnerabilitiesRaw.
 	var report struct {
-		Vulnerabilities struct {
-			State        string `json:"state"`
-			Requested    bool   `json:"requested"`
-			GrypeVersion string `json:"grypeVersion"`
-		} `json:"vulnerabilities"`
+		Raw struct {
+			Vulnerabilities struct {
+				State        string `json:"state"`
+				Requested    bool   `json:"requested"`
+				GrypeVersion string `json:"grypeVersion"`
+			} `json:"vulnerabilitiesRaw"`
+		} `json:"raw"`
 	}
 	if unmarshalErr := json.Unmarshal(raw, &report); unmarshalErr != nil {
 		t.Fatalf("parsing JSON report JSON: %v", unmarshalErr)
 	}
 
-	if report.Vulnerabilities.State != "completed" {
-		t.Errorf("vulnerabilities.state = %q, want completed", report.Vulnerabilities.State)
+	vulns := report.Raw.Vulnerabilities
+	if vulns.State != "completed" {
+		t.Errorf("raw.vulnerabilitiesRaw.state = %q, want completed", vulns.State)
 	}
-	if !report.Vulnerabilities.Requested {
-		t.Error("vulnerabilities.requested = false, want true")
+	if !vulns.Requested {
+		t.Error("raw.vulnerabilitiesRaw.requested = false, want true")
 	}
-	if report.Vulnerabilities.GrypeVersion == "" {
-		t.Error("vulnerabilities.grypeVersion is empty")
+	if vulns.GrypeVersion == "" {
+		t.Error("raw.vulnerabilitiesRaw.grypeVersion is empty")
 	}
 
 	humanRaw, err := os.ReadFile(humanReportPath)
@@ -197,5 +202,5 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 		t.Error("markdown report does not contain 'Vulnerability' section")
 	}
 
-	t.Logf("grype roundtrip passed (grypeVersion=%s)", report.Vulnerabilities.GrypeVersion)
+	t.Logf("grype roundtrip passed (grypeVersion=%s)", vulns.GrypeVersion)
 }
