@@ -51,7 +51,7 @@ func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t transla
 	}
 	for i := range extractionIssues {
 		row := &extractionIssues[i]
-		class := extractionStatusClass(row.Status, t)
+		class := extractionStatusClass(row.Status, row.Detail, t)
 		archiveType, archiveMethod, encrypted, physicalSize := extractionArchiveCols(row)
 		detected := ""
 		if row.Depth > 0 {
@@ -71,10 +71,28 @@ func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t transla
 	}
 }
 
-func extractionStatusClass(status string, t translations) string {
+func extractionStatusClass(status, detail string, t translations) string {
 	switch status {
 	case "failed":
-		return t.processingExtractionFailedLabel
+		lower := strings.ToLower(detail)
+		switch {
+		case strings.Contains(lower, "per-extraction timeout"):
+			return t.processingTimeoutLabel
+		case strings.Contains(lower, "no matching password"):
+			return t.processingPasswordRequiredLabel
+		case strings.Contains(lower, "can not open the file as archive") ||
+			strings.Contains(lower, "is not archive") ||
+			strings.Contains(lower, "does not match the detected archive format"):
+			return t.processingFormatMismatchLabel
+		case strings.Contains(lower, "unexpected end of archive") ||
+			strings.Contains(lower, "headers error") ||
+			strings.Contains(lower, "unconfirmed start of archive") ||
+			strings.Contains(lower, "truncated/corrupt") ||
+			strings.Contains(lower, "invalid tar header"):
+			return t.processingCorruptLabel
+		default:
+			return t.processingExtractionFailedLabel
+		}
 	case "security-blocked":
 		return t.processingSecurityBlockedLabel
 	case "tool-missing":
