@@ -3,21 +3,40 @@ package markdown
 import (
 	"fmt"
 	"io"
+	"slices"
 )
 
 // Default values mirrored from config.DefaultConfig() / config.DefaultLimits().
 // Kept here as constants to avoid a cross-package import in the renderer.
 const (
-	configDefaultPolicyMode    = "strict"
-	configDefaultInterpretMode = "installer-semantic"
-	configDefaultLanguage      = "en"
-	configDefaultMaxDepth      = 6
-	configDefaultMaxFiles      = 200000
-	configDefaultMaxTotalSize  = int64(20 * 1024 * 1024 * 1024)
-	configDefaultMaxEntrySize  = int64(2 * 1024 * 1024 * 1024)
-	configDefaultMaxRatio      = 150
-	configDefaultTimeout       = "1m0s"
+	configDefaultPolicyMode      = "strict"
+	configDefaultInterpretMode   = "installer-semantic"
+	configDefaultLanguage        = "en"
+	configDefaultSBOMFormat      = "cyclonedx-json"
+	configDefaultReportSelection = "markdown"
+	configDefaultMaxDepth        = 6
+	configDefaultMaxFiles        = 200000
+	configDefaultMaxTotalSize    = int64(20 * 1024 * 1024 * 1024)
+	configDefaultMaxEntrySize    = int64(2 * 1024 * 1024 * 1024)
+	configDefaultMaxRatio        = 150
+	configDefaultTimeout         = "1m0s"
 )
+
+// configDefaultSkipExtensions mirrors config.defaultSkipExtensions().
+// Order must match exactly for slices.Equal comparison to work.
+var configDefaultSkipExtensions = []string{
+	".doc", ".dot",
+	".xls", ".xlt", ".xla",
+	".ppt", ".pot", ".pps", ".ppa",
+	".vsd", ".vss", ".vst",
+	".msg", ".pub", ".mdb",
+	".docx", ".docm", ".dotx", ".dotm",
+	".xlsx", ".xlsm", ".xltx", ".xltm",
+	".pptx", ".pptm", ".potx", ".potm", ".ppsx", ".ppsm",
+	".vsdx", ".vsdm",
+	".odt", ".ods", ".odp", ".odg", ".odf",
+	".pdf",
+}
 
 func configMarkDefault(val, def string) string {
 	if val == def {
@@ -56,7 +75,7 @@ func configMarkDefaultBytes(val, def int64, unit string) string {
 //
 //	## Run & Scope
 //	### Input File          (filename, hash, Run ID, timing)
-//	### Configuration       (limit settings, generator)
+//	### Configuration       (limit settings, output formats, safety flags)
 //	### Sandbox             (sandbox status, unsafe override warning)
 func writeRunScopeSection(w io.Writer, vm markdownReportViewModel) {
 	t := vm.translations
@@ -79,27 +98,37 @@ func writeRunScopeSection(w io.Writer, vm markdownReportViewModel) {
 	fmt.Fprintf(w, "| %s | %s |\n", t.policyMode, configMarkDefault(cfg.PolicyMode, configDefaultPolicyMode))
 	fmt.Fprintf(w, "| %s | %s |\n", t.interpretMode, configMarkDefault(cfg.InterpretMode, configDefaultInterpretMode))
 	fmt.Fprintf(w, "| %s | %s |\n", t.language, configMarkDefault(cfg.Language, configDefaultLanguage))
+	fmt.Fprintf(w, "| sbom-format | %s |\n", configMarkDefault(cfg.SBOMFormat, configDefaultSBOMFormat))
+	fmt.Fprintf(w, "| report-selection | %s |\n", configMarkDefault(cfg.ReportSelection, configDefaultReportSelection))
 	fmt.Fprintf(w, "| grype | %s |\n", configMarkDefaultBool(cfg.GrypeEnabled, false))
+	fmt.Fprintf(w, "| unsafe | %s |\n", configMarkDefaultBool(cfg.Unsafe, false))
+	fmt.Fprintf(w, "| parallel-scanners | %d |\n", cfg.ParallelScanners)
 	fmt.Fprintf(w, "| %s | %s |\n", t.maxDepth, configMarkDefaultInt(cfg.Limits.MaxDepth, configDefaultMaxDepth))
 	fmt.Fprintf(w, "| %s | %s |\n", t.maxFiles, configMarkDefaultInt(cfg.Limits.MaxFiles, configDefaultMaxFiles))
 	fmt.Fprintf(w, "| %s | %s |\n", t.maxTotalSize, configMarkDefaultBytes(cfg.Limits.MaxTotalSize, configDefaultMaxTotalSize, t.unitBytes))
 	fmt.Fprintf(w, "| %s | %s |\n", t.maxEntrySize, configMarkDefaultBytes(cfg.Limits.MaxEntrySize, configDefaultMaxEntrySize, t.unitBytes))
 	fmt.Fprintf(w, "| %s | %s |\n", t.maxRatio, configMarkDefaultInt(cfg.Limits.MaxRatio, configDefaultMaxRatio))
 	fmt.Fprintf(w, "| %s | %s |\n", t.timeout, configMarkDefault(cfg.Limits.Timeout, configDefaultTimeout))
-	fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(cfg.SkipExtensions))
+	skipExtsIsDefault := slices.Equal(cfg.SkipExtensions, configDefaultSkipExtensions)
+	fmt.Fprintf(w, "| %s | %s |\n", t.skipExtensions, configSkipExtensionsDisplay(cfg.SkipExtensions, skipExtsIsDefault))
 	fmt.Fprintln(w)
 
 	// Sandbox subsection.
 	writeAnchoredHeading(w, 3, t.sandboxSection, anchorSandbox)
-	fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
-	fmt.Fprintln(w, "|---|---|")
-	fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, sb.Name)
-	fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, sb.Available)
-	// Only warn when bwrap was actually present on this system but explicitly
-	// bypassed via --unsafe. On platforms where bwrap is not available (macOS)
-	// passthrough is the only mode and the WARNING would be misleading.
-	if sb.UnsafeOverride && sb.BwrapFound {
-		fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
+	if !sb.BwrapFound {
+		// No bwrap on this platform (e.g. macOS) — show explanatory prose instead of
+		// a table that would show "Available: true" for passthrough (misleading).
+		fmt.Fprintf(w, "%s\n\n", t.sandboxNoBwrap)
+	} else {
+		fmt.Fprintf(w, "| %s | %s |\n", t.setting, t.value)
+		fmt.Fprintln(w, "|---|---|")
+		fmt.Fprintf(w, "| %s | %s |\n", t.sandboxName, sb.Name)
+		fmt.Fprintf(w, "| %s | %v |\n", t.sandboxAvail, sb.Available)
+		// BwrapFound=true here, so --unsafe override is the only reason the sandbox
+		// would be bypassed; warn when that is the case.
+		if sb.UnsafeOverride {
+			fmt.Fprintf(w, "| **%s** | **%s** |\n", t.unsafeWarning, t.unsafeActive)
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w)
 }

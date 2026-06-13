@@ -43,6 +43,7 @@ func translationsEN() translations {
 		generator:                              "extract-sbom build",
 		sandboxName:                            "Sandbox",
 		sandboxAvail:                           "Available",
+		sandboxNoBwrap:                         "This host does not have `bwrap` (bubblewrap) installed. Sandbox isolation is therefore not available; the tool ran in passthrough mode without process isolation. This is expected behavior on platforms where bwrap is not supported, such as macOS. No --unsafe override was required.",
 		unsafeWarning:                          "WARNING",
 		unsafeActive:                           "Unsafe mode active — no sandbox isolation",
 		tableOfContentsSection:                 "Table of Contents",

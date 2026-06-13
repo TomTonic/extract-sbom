@@ -261,6 +261,10 @@ func TestGenerateHumanTOCContainsAnchorLinks(t *testing.T) {
 		"    - [Components with PURL](#components-with-purl)",
 		"    - [Components without PURL](#components-without-purl)",
 		"- [Component Normalization](#component-normalization)",
+		"    - [FS-cataloger artifact](#suppression-fs-artifacts)",
+		"    - [File with no identification metadata](#suppression-low-value-file-artifacts)",
+		"    - [Weak duplicate](#suppression-weak-duplicates)",
+		"    - [PURL duplicate](#suppression-purl-duplicates)",
 		"- [Input File](#input-file)",
 		"- [Configuration](#configuration)",
 		"- [Extension Filter](#extension-filter)",
@@ -571,7 +575,10 @@ func TestConfigDefaultMarkers(t *testing.T) {
 		"| Policy mode | strict (default) |",
 		"| Interpretation mode | installer-semantic (default) |",
 		"| Language | en (default) |",
+		"| sbom-format | cyclonedx-json (default) |",
+		"| report-selection | markdown (default) |",
 		"| grype | false (default) |",
+		"| unsafe | false (default) |",
 		"| Max depth | 6 (default) |",
 		"| Max files | 200000 (default) |",
 		"| Timeout | 1m0s (default) |",
@@ -718,5 +725,200 @@ func TestComponentIndexSortedAlphabetically(t *testing.T) {
 	if !(alphaIdx < mongooseIdx && mongooseIdx < zlibIdx) {
 		t.Errorf("component index not sorted alphabetically: alpha=%d mongoose=%d zlib=%d",
 			alphaIdx, mongooseIdx, zlibIdx)
+	}
+}
+
+// TestVulnSummaryHeadingAbsentWhenNotRequested verifies that the
+// "Vulnerability summary (grype-inspired view):" heading does not appear
+// when --grype was not requested.
+func TestVulnSummaryHeadingAbsentWhenNotRequested(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "Vulnerability summary (grype-inspired view):") {
+		t.Error("vuln summary heading must not appear when grype was not requested")
+	}
+}
+
+// TestSkipExtensionsDefaultMarker verifies that the skip-extensions row shows
+// "(default)" when the configured list matches the default list.
+func TestSkipExtensionsDefaultMarker(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData() // uses config.DefaultConfig() → default SkipExtensions
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "(default)") || !strings.Contains(output, ".doc, .dot") {
+		t.Error("skip-extensions with default list should include '(default)' marker")
+	}
+	// Verify the full marker is in the skip-extensions row specifically.
+	if !strings.Contains(output, "| skip-extensions | .doc") {
+		t.Error("skip-extensions row not found")
+	}
+	if !strings.Contains(output, ".pdf (default) |") {
+		t.Error("skip-extensions default marker missing at end of value")
+	}
+}
+
+// TestSkipExtensionsNoDefaultMarkerWhenCustom verifies that a custom
+// skip-extensions list does not receive the "(default)" marker.
+func TestSkipExtensionsNoDefaultMarkerWhenCustom(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.Config.SkipExtensions = []string{".tmp", ".log"}
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if strings.Contains(output, "| skip-extensions | .tmp, .log (default) |") {
+		t.Error("custom skip-extensions list must not be marked as default")
+	}
+	if !strings.Contains(output, "| skip-extensions | .tmp, .log |") {
+		t.Error("custom skip-extensions list not rendered correctly")
+	}
+}
+
+// TestConfigTableHasNewRows verifies that the config table now includes
+// unsafe, sbom-format, report-selection, and parallel-scanners rows.
+func TestConfigTableHasNewRows(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	for _, row := range []string{
+		"| unsafe |",
+		"| sbom-format |",
+		"| report-selection |",
+		"| parallel-scanners |",
+	} {
+		if !strings.Contains(output, row) {
+			t.Errorf("config table missing row %q", row)
+		}
+	}
+}
+
+// TestSandboxProseWhenBwrapAbsent verifies that when bwrap is not available
+// the sandbox section shows explanatory prose instead of a misleading table.
+func TestSandboxProseWhenBwrapAbsent(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData() // BwrapFound=false by default
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "bwrap") {
+		t.Error("sandbox section should mention bwrap when it is absent")
+	}
+	if !strings.Contains(output, "passthrough mode") {
+		t.Error("sandbox section should mention passthrough mode when bwrap is absent")
+	}
+	// The raw "Available: true" table row must not appear on macOS.
+	if strings.Contains(output, "| Available | true |") {
+		t.Error("misleading 'Available: true' table row must not appear when bwrap is absent")
+	}
+}
+
+// TestSandboxTableWhenBwrapPresent verifies that when bwrap IS available and
+// active (no --unsafe), the sandbox section shows the status table, not prose.
+func TestSandboxTableWhenBwrapPresent(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	data.SandboxInfo.BwrapFound = true
+	data.SandboxInfo.Name = "bubblewrap"
+	data.SandboxInfo.Available = true
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "| Sandbox | bubblewrap |") {
+		t.Error("sandbox table row 'bubblewrap' missing when bwrap is present")
+	}
+	if strings.Contains(output, "WARNING") {
+		t.Error("no WARNING expected when bwrap is present but --unsafe was not used")
+	}
+	if strings.Contains(output, "passthrough mode") {
+		t.Error("passthrough prose must not appear when bwrap IS available")
+	}
+}
+
+// TestSuppressionSubsectionsAreH3 verifies that the four Component Normalization
+// subsections are rendered as H3 (###) headings, not H4 (####).
+func TestSuppressionSubsectionsAreH3(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	for _, heading := range []string{
+		"### FS-cataloger artifact",
+		"### File with no identification metadata",
+		"### Weak duplicate",
+		"### PURL duplicate",
+	} {
+		if !strings.Contains(output, heading) {
+			t.Errorf("suppression subsection not H3: want %q in output", heading)
+		}
+	}
+	for _, heading := range []string{
+		"#### FS-cataloger artifact",
+		"#### File with no identification metadata",
+		"#### Weak duplicate",
+		"#### PURL duplicate",
+	} {
+		if strings.Contains(output, heading) {
+			t.Errorf("suppression subsection must not be H4: found %q in output", heading)
+		}
+	}
+}
+
+// TestTOCContainsSuppressionSubsections verifies that the four suppression-reason
+// subsections appear in the Table of Contents with their correct anchors.
+func TestTOCContainsSuppressionSubsections(t *testing.T) {
+	t.Parallel()
+
+	data := makeTestReportData()
+	var buf bytes.Buffer
+	if err := GenerateMarkdownWithOptions(data, "en", &buf, RenderOptions{}); err != nil {
+		t.Fatalf("GenerateMarkdownWithOptions error: %v", err)
+	}
+	output := buf.String()
+
+	for _, link := range []string{
+		"[FS-cataloger artifact](#suppression-fs-artifacts)",
+		"[File with no identification metadata](#suppression-low-value-file-artifacts)",
+		"[Weak duplicate](#suppression-weak-duplicates)",
+		"[PURL duplicate](#suppression-purl-duplicates)",
+	} {
+		if !strings.Contains(output, link) {
+			t.Errorf("ToC missing suppression subsection entry %q", link)
+		}
 	}
 }

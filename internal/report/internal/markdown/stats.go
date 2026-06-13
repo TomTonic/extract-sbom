@@ -134,8 +134,12 @@ func writeResidualRisk(w io.Writer, proj reportjson.ProjectionsV2, t translation
 	fmt.Fprintf(w, "- %s\n", fmt.Sprintf(t.residualRiskMoreDetails, scanApproachLink(t.linkPackageDetectionReliability, "6-package-detection-reliability")))
 }
 
-func configSkipExtensionsDisplay(exts []string) string {
-	return strings.Join(exts, ", ")
+func configSkipExtensionsDisplay(exts []string, isDefault bool) string {
+	s := strings.Join(exts, ", ")
+	if isDefault {
+		return s + " (default)"
+	}
+	return s
 }
 
 // extractionPathsByStatus collects extraction-log node paths whose status is in

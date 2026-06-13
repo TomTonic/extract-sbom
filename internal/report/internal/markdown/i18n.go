@@ -63,6 +63,7 @@ type translations struct {
 	generator                              string
 	sandboxName                            string
 	sandboxAvail                           string
+	sandboxNoBwrap                         string
 	unsafeWarning                          string
 	unsafeActive                           string
 	tableOfContentsSection                 string

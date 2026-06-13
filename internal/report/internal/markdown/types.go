@@ -48,6 +48,8 @@ const (
 	anchorSuppression            = "component-normalization"
 	anchorSuppressionFSArtifacts = "suppression-fs-artifacts"
 	anchorSuppressionLowValue    = "suppression-low-value-file-artifacts"
+	anchorSuppressionWeakDups    = "suppression-weak-duplicates"
+	anchorSuppressionPURLDups    = "suppression-purl-duplicates"
 	anchorScan                   = "scan-results"
 	anchorScanNoPackageIDs       = "content-items-without-package-identities"
 	anchorExtraction             = "extraction-log"
