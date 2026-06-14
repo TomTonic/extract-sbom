@@ -348,7 +348,7 @@ func TestNormalizationAndMethodAndResidual(t *testing.T) {
 	if !strings.Contains(html, `href="https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md"`) {
 		t.Error("Method section should link to SCAN_APPROACH.md")
 	}
-	if !strings.Contains(html, "#3-two-phases") {
+	if !strings.Contains(html, "#3-two-mandatory-phases-plus-one-optional-enrichment-phase") {
 		t.Error("Method section should embed the two-phases deep link")
 	}
 	// Residual Risk: PURL coverage prose is always emitted.

@@ -192,14 +192,22 @@ type normalizationSection struct {
 	Lead         htmltmpl.HTML
 	EmptyText    string
 	Empty        bool
-	SummaryTable headerKV
+	SummaryTable normalizationSummaryTable
 	Groups       []suppressionGroup
 }
 
-// headerKV is a key/value table with a header row.
-type headerKV struct {
+// normalizationSummaryTable is a 3-column reason/count/description table for
+// the Component Normalization overview.
+type normalizationSummaryTable struct {
 	Headers []string
-	Rows    []kv
+	Rows    []normalizationSummaryRow
+}
+
+// normalizationSummaryRow is one row in the normalization overview table.
+type normalizationSummaryRow struct {
+	Reason      string
+	Count       string
+	Description string
 }
 
 // suppressionGroup is one collapsible suppression-reason block.
@@ -212,15 +220,15 @@ type suppressionGroup struct {
 	Truncated   string
 }
 
-// suppRow is one suppression-table row. The "suppressed by" cell is modeled as
-// data (kept component link/code or an italic reason) so the template can
-// auto-escape the untrusted component name.
+// suppRow is one suppression-table row. KeptName/KeptAnchor carry untrusted
+// component names auto-escaped by the template. Reason is trusted i18n prose
+// (may contain inline HTML from RenderInlineHTML) so it is typed as HTML.
 type suppRow struct {
 	DeliveryPath string
 	Name         string
 	KeptName     string
 	KeptAnchor   string
-	Reason       string
+	Reason       htmltmpl.HTML
 }
 
 // extensionFilterSection documents skipped extensions and affected paths.
@@ -286,14 +294,17 @@ type extractionSection struct {
 }
 
 // extractionRow is one extraction-log row; Depth drives indentation of Path.
+// ShortPath is the last path segment shown in the cell; Path is the full path
+// placed in the title tooltip for hover inspection.
 type extractionRow struct {
-	Depth   int
-	Path    string
-	Format  string
-	Status  string
-	Tool    string
-	Sandbox string
-	Detail  string
+	Depth     int
+	Path      string
+	ShortPath string
+	Format    string
+	Status    string
+	Tool      string
+	Sandbox   string
+	Detail    string
 }
 
 // severityCSSClass maps a normalized severity to a CSS badge class.

@@ -17,7 +17,7 @@ func writeMethodOverview(w io.Writer, t translations) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "- %s — %s, %s\n",
 		t.MethodBulletTwoPhases,
-		scanApproachLink(t.LinkTwoPhases, "3-two-phases"),
+		scanApproachLink(t.LinkTwoPhases, "3-two-mandatory-phases-plus-one-optional-enrichment-phase"),
 		scanApproachLink(t.LinkScanDetail, "7-how-the-scan-phase-works-in-detail"))
 	fmt.Fprintf(w, "- %s\n", t.MethodBulletEvidence)
 	fmt.Fprintf(w, "- %s — %s, %s\n",

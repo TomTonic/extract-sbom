@@ -43,10 +43,22 @@ details.bucket>summary{font-size:1.02rem}
 .count{color:var(--muted);font-weight:400}
 .note{background:#fff8e1;border-left:3px solid #f1c40f;padding:0.4rem 0.7rem;margin:0.5rem 0;font-size:0.9rem}
 .prose{margin:0.6rem 0}
-.pathlist{font-family:ui-monospace,monospace;font-size:0.82rem}
+.pathlist{font-family:ui-monospace,monospace;font-size:0.82rem;word-break:break-all}
 .d0{padding-left:0}.d1{padding-left:1.2rem}.d2{padding-left:2.4rem}
 .d3{padding-left:3.6rem}.d4{padding-left:4.8rem}.d5{padding-left:6rem}
 .kvtable td:first-child{width:230px;color:#444;font-weight:500}
+.pkg-meta{margin:0.3rem 0 0.5rem;padding-left:1.3rem}
+.occ{border-top:1px solid var(--border-soft);padding:0.45rem 0 0.2rem}
+.occ-hdr{font-size:0.88rem}
+.occ-hdr code{font-size:0.83rem}
+.occ-paths{margin:0.2rem 0 0;padding-left:1rem;list-style:disc;font-size:0.82rem;font-family:ui-monospace,monospace}
+.occ-paths em{font-style:normal;color:#555;font-family:system-ui,-apple-system,sans-serif}
+.scantable{table-layout:fixed;width:100%}
+.scantable th:first-child,.scantable td:first-child{width:42%;word-break:break-all}
+.scantable th:nth-child(2),.scantable td:nth-child(2){width:10%}
+.scantable th:last-child,.scantable td:last-child{width:48%}
+table.sortable th{cursor:pointer;user-select:none}
+table.sortable th:hover{background:#e0e0e0}
 `
 
 // htmlReportTemplateText is the full report template. Named sub-templates keep
@@ -141,7 +153,7 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 <h3 id="{{.ScanLog.Anchor}}">{{.ScanLog.Heading}}</h3>
 {{with .ScanLog}}<p>{{.Lead}}</p>
 <details class="group"><summary>{{.Heading}} ({{len .Rows}})</summary>
-<table><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
+<table class="scantable"><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
 {{range .Rows}}<tr><td><code>{{.NodePath}}</code></td><td>{{if .Error}}<span class="err">{{.Error}}</span>{{else}}{{.Count}}{{end}}</td><td><ul class="pathlist">{{range .Evidence}}<li>{{.}}</li>{{end}}</ul></td></tr>
 {{end}}</table>
 </details>
@@ -154,13 +166,36 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 <h3 id="{{.Extraction.Anchor}}">{{.Extraction.Heading}}</h3>
 {{with .Extraction}}<details class="group" open><summary>{{.Heading}} ({{len .Rows}})</summary>
 <table><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
-{{range .Rows}}<tr><td class="d{{.Depth}}"><code>{{.Path}}</code></td><td>{{.Format}}</td><td>{{.Status}}</td><td>{{.Tool}}</td><td>{{.Sandbox}}</td><td>{{.Detail}}</td></tr>
+{{range .Rows}}<tr><td class="d{{.Depth}}" title="{{.Path}}"><code>{{.ShortPath}}</code></td><td>{{.Format}}</td><td>{{.Status}}</td><td>{{.Tool}}</td><td>{{.Sandbox}}</td><td>{{.Detail}}</td></tr>
 {{end}}</table>
 </details>{{end}}
 
 <p class="muted">{{.EndNote}}</p>
 </main>
 </div>
+<script>
+(function(){
+  document.querySelectorAll('table.sortable').forEach(function(tbl){
+    var ths=tbl.querySelectorAll('tr:first-child th');
+    ths.forEach(function(th,ci){
+      th.addEventListener('click',function(){
+        var asc=th.dataset.dir!=='asc';
+        ths.forEach(function(h){h.dataset.dir='';h.textContent=h.textContent.replace(/ [▲▼]$/,'')});
+        th.dataset.dir=asc?'asc':'desc';
+        th.textContent+=asc?' ▲':' ▼';
+        var rows=Array.from(tbl.querySelectorAll('tr:not(:first-child)'));
+        rows.sort(function(a,b){
+          var av=(a.cells[ci]||{}).textContent||'';
+          var bv=(b.cells[ci]||{}).textContent||'';
+          var n=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});
+          return asc?n:-n;
+        });
+        rows.forEach(function(r){tbl.appendChild(r)});
+      });
+    });
+  });
+})();
+</script>
 </body>
 </html>
 
@@ -168,8 +203,8 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 {{range .}}<tr><td>{{.K}}</td><td>{{.V}}</td></tr>
 {{end}}</tbody></table>{{end}}
 
-{{define "kvtable2"}}<table class="kvtable"><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
-{{range .Rows}}<tr><td>{{.K}}</td><td>{{.V}}</td></tr>
+{{define "kvtable2"}}<table><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
+{{range .Rows}}<tr><td>{{.Reason}}</td><td>{{.Count}}</td><td>{{.Description}}</td></tr>
 {{end}}</table>{{end}}
 
 {{define "matrix"}}<table><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
@@ -181,19 +216,23 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 {{else}}<p>{{.StateLine}}</p>
 <p>{{.FindingLine}}</p>
 {{if .Rows}}<details class="group" open><summary>{{.Heading}} ({{len .Rows}})</summary>
-<table><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
+<table class="sortable"><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
 {{range .Rows}}<tr><td>{{.ID}}</td><td><span class="badge {{.SeverityCSS}}">{{.Severity}}</span></td><td>{{if .NameAnchor}}<a href="#{{.NameAnchor}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</td><td>{{.Installed}}</td><td>{{.FixedIn}}</td><td>{{.EPSS}}</td><td>{{.Risk}}</td><td>{{.KEV}}</td><td>{{.Description}}</td></tr>
 {{end}}</table>
 </details>{{end}}{{end}}{{end}}
 
 {{define "group"}}<details class="group" id="{{.AnchorID}}"><summary>{{.Title}} <span class="count">({{len .Occurrences}})</span></summary>
-<ul>
+<ul class="pkg-meta">
 <li>{{.Labels.ComponentID}} — <strong>{{.Name}}</strong>{{if .Version}} {{.Version}}{{end}}</li>
 {{range .PURLs}}<li><code>{{.}}</code></li>{{end}}
 {{if .VulnLine}}<li>{{.VulnLine}}</li>{{end}}
 </ul>
-<table><tr><th>{{.Labels.ComponentID}}</th><th>{{.Labels.DeliveryPath}}</th><th>{{.Labels.EvidencePath}}</th><th>{{.Labels.FoundBy}}</th></tr>
-{{range .Occurrences}}<tr id="{{.AnchorID}}"><td><code>{{.ObjectID}}</code>{{if .VulnLine}}<br><span class="muted">{{.VulnLine}}</span>{{end}}</td><td class="pathlist">{{range .DeliveryPaths}}{{.}}<br>{{end}}</td><td class="pathlist">{{range .Evidence}}{{.}}<br>{{end}}</td><td>{{.FoundBy}}</td></tr>
-{{end}}</table>
-</details>{{end}}
+{{$g := .}}{{range .Occurrences}}<div class="occ" id="{{.AnchorID}}">
+<div class="occ-hdr"><code>{{.ObjectID}}</code> <span class="muted">· {{$g.Labels.FoundBy}}: {{.FoundBy}}{{if .VulnLine}} · {{.VulnLine}}{{end}}</span></div>
+<ul class="occ-paths">
+{{range .DeliveryPaths}}<li><em>{{$g.Labels.DeliveryPath}}:</em> {{.}}</li>
+{{end}}{{range .Evidence}}<li><em>{{$g.Labels.EvidencePath}}:</em> {{.}}</li>
+{{end}}</ul>
+</div>
+{{end}}</details>{{end}}
 `
