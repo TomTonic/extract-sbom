@@ -399,7 +399,7 @@ func TestGenerateHumanIncludesMethodDeepLinks(t *testing.T) {
 	output := buf.String()
 
 	for _, fragment := range []string{
-		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#3-two-phases",
+		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#3-two-mandatory-phases-plus-one-optional-enrichment-phase",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#81-how-deduplication-works",
 		"https://github.com/TomTonic/extract-sbom/blob/main/SCAN_APPROACH.md#6-package-detection-reliability",
 	} {

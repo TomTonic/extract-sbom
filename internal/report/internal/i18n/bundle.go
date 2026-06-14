@@ -198,6 +198,7 @@ type Bundle struct {
 	NoneValue                              string
 	ReasonLabel                            string
 	CountLabel                             string
+	DescriptionLabel                       string
 	SuppressionOperationalFS               string
 	SuppressionOperationalFSFollowUp       string
 	SuppressionOperationalLowValue         string
@@ -208,14 +209,18 @@ type Bundle struct {
 	SuppressionTableSuppressedBy           string
 	ExtractionSandboxLabel                 string
 
-	ComponentNormalizationSection  string
-	ComponentNormalizationLead     string
-	NoSuppressions                 string
-	SuppressionReasonFSArtifact    string
-	SuppressionReasonLowValueFile  string
-	SuppressionReasonWeakDuplicate string
-	SuppressionReasonPURLDuplicate string
-	SuppressionReplacedBy          string
+	ComponentNormalizationSection       string
+	ComponentNormalizationLead          string
+	NoSuppressions                      string
+	SuppressionReasonFSArtifact         string
+	SuppressionReasonLowValueFile       string
+	SuppressionReasonWeakDuplicate      string
+	SuppressionReasonPURLDuplicate      string
+	SuppressionReplacedBy               string
+	SuppressionDescriptionFSArtifact    string
+	SuppressionDescriptionLowValueFile  string
+	SuppressionDescriptionWeakDuplicate string
+	SuppressionDescriptionPURLDuplicate string
 
 	ExtensionFilterSection              string
 	ExtensionFilterLead                 string

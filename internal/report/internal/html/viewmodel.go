@@ -288,7 +288,7 @@ func buildMethod(t i18npkg.Bundle) methodSection {
 		Lead:    md(t.MethodLead, docLink),
 		Bullets: []htmltmpl.HTML{
 			md("%s — %s, %s", t.MethodBulletTwoPhases,
-				scanApproachLink(t.LinkTwoPhases, "3-two-phases"),
+				scanApproachLink(t.LinkTwoPhases, "3-two-mandatory-phases-plus-one-optional-enrichment-phase"),
 				scanApproachLink(t.LinkScanDetail, "7-how-the-scan-phase-works-in-detail")),
 			i18npkg.RenderInlineHTML(t.MethodBulletEvidence),
 			md("%s — %s, %s", t.MethodBulletDedup,
@@ -516,13 +516,13 @@ func buildNormalization(groups reportjson.SuppressionGroupsV2, t i18npkg.Bundle)
 		Lead:      i18npkg.RenderInlineHTML(t.ComponentNormalizationLead),
 		EmptyText: t.NoSuppressions,
 		Empty:     total == 0,
-		SummaryTable: headerKV{
-			Headers: []string{t.ReasonLabel, t.CountLabel},
-			Rows: []kv{
-				{t.SuppressionReasonFSArtifact, fmt.Sprintf("%d", len(groups.FSArtifacts))},
-				{t.SuppressionReasonLowValueFile, fmt.Sprintf("%d", len(groups.LowValue))},
-				{t.SuppressionReasonWeakDuplicate, fmt.Sprintf("%d", len(groups.WeakDups))},
-				{t.SuppressionReasonPURLDuplicate, fmt.Sprintf("%d", len(groups.PURLDups))},
+		SummaryTable: normalizationSummaryTable{
+			Headers: []string{t.ReasonLabel, t.CountLabel, t.DescriptionLabel},
+			Rows: []normalizationSummaryRow{
+				{t.SuppressionReasonFSArtifact, fmt.Sprintf("%d", len(groups.FSArtifacts)), t.SuppressionDescriptionFSArtifact},
+				{t.SuppressionReasonLowValueFile, fmt.Sprintf("%d", len(groups.LowValue)), t.SuppressionDescriptionLowValueFile},
+				{t.SuppressionReasonWeakDuplicate, fmt.Sprintf("%d", len(groups.WeakDups)), t.SuppressionDescriptionWeakDuplicate},
+				{t.SuppressionReasonPURLDuplicate, fmt.Sprintf("%d", len(groups.PURLDups)), t.SuppressionDescriptionPURLDuplicate},
 			},
 		},
 	}
@@ -561,8 +561,9 @@ func buildSuppressionGroup(reason, anchor string, rows []reportjson.SuppressionR
 	return g
 }
 
-// buildSuppRow models the "suppressed by" cell as data so the template can
-// auto-escape the untrusted kept-component name.
+// buildSuppRow models the "suppressed by" cell. KeptName/KeptAnchor are plain
+// strings auto-escaped by the template. Reason is a trusted i18n prose string
+// that may contain inline Markdown links, so it is rendered to HTML here.
 func buildSuppRow(row *reportjson.SuppressionRowV2, name string, t i18npkg.Bundle) suppRow {
 	sr := suppRow{DeliveryPath: row.DeliveryPath, Name: name}
 	if row.ResolutionStatus == "resolved" && row.KeptComponentName != "" {
@@ -570,7 +571,7 @@ func buildSuppRow(row *reportjson.SuppressionRowV2, name string, t i18npkg.Bundl
 		sr.KeptAnchor = row.KeptAnchorID
 		return sr
 	}
-	sr.Reason = t.SuppressedByNoIndexedMatch
+	sr.Reason = i18npkg.RenderInlineHTML(t.SuppressedByNoIndexedMatch)
 	return sr
 }
 
@@ -697,14 +698,19 @@ func buildExtraction(rows []reportjson.ExtractionLogRowV2, t i18npkg.Bundle) ext
 				detail = meta
 			}
 		}
+		shortPath := row.Path
+		if idx := strings.LastIndex(row.Path, "/"); idx >= 0 {
+			shortPath = row.Path[idx+1:]
+		}
 		s.Rows = append(s.Rows, extractionRow{
-			Depth:   depth,
-			Path:    row.Path,
-			Format:  row.Format,
-			Status:  row.Status,
-			Tool:    row.Tool,
-			Sandbox: row.SandboxUsed,
-			Detail:  detail,
+			Depth:     depth,
+			Path:      row.Path,
+			ShortPath: shortPath,
+			Format:    row.Format,
+			Status:    row.Status,
+			Tool:      row.Tool,
+			Sandbox:   row.SandboxUsed,
+			Detail:    detail,
 		})
 	}
 	return s

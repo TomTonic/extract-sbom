@@ -17,12 +17,12 @@ func writeSuppressionReport(w io.Writer, groups reportjson.SuppressionGroupsV2, 
 		fmt.Fprintf(w, "- %s\n\n", t.NoSuppressions)
 	}
 
-	fmt.Fprintf(w, "| %s | %s |\n", t.ReasonLabel, t.CountLabel)
-	fmt.Fprintln(w, "|---|---|")
-	fmt.Fprintf(w, "| %s | %d |\n", t.SuppressionReasonFSArtifact, len(groups.FSArtifacts))
-	fmt.Fprintf(w, "| %s | %d |\n", t.SuppressionReasonLowValueFile, len(groups.LowValue))
-	fmt.Fprintf(w, "| %s | %d |\n", t.SuppressionReasonWeakDuplicate, len(groups.WeakDups))
-	fmt.Fprintf(w, "| %s | %d |\n", t.SuppressionReasonPURLDuplicate, len(groups.PURLDups))
+	fmt.Fprintf(w, "| %s | %s | %s |\n", t.ReasonLabel, t.CountLabel, t.DescriptionLabel)
+	fmt.Fprintln(w, "|---|---|---|")
+	fmt.Fprintf(w, "| %s | %d | %s |\n", t.SuppressionReasonFSArtifact, len(groups.FSArtifacts), t.SuppressionDescriptionFSArtifact)
+	fmt.Fprintf(w, "| %s | %d | %s |\n", t.SuppressionReasonLowValueFile, len(groups.LowValue), t.SuppressionDescriptionLowValueFile)
+	fmt.Fprintf(w, "| %s | %d | %s |\n", t.SuppressionReasonWeakDuplicate, len(groups.WeakDups), t.SuppressionDescriptionWeakDuplicate)
+	fmt.Fprintf(w, "| %s | %d | %s |\n", t.SuppressionReasonPURLDuplicate, len(groups.PURLDups), t.SuppressionDescriptionPURLDuplicate)
 	fmt.Fprintln(w)
 
 	writeAnchoredHeading(w, 3, fmt.Sprintf("%s (%d)", t.SuppressionReasonFSArtifact, len(groups.FSArtifacts)), anchorSuppressionFSArtifacts)
