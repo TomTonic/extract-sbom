@@ -41,10 +41,15 @@ func RenderInlineHTML(s string) template.HTML {
 
 	// Links: [text](url). The URL is emitted into an href; html.EscapeString
 	// already neutralized quotes and angle brackets, so attribute injection is
-	// not possible.
+	// not possible. As defense in depth — should untrusted data ever flow
+	// through this converter — dangerous URL schemes (javascript:, data:, vbscript:)
+	// are rejected and the link is rendered as plain text instead of an anchor.
 	escaped = inlineLinkPattern.ReplaceAllStringFunc(escaped, func(m string) string {
 		groups := inlineLinkPattern.FindStringSubmatch(m)
 		text, url := groups[1], groups[2]
+		if !isSafeURL(url) {
+			return text
+		}
 		return `<a href="` + url + `">` + text + `</a>`
 	})
 
@@ -52,6 +57,30 @@ func RenderInlineHTML(s string) template.HTML {
 	escaped = inlineBoldPattern.ReplaceAllString(escaped, "<strong>$1</strong>")
 
 	return template.HTML(escaped) //nolint:gosec // markup is limited to the tags emitted above over escaped text
+}
+
+// isSafeURL reports whether url is safe to place in an href. Relative URLs and
+// fragments (no scheme) are always allowed; absolute URLs are allowed only for
+// the http, https, and mailto schemes. Schemes such as javascript:, data:, and
+// vbscript: are rejected.
+func isSafeURL(url string) bool {
+	// Find a scheme: letters/digits/+/-/. before the first ':', and only when
+	// that ':' precedes any '/', '?', '#' (otherwise it is part of the path).
+	colon := strings.IndexByte(url, ':')
+	if colon < 0 {
+		return true // no scheme → relative URL or fragment
+	}
+	for _, sep := range []byte{'/', '?', '#'} {
+		if i := strings.IndexByte(url, sep); i >= 0 && i < colon {
+			return true // separator before ':' → ':' is in the path, not a scheme
+		}
+	}
+	switch strings.ToLower(url[:colon]) {
+	case "http", "https", "mailto":
+		return true
+	default:
+		return false
+	}
 }
 
 // PlainText strips the inline Markdown markers from a catalog string, leaving

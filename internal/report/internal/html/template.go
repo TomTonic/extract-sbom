@@ -184,10 +184,9 @@ const htmlReportTemplateText = `<!DOCTYPE html>
         th.dataset.dir=asc?'asc':'desc';
         th.textContent+=asc?' ▲':' ▼';
         var rows=Array.from(tbl.querySelectorAll('tr:not(:first-child)'));
+        function key(r){var c=r.cells[ci];if(!c)return '';var d=c.getAttribute('data-sort');return d!==null?d:(c.textContent||'');}
         rows.sort(function(a,b){
-          var av=(a.cells[ci]||{}).textContent||'';
-          var bv=(b.cells[ci]||{}).textContent||'';
-          var n=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});
+          var n=key(a).localeCompare(key(b),undefined,{numeric:true,sensitivity:'base'});
           return asc?n:-n;
         });
         rows.forEach(function(r){tbl.appendChild(r)});
@@ -217,7 +216,7 @@ const htmlReportTemplateText = `<!DOCTYPE html>
 <p>{{.FindingLine}}</p>
 {{if .Rows}}<details class="group" open><summary>{{.Heading}} ({{len .Rows}})</summary>
 <table class="sortable"><tr>{{range .Headers}}<th>{{.}}</th>{{end}}</tr>
-{{range .Rows}}<tr><td>{{.ID}}</td><td><span class="badge {{.SeverityCSS}}">{{.Severity}}</span></td><td>{{if .NameAnchor}}<a href="#{{.NameAnchor}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</td><td>{{.Installed}}</td><td>{{.FixedIn}}</td><td>{{.EPSS}}</td><td>{{.Risk}}</td><td>{{.KEV}}</td><td>{{.Description}}</td></tr>
+{{range .Rows}}<tr><td>{{.ID}}</td><td data-sort="{{.SeverityRank}}"><span class="badge {{.SeverityCSS}}">{{.Severity}}</span></td><td>{{if .NameAnchor}}<a href="#{{.NameAnchor}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</td><td>{{.Installed}}</td><td>{{.FixedIn}}</td><td>{{.EPSS}}</td><td>{{.Risk}}</td><td>{{.KEV}}</td><td>{{.Description}}</td></tr>
 {{end}}</table>
 </details>{{end}}{{end}}{{end}}
 

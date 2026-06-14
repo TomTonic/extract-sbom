@@ -374,3 +374,50 @@ func TestNormalizationAndMethodAndResidual(t *testing.T) {
 		t.Error("Policy Decisions should list the decision trigger")
 	}
 }
+
+// TestSeveritySortRankCoversAllSeverities verifies the numeric ordering used as
+// the vulnerability table's client-side sort key: more severe = lower rank, and
+// unknown severities sort last.
+func TestSeveritySortRankCoversAllSeverities(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		sev  string
+		want int
+	}{
+		{"critical", 1},
+		{"high", 2},
+		{"medium", 3},
+		{"low", 4},
+		{"negligible", 5},
+		{"unknown", 99},
+		{"", 99},
+	}
+	for _, tc := range cases {
+		if got := severitySortRank(tc.sev); got != tc.want {
+			t.Errorf("severitySortRank(%q) = %d, want %d", tc.sev, got, tc.want)
+		}
+		// severityCSSClass shares the same severity vocabulary.
+		if cls := severityCSSClass(tc.sev); cls == "" {
+			t.Errorf("severityCSSClass(%q) returned empty class", tc.sev)
+		}
+	}
+}
+
+// TestVulnerabilityTableIsSortable verifies that the rendered vulnerability
+// table carries the sortable affordance: the sort script, the sortable class,
+// and a numeric data-sort key on the severity cell.
+func TestVulnerabilityTableIsSortable(t *testing.T) {
+	t.Parallel()
+
+	html := renderHTML(t, richReportData(), "en")
+	for _, want := range []string{
+		`<table class="sortable">`,
+		`data-sort="2"`, // the single finding is "high" → rank 2
+		"querySelectorAll('table.sortable')",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("sortable vulnerability table missing %q", want)
+		}
+	}
+}
