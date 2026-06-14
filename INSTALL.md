@@ -57,8 +57,9 @@ Or place the binary anywhere on your `PATH`.
 The binary itself has no external Go runtime dependencies. Certain input formats,
 however, require external tools at runtime:
 
-- `7zz` (7-Zip): required for CAB, 7z, MSI payload, RAR, TAR XZ/Zstd, and encrypted ZIP fallback extraction
+- `7zz` (7-Zip): required for CAB, 7z, MSI payload, RAR, ISO, CPIO, TAR XZ/Zstd, and encrypted ZIP fallback extraction; also the Squashfs fallback extractor
 - `unshield`: required for InstallShield CAB extraction
+- `unsquashfs` (squashfs-tools): preferred extractor for Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`); 7-Zip is used as a fallback when it is absent
 - `bwrap` (Bubblewrap, Linux only): required for sandboxed external extraction unless `--unsafe` is used
 
 Encrypted archive note:
@@ -82,6 +83,7 @@ Dependency checks:
 ```bash
 command -v 7zz || echo "7zz missing"
 command -v unshield || echo "unshield missing"
+command -v unsquashfs || echo "unsquashfs missing (Squashfs/Snap; 7zz is the fallback)"
 command -v bwrap || echo "bwrap missing (Linux sandbox mode)"
 ```
 
@@ -113,7 +115,14 @@ When processing InstallShield CAB:
 - extraction node status becomes `tool-missing`
 - status detail mentions `unshield is not installed`
 
-### 6.4 Missing bwrap (sandbox)
+### 6.4 Missing unsquashfs
+
+When processing a Squashfs filesystem image or Snap package:
+
+- extract-sbom falls back to 7-Zip automatically
+- if 7-Zip also cannot handle the image, the extraction node status becomes `tool-missing`
+
+### 6.5 Missing bwrap (sandbox)
 
 If `bwrap` is unavailable and you did not pass `--unsafe`:
 
@@ -127,7 +136,7 @@ If you pass `--unsafe`, extract-sbom will run external tools unsandboxed and pri
 ### 7.1 macOS (Homebrew)
 
 ```bash
-brew install p7zip unshield
+brew install p7zip unshield squashfs
 ```
 
 Sandbox note:
@@ -138,17 +147,17 @@ Sandbox note:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y p7zip-full unshield bubblewrap
+sudo apt-get install -y p7zip-full unshield squashfs-tools bubblewrap
 ```
 
 ### 7.3 Fedora / RHEL-like
 
 ```bash
-sudo dnf install -y p7zip p7zip-plugins unshield bubblewrap
+sudo dnf install -y p7zip p7zip-plugins unshield squashfs-tools bubblewrap
 ```
 
 Package names can vary by distribution version.
-If a package is not found, search for the equivalent `7zip`, `unshield`, or `bubblewrap` package.
+If a package is not found, search for the equivalent `7zip`, `unshield`, `squashfs-tools`, or `bubblewrap` package.
 
 ## 8. Minimal Post-Install Smoke Test
 

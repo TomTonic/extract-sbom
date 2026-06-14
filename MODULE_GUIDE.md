@@ -14,7 +14,8 @@ coding agent invocations.
 | Library | Version | Purpose | Rationale |
 |---|---|---|---|
 | `github.com/anchore/syft` | v1.x (latest stable) | SBOM cataloging in library mode | Mandatory per DESIGN.md §9.2. `syft.GetSource()` resolves a path to a `source.Source`; `syft.CreateSBOM(ctx, src, cfg)` returns an `sbom.SBOM`. Builder-pattern config via `DefaultCreateSBOMConfig().WithTool(…)`. Avoids shelling out. |
-| `github.com/CycloneDX/cyclonedx-go` | v0.10.x | SBOM data model, encoding, decoding | Standard Go binding for CycloneDX 1.6. Provides `BOM`, `Component`, `Dependency`, `Composition` types plus JSON/XML encoder/decoder. Used for merging per-subtree SBOMs and adding container components. |
+| `github.com/CycloneDX/cyclonedx-go` | v0.11.x | SBOM data model, encoding, decoding | Standard Go binding for CycloneDX 1.6. Provides `BOM`, `Component`, `Dependency`, `Composition` types plus JSON/XML encoder/decoder. Used for merging per-subtree SBOMs, adding container components, and writing CycloneDX JSON or XML output. |
+| `github.com/spdx/tools-golang` | v0.5.x | SPDX 2.3 document model and JSON serialization | Used by `assembly/spdx_output.go` to convert the assembled CycloneDX BOM to an SPDX 2.3 document and write it as JSON. Provides `spdx/v2/v2_3` types and the `json.Write` serializer. |
 | `github.com/spf13/cobra` | v1.x | CLI framework | De facto standard for Go CLIs. Provides flag parsing, subcommands, help generation. Low-risk, widely adopted. |
 | `github.com/spf13/viper` | v1.x | Configuration binding | Binds CLI flags, env vars, and config files to a single config struct. Pairs naturally with cobra. |
 | `github.com/richardlehane/mscfb` | v1.x | OLE/CFBF compound document reader | Required for reading MSI Property tables (ProductName, Manufacturer, ProductVersion). Used in both physical and installer-semantic modes for container metadata enrichment (see §5.8). |
@@ -30,26 +31,29 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 
 | Binary | Purpose | Rationale |
 |---|---|---|
-| **7-Zip** (`7zz`) | Extract all supported archive formats: ZIP, TAR (all compressed variants), CAB, MSI, 7z, RAR | 7-Zip is the single extraction engine for all archive formats. No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. Using 7-Zip for ZIP/TAR as well avoids maintaining two extraction code paths and ensures a uniform security posture (sandboxed, post-extraction safeguard walk) for all formats. |
+| **7-Zip** (`7zz`) | Extract ZIP, TAR (all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO; Squashfs fallback | 7-Zip is the single extraction engine for all archive formats. No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. Using 7-Zip for all formats ensures a uniform security posture (sandboxed, post-extraction safeguard walk). |
 | **unshield** | Extract InstallShield CAB files (`data1.cab` + `data1.hdr`) | InstallShield uses a proprietary cabinet format incompatible with Microsoft CABs. `unshield` (MIT, actively maintained, v1.6.2) is the only tool capable of extracting these. Available via Linux package managers and Homebrew. |
+| **unsquashfs** | Extract Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`) | Preferred extractor for Squashfs; 7-Zip is the fallback when `unsquashfs` is not installed. Part of the `squashfs-tools` package on Debian/Ubuntu and Homebrew. |
 | **Grype** (`grype`) | Optional vulnerability scan of the generated SBOM (`--grype`) | Grype provides stable JSON output with per-match package identity and vulnerability source metadata. Using the generated SBOM as input preserves deterministic component identities and avoids rescanning the extracted filesystem. |
-| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
+| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`, `unsquashfs`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
 
 ### 1.3 Tool Availability Strategy
 
 | Mechanism | Available | Not Available |
 |---|---|---|
-| `bwrap` | All external binary invocations (`7zz`, `unshield`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
-| `7zz` | All archive extraction (ZIP, TAR, CAB, MSI, 7z, RAR) proceeds normally. | All archives are recorded as non-extractable components in the SBOM (contents cannot be scanned). MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
+| `bwrap` | All external binary invocations (`7zz`, `unshield`, `unsquashfs`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
+| `7zz` | All archive extraction (ZIP, TAR, CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs fallback) proceeds normally. | All archives that require 7zz are recorded as non-extractable. MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
 | `unshield` | InstallShield CAB extraction proceeds normally. | InstallShield CABs are recorded as non-extractable components in the SBOM. Audit report notes missing tool. |
+| `unsquashfs` | Squashfs/Snap extraction proceeds normally. | Extraction falls back to 7zz; if 7zz also cannot handle the image, the node is recorded as tool-missing. |
 | `grype` (only if `--grype`) | SBOM is scanned and vulnerability matches are correlated to component BOM refs in the report. | SBOM and report are still produced; report marks vulnerability enrichment as unavailable and includes root-cause metadata (tool missing, execution error, or DB issue). |
 | Syft (library) | Required | Fatal error. |
 
 ### 1.4 Extraction Architecture: Single 7-Zip Path
 
-All archive formats (ZIP, TAR and compressed variants, CAB, MSI, 7z, RAR) are
-extracted via the external 7-Zip binary. InstallShield CAB is the only exception
-(requires `unshield`).
+Most archive formats (ZIP, TAR and compressed variants, CAB, MSI, 7z, RAR, ISO,
+CPIO) are extracted via the external 7-Zip binary. The exceptions are
+InstallShield CAB (requires `unshield`) and Squashfs/Snap images (preferred
+extractor `unsquashfs`, with 7-Zip as fallback).
 
 An earlier design used Go's `archive/zip` and `archive/tar` standard library
 packages for in-process ZIP/TAR extraction. That code was removed in favour of
@@ -93,8 +97,9 @@ These mitigations apply to all extraction paths.
 
 | Path | Format coverage | Safeguard integration |
 |---|---|---|
-| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
+| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs (fallback) | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
 | unshield (external, sandboxed) | InstallShield CAB only | Same Bubblewrap isolation + post-extraction safeguard walk. |
+| unsquashfs (external, sandboxed) | Squashfs / Snap images (preferred) | Same Bubblewrap isolation + post-extraction safeguard walk. |
 
 Post-extraction safeguard checks enforce the same invariants for every format.
 Hard security violations (path traversal, symlink escape, special files) are
@@ -224,10 +229,10 @@ main()
 - `--input` / positional arg: path to delivery file
 - `--output-dir`: target directory for SBOM + report
 - `--work-dir`: base directory for temporary extraction work (default: system temp dir)
-- `--format`: SBOM output format (`cyclonedx-json` default)
-- `--policy`: `strict` (default) | `partial`
+- `--format`: SBOM output format — `cyclonedx-json` (default), `cyclonedx-xml`, `spdx-json`
+- `--policy`: `partial` (default) | `strict`
 - `--mode`: `installer-semantic` (default) | `physical`
-- `--report`: `human` (default) | `machine` | `both`
+- `--report`: `markdown` (default) | `json` | `both` | `html` | `sarif` | `all`
 - `--language`: `en` (default) | `de`
 - `--root-manufacturer`: override manufacturer / supplier for the SBOM root component
 - `--root-name`: override software / product name for the SBOM root component
@@ -261,10 +266,10 @@ type Config struct {
     InputPath       string
     OutputDir       string
   WorkDir         string        // base directory for temporary extraction work
-    SBOMFormat      string        // "cyclonedx-json"
+    SBOMFormat      string        // "cyclonedx-json" | "cyclonedx-xml" | "spdx-json"
     PolicyMode      PolicyMode    // Strict | Partial
     InterpretMode   InterpretMode // Physical | InstallerSemantic
-    ReportMode      ReportMode    // Human | Machine | Both
+    ReportSelection      ReportSelection    // Markdown | JSON | Both | HTML | SARIF | All
     Language        string        // "en" | "de"
     GrypeEnabled    bool
     Passwords       []string      // ordered candidates for encrypted archives
@@ -317,11 +322,11 @@ it natively or whether extract-sbom needs to extract it.
 
 ```go
 type FormatInfo struct {
-    Format     Format   // ZIP, TAR, GzipTAR, Bzip2TAR, XzTAR, ZstdTAR, CAB, MSI, SevenZip, RAR, InstallShieldCAB, Unknown
+    Format     Format   // ZIP, TAR, GzipTAR, Bzip2TAR, XzTAR, ZstdTAR, CAB, MSI, SevenZip, RAR, InstallShieldCAB, ISO, CPIO, Squashfs, AppImage, Unknown
     MIMEType   string
     Extension  string
     SyftNative bool     // true if Syft already understands this format (JAR, RPM, DEB, etc.)
-    Extractable bool   // true if we can extract it (7zz or unshield)
+    Extractable bool   // true if we can extract it (7zz, unshield, or unsquashfs)
 }
 
 func Identify(ctx context.Context, path string) (FormatInfo, error)
@@ -344,6 +349,10 @@ func Identify(ctx context.Context, path string) (FormatInfo, error)
   - Compressed TAR: detect outer compression (gzip magic `\x1F\x8B`,
     bzip2 `BZ`, xz `\xFD7zXZ\x00`, zstd `\x28\xB5\x2F\xFD`), then
     verify inner TAR header.
+  - CPIO: `070701`/`070702` (newc/newcrc) or binary `\xc7\x71`/`\x71\xc7` at offset 0
+  - Squashfs: `hsqs` (little-endian) or `sqsh` (big-endian) at offset 0; `.snap`/`.squashfs` extension as additional signal
+  - AppImage: ELF magic `\x7fELF` at offset 0 plus `AI` at offset 8 and type byte (0x01 or 0x02)
+  - ISO: `.iso` extension heuristic (ISO 9660 primary volume descriptor is at byte offset 32769, beyond the fast read window)
 - **Syft-native formats** are file types where Syft has a dedicated cataloger
   that understands the internal structure (e.g. JAR → Java packages, RPM →
   RPM metadata, DEB → Debian packages). These are passed directly to Syft
@@ -507,8 +516,10 @@ For each file encountered:
      → extract:
         ├─ ZIP, TAR, compressed TAR → 7zz via sandbox (post-extraction safeguard walk,
         │                             password attempts: none, then configured list)
-        ├─ CAB, MSI, 7z, RAR   → 7zz via sandbox (post-extraction safeguard walk,
-        │                         password attempts: none, then configured list)
+        ├─ CAB, MSI, 7z, RAR,  → 7zz via sandbox (post-extraction safeguard walk,
+        │  ISO, CPIO              password attempts: none, then configured list)
+        ├─ Squashfs / Snap     → unsquashfs via sandbox; 7zz fallback if unsquashfs absent
+        ├─ AppImage            → tool-missing (extraction not yet supported)
         ├─ InstallShield CAB   → unshield via sandbox (post-extraction safeguard walk,
         │                         password attempts: none, then configured list)
         └─ Unknown container   → mark as non-extractable leaf
@@ -693,7 +704,10 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
    - `Incomplete` for skipped, failed, or security-blocked nodes.
    - `Unknown` for nodes where Syft scan failed.
 6. Set `Metadata.Tools` to include extract-sbom + Syft version info.
-7. Encode to CycloneDX JSON via `cyclonedx.NewBOMEncoder(writer, cyclonedx.BOMFileFormatJSON)`.
+7. Write SBOM in the format requested by `cfg.SBOMFormat`:
+   - `cyclonedx-json`: `cyclonedx.NewBOMEncoder(writer, BOMFileFormatJSON)` → `*.cdx.json`
+   - `cyclonedx-xml`: `cyclonedx.NewBOMEncoder(writer, BOMFileFormatXML)` → `*.cdx.xml`
+   - `spdx-json`: `assembly.WriteSBOMSPDX(bom, path)` via `spdx/tools-golang` → `*.spdx.json`
 8. Return suppression records for every dropped component candidate so the
   report module can render deterministic suppression traceability.
 
@@ -736,21 +750,35 @@ type ReportData struct {
     EndTime          time.Time
 }
 
-// GenerateHuman writes a human-readable Markdown report.
-func GenerateHuman(data ReportData, lang string, w io.Writer) error
+// GenerateMarkdown writes the markdown report using the default writer backend.
+func GenerateMarkdown(data ReportData, lang string, w io.Writer) error
 
-// GenerateMachine writes a structured JSON report.
-func GenerateMachine(data ReportData, w io.Writer) error
+// GenerateMarkdownWithEngine writes the markdown report using writer,
+// template-wrapper, or template-document backends.
+func GenerateMarkdownWithEngine(data ReportData, lang string, w io.Writer, engine string, templateContent string) error
+
+// GenerateHTML writes a self-contained HTML report.
+func GenerateHTML(data ReportData, lang string, w io.Writer) error
+
+// GenerateJSON writes a structured JSON report in the default v2 schema.
+func GenerateJSON(data ReportData, w io.Writer) error
+
+// GenerateJSONLegacy writes the deprecated v1 JSON report schema (--legacy-json).
+func GenerateJSONLegacy(data ReportData, w io.Writer) error
+
+// GenerateSARIF writes a SARIF 2.1.0 JSON report.
+func GenerateSARIF(data ReportData, w io.Writer) error
 ```
 
 **Implementation layout (current):**
 
-- `report.go`: public API, input summary hashing, machine-report entry wiring, and shared report models.
-- `report_i18n.go`: localized string catalog and language selection (`en`, `de`).
-- `report_human_main.go`: human Markdown section orchestration, summary/progress sections, and processing-issues appendix.
-- `report_suppression.go`: suppression appendix rendering and replacement-link resolution.
-- `report_occurrence.go`: package-grouped component occurrence indexing, quality filtering, and deterministic duplicate collapsing.
-- `report_stats_tree.go`: extraction-tree rendering, residual-risk section, and phase statistics collectors.
+- `internal/report/internal/model/types.go`: shared report contracts (`ReportData`, `InputSummary`, `ToolVersions`, sandbox and issue summaries) used by the root facade and future report subpackages.
+- `internal/report/internal/domain/*.go`: report-domain aggregation logic grouped by noun (occurrence collection/grouping, vulnerability counters, suppression reason stats, and extraction/scan/policy statistics) shared by report renderers.
+- `report.go`, `report_types.go`: public facade API, input summary hashing, a minimal orchestrator-facing type surface (`InputSummary`, `ProcessingIssue`, `ReportData`), and thin markdown/HTML/json/SARIF facades delegating into internal report packages.
+- `internal/report/internal/markdown/*.go`: active Markdown rendering path (options, renderer backends, canonical markdown assembly, template document model, sections, remaining markdown-specific occurrence/vulnerability/suppression presentation logic, and markdown-specific i18n).
+- `internal/report/internal/html/*.go`: active HTML rendering path (template, localized labels, extraction projection, vulnerability rows, view-model shaping, and HTML-specific tests).
+- `internal/report/internal/json/*.go`: structured json JSON report generator, JSON schema projection helpers, and json-specific tests.
+- `internal/report/internal/sarif/*.go`: SARIF 2.1.0 generator with deterministic rule/result ordering, explicit enrichment audit state, and SARIF-specific tests.
 
 **Required content (per DESIGN.md §10.4):**
 
@@ -788,17 +816,46 @@ func GenerateMachine(data ReportData, w io.Writer) error
   template loading, to keep output deterministic and easy to audit.
 - The report is generated after all processing is complete, from a read-only
   snapshot of the processing state.
+- Shared report contracts now live in `internal/report/internal/model`; the
+  root `report` package re-exports only the minimal contracts needed by the
+  orchestrator so implementation can keep moving into subpackages without
+  widening the facade again.
+- The active markdown report execution path now lives in
+  `internal/report/internal/markdown`; the root package now keeps only the thin
+  orchestrator-facing Markdown facade while markdown-specific helpers and tests
+  live next to the markdown implementation.
+- The active HTML report execution path now lives in
+  `internal/report/internal/html`; the root package keeps only the thin
+  orchestrator-facing `GenerateHTML` facade while HTML-specific labels,
+  view-model helpers, and tests are package-local.
+- The active json and SARIF report execution paths now live in
+  `internal/report/internal/json` and `internal/report/internal/sarif`;
+  the root package keeps only thin `GenerateJSON` and `GenerateSARIF`
+  facades while output-specific helpers and tests live with their renderer.
+- Report-domain aggregation now lives in
+  `internal/report/internal/domain`; occurrence collection/grouping,
+  vulnerability counters, suppression reason stats, and extraction/scan/policy
+  aggregations are shared domain helpers consumed by renderers.
 - Processing-stage errors are captured as structured `ProcessingIssue` entries
-  and included in both human and machine reports.
+  and included in both markdown and JSON reports.
 - The report distinguishes explicit root metadata input from derived defaults.
 - Vulnerability enrichment is report-only: it does not mutate the SBOM and does
   not alter component deduplication or dependency relationships.
 - If `--grype` is set, the report renders an explicit enrichment state:
   `completed`, `completed-with-errors`, `unavailable`, or `not-requested`.
-- A full migration to a template engine is intentionally deferred: the current
-  report has high logic density (ordering, conditional sections, and
-  provenance-driven tables), where direct writer functions are simpler and
-  less error-prone for deterministic audit output.
+- Human report rendering is backend-oriented: a deterministic writer backend is
+  the default for audit stability; optional template-wrapper/template-document
+  backends are selected through `GenerateMarkdownWithEngine`.
+- Runtime selection of the human renderer backend is configurable via
+  `Config.MarkdownRenderEngine` and `Config.MarkdownTemplateFile`.
+  The orchestrator resolves these into engine/template parameters and keeps
+  json/HTML/SARIF report generation unaffected.
+- Template execution helpers are package-local in
+  `internal/report/internal/markdown`; the root `report` package keeps a minimal
+  orchestrator-facing surface and delegates backend selection via options.
+- Full template-first rendering for the complete markdown report remains deferred
+  until all high-density logic (ordering, conditional sections, and
+  provenance-driven tables) is isolated into view-model builders.
 
 ---
 
@@ -1007,25 +1064,30 @@ Hard security events therefore change the final status code and subtree
 completeness, but do not suppress final output generation when the run has
 already initialized the root processing state.
 
-### 5.4 External Binaries: 7-Zip and unshield
+### 5.4 External Binaries: 7-Zip, unshield, and unsquashfs
 
-7-Zip and unshield are the only external binary dependencies for
-extraction. Their roles are strictly partitioned:
+7-Zip, unshield, and unsquashfs are the external binary dependencies for
+extraction. Their roles are partitioned:
 
-- **7-Zip** covers all archive formats: ZIP, TAR (all compressed variants),
-  Microsoft CAB, MSI (OLE compound documents), 7z, and RAR. Passwords
-  configured via `--password`, `--password-file`, or `EXTRACT_SBOM_PASSWORDS`
-  are tried in order for any format that supports encryption.
+- **7-Zip** covers most archive formats: ZIP, TAR (all compressed variants),
+  Microsoft CAB, MSI (OLE compound documents), 7z, RAR, ISO 9660, and CPIO. It
+  is also the fallback extractor for Squashfs images. Passwords configured via
+  `--password`, `--password-file`, or `EXTRACT_SBOM_PASSWORDS` are tried in
+  order for any format that supports encryption.
 - **unshield** covers InstallShield proprietary CABs — a format that no
   other tool (including 7-Zip) can handle.
+- **unsquashfs** is the preferred extractor for Squashfs filesystem images and
+  Snap packages; 7-Zip is used as a fallback when unsquashfs is not installed.
 
-Using 7-Zip as the single extraction engine ensures a uniform security
+Using 7-Zip as the primary extraction engine ensures a uniform security
 posture: every extraction runs as an isolated subprocess under Bubblewrap
-namespace isolation and receives a post-extraction safeguard walk.
+namespace isolation and receives a post-extraction safeguard walk. The same
+sandbox + safeguard pattern applies to unshield and unsquashfs.
 
-Both external binaries are optional at runtime. If either is missing, the
-corresponding format is recorded as non-extractable in the SBOM. Both
-are always invoked through the sandbox interface when available.
+All three external binaries are optional at runtime. If a required tool is
+missing (and, for Squashfs, the 7-Zip fallback also cannot handle the image),
+the corresponding node is recorded as non-extractable/tool-missing in the SBOM.
+Each is always invoked through the sandbox interface when available.
 
 ### 5.5 Syft-First Principle
 
@@ -1044,7 +1106,7 @@ This principle has three benefits:
    are never parsed by extract-sbom's extraction code.
 
 extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI,
-7z, RAR, InstallShield CAB)
+7z, RAR, InstallShield CAB, ISO, CPIO, Squashfs/Snap)
 that Syft cannot see through, in order to present their contents to Syft.
 
 ### 5.6 Downstream Vulnerability Matching (CPE / PURL)
@@ -1208,7 +1270,7 @@ delivery without re-extracting it.
 2. `assembly`: multi-BOM merge, container components, dependency graph,
    composition annotations
 3. `policy`: strict/partial engine
-4. `report`: basic human-readable Markdown report (EN only)
+4. `report`: basic markdown-readable Markdown report (EN only)
 5. Extend delivery-path handling to nested container trees
 6. Integration tests with nested archives (ZIP-in-ZIP, TAR.GZ-in-ZIP)
 
@@ -1231,7 +1293,7 @@ delivery without re-extracting it.
 
 **Goal:** Full audit report, i18n, interpretation modes.
 
-1. `report`: complete human-readable report with all required sections
+1. `report`: complete markdown-readable report with all required sections
 2. `report`: machine-readable JSON schema and encoder
 3. `report`: German language support via embedded templates
 4. Installer-semantic interpretation mode: MSI table parsing via OLE reader,
@@ -1277,7 +1339,7 @@ vulnerability information.
 9. Release tests:
   - `integration/releasetest`: validate release artifact behavior with
     `--grype` enabled and disabled
-  - assert user-facing report sections and machine-report fields are present
+  - assert user-facing report sections and json-report fields are present
     and schema-stable
 
 ---

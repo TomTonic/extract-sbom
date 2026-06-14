@@ -18,17 +18,42 @@ func TestFormatComponentCountZero(t *testing.T) {
 
 func TestFormatComponentCountOne(t *testing.T) {
 	t.Parallel()
+	// Test env stderr is not a terminal; expect plain text.
 	got := FormatComponentCount(1)
-	if got != "\033[1m1 component\033[0m" {
-		t.Fatalf("FormatComponentCount(1) = %q", got)
+	if got != "1 component" {
+		t.Fatalf("FormatComponentCount(1) non-TTY = %q, want %q", got, "1 component")
 	}
 }
 
 func TestFormatComponentCountMany(t *testing.T) {
 	t.Parallel()
 	got := FormatComponentCount(42)
-	if got != "\033[1m42 components\033[0m" {
-		t.Fatalf("FormatComponentCount(42) = %q", got)
+	if got != "42 components" {
+		t.Fatalf("FormatComponentCount(42) non-TTY = %q, want %q", got, "42 components")
+	}
+}
+
+func TestBoldTextTTY(t *testing.T) {
+	t.Parallel()
+	orig := stderrIsTerminal
+	stderrIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stderrIsTerminal = orig })
+
+	got := BoldText("hello")
+	if got != "\033[1mhello\033[0m" {
+		t.Fatalf("BoldText TTY = %q, want ANSI bold", got)
+	}
+}
+
+func TestBoldTextNonTTY(t *testing.T) {
+	t.Parallel()
+	orig := stderrIsTerminal
+	stderrIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stderrIsTerminal = orig })
+
+	got := BoldText("hello")
+	if got != "hello" {
+		t.Fatalf("BoldText non-TTY = %q, want plain", got)
 	}
 }
 
