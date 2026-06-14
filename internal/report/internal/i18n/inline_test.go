@@ -44,6 +44,35 @@ func TestRenderInlineHTMLEscapesMarkupInText(t *testing.T) {
 	}
 }
 
+// TestRenderInlineHTMLRejectsDangerousSchemes verifies that link URLs with
+// dangerous schemes are not turned into anchors but rendered as plain text,
+// while safe and relative URLs still produce anchors.
+func TestRenderInlineHTMLRejectsDangerousSchemes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"javascript", "[x](javascript:evil)", "x"},
+		{"data", "[x](data:text/html;base64,AAAA)", "x"},
+		{"vbscript", "[x](VBScript:msgbox)", "x"},
+		{"mailto allowed", "[mail](mailto:a@b.com)", `<a href="mailto:a@b.com">mail</a>`},
+		{"relative path with colon later", "[p](/a/b:c)", `<a href="/a/b:c">p</a>`},
+		{"fragment", "[f](#frag)", `<a href="#frag">f</a>`},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := string(RenderInlineHTML(tc.in)); got != tc.want {
+				t.Errorf("RenderInlineHTML(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPlainText(t *testing.T) {
 	t.Parallel()
 

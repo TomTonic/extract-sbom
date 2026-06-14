@@ -100,17 +100,18 @@ type vulnSection struct {
 // strings; the template renders the (optional) anchor link with context-aware
 // auto-escaping so an untrusted package name cannot inject markup.
 type vulnRow struct {
-	ID          string
-	Severity    string
-	SeverityCSS string
-	Name        string
-	NameAnchor  string
-	Installed   string
-	FixedIn     string
-	EPSS        string
-	Risk        string
-	KEV         string
-	Description string
+	ID           string
+	Severity     string
+	SeverityCSS  string
+	SeverityRank int
+	Name         string
+	NameAnchor   string
+	Installed    string
+	FixedIn      string
+	EPSS         string
+	Risk         string
+	KEV          string
+	Description  string
 }
 
 // sandboxSection renders either a status table (bwrap present) or explanatory
@@ -322,5 +323,25 @@ func severityCSSClass(sev string) string {
 		return "negligible"
 	default:
 		return "unknown-sev"
+	}
+}
+
+// severitySortRank maps a normalized severity to a numeric rank (lower = more
+// severe) used as the client-side sort key so the Severity column sorts by
+// severity instead of alphabetically by its rendered label.
+func severitySortRank(sev string) int {
+	switch sev {
+	case "critical":
+		return 1
+	case "high":
+		return 2
+	case "medium":
+		return 3
+	case "low":
+		return 4
+	case "negligible":
+		return 5
+	default:
+		return 99
 	}
 }

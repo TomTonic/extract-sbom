@@ -217,17 +217,18 @@ func buildVulnSection(proj reportjson.ProjectionsV2, t i18npkg.Bundle) vulnSecti
 	for i := range proj.Vulnerabilities {
 		row := &proj.Vulnerabilities[i]
 		v.Rows = append(v.Rows, vulnRow{
-			ID:          row.VulnerabilityID,
-			Severity:    formatSeverity(row.Severity, row.CVSSScore),
-			SeverityCSS: severityCSSClass(domain.NormalizeSeverity(row.Severity)),
-			Name:        emptyDash(row.Name),
-			NameAnchor:  row.PackageAnchorID,
-			Installed:   emptyDash(row.Installed),
-			FixedIn:     emptyDash(row.FixedIn),
-			EPSS:        formatEPSS(row.EPSS, row.EPSSPercentile),
-			Risk:        formatRisk(row.Risk),
-			KEV:         formatKEV(row.KEV, t),
-			Description: truncateText(row.Description, vulnDescriptionMaxRunes),
+			ID:           row.VulnerabilityID,
+			Severity:     formatSeverity(row.Severity, row.CVSSScore),
+			SeverityCSS:  severityCSSClass(domain.NormalizeSeverity(row.Severity)),
+			SeverityRank: severitySortRank(domain.NormalizeSeverity(row.Severity)),
+			Name:         emptyDash(row.Name),
+			NameAnchor:   row.PackageAnchorID,
+			Installed:    emptyDash(row.Installed),
+			FixedIn:      emptyDash(row.FixedIn),
+			EPSS:         formatEPSS(row.EPSS, row.EPSSPercentile),
+			Risk:         formatRisk(row.Risk),
+			KEV:          formatKEV(row.KEV, t),
+			Description:  truncateText(row.Description, vulnDescriptionMaxRunes),
 		})
 	}
 	return v

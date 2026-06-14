@@ -41,6 +41,27 @@ func sanitizeSPDXID(bomRef string) string {
 	return s
 }
 
+// rootPackageIDSuffix derives the SPDX ElementID suffix for the root package.
+// It must never collapse to "DOCUMENT", which is the reserved identifier of the
+// SPDX document element itself; reusing it would create two elements with the
+// same SPDXID (SPDXRef-DOCUMENT) and produce an invalid document.
+func rootPackageIDSuffix(bomRef string) string {
+	suffix := sanitizeSPDXID(bomRef)
+	if strings.EqualFold(suffix, "DOCUMENT") {
+		return "root-" + suffix
+	}
+	return suffix
+}
+
+// spdxPackageName returns a non-empty SPDX PackageName. SPDX requires the field
+// to be present, so a component without a name falls back to "NOASSERTION".
+func spdxPackageName(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "NOASSERTION"
+	}
+	return name
+}
+
 // spdxLicense returns the first usable SPDX license expression from a
 // CycloneDX component, or "NOASSERTION" if none is available.
 func spdxLicense(c cdx.Component) string {
@@ -172,12 +193,22 @@ func writeSPDXTo(bom *cdx.BOM, w io.Writer) error {
 		return spdxjson.Write(doc, w, spdxjson.Indent("  "))
 	}
 
-	// Add root package from metadata component.
+	// Map BOMRef → SPDX ElementID for dependency relationship building.
+	bomRefToElementID := make(map[string]spdxcommon.ElementID)
+
+	// Add root package from metadata component. The root package gets its own
+	// SPDX identifier (never the reserved SPDXRef-DOCUMENT, which belongs to the
+	// document element) so the identifiers stay unique and the document can
+	// DESCRIBE the root package.
+	var rootSuffix string
 	if bom.Metadata != nil && bom.Metadata.Component != nil {
 		root := bom.Metadata.Component
+		rootSuffix = rootPackageIDSuffix(root.BOMRef)
+		rootElementID := spdxcommon.ElementID("SPDXRef-" + rootSuffix)
+		bomRefToElementID[root.BOMRef] = rootElementID
 		rootPkg := &spdx.Package{
-			PackageName:             root.Name,
-			PackageSPDXIdentifier:   spdxcommon.ElementID("DOCUMENT"),
+			PackageName:             spdxPackageName(root.Name),
+			PackageSPDXIdentifier:   rootElementID,
 			PackageVersion:          root.Version,
 			PackageDownloadLocation: downloadLocation(*root),
 			FilesAnalyzed:           false,
@@ -187,9 +218,6 @@ func writeSPDXTo(bom *cdx.BOM, w io.Writer) error {
 		doc.Packages = append(doc.Packages, rootPkg)
 	}
 
-	// Map BOMRef → SPDX ElementID for dependency relationship building.
-	bomRefToElementID := make(map[string]spdxcommon.ElementID)
-
 	if bom.Components != nil {
 		for i := range *bom.Components {
 			c := (*bom.Components)[i]
@@ -197,7 +225,7 @@ func writeSPDXTo(bom *cdx.BOM, w io.Writer) error {
 			bomRefToElementID[c.BOMRef] = eid
 
 			pkg := &spdx.Package{
-				PackageName:             c.Name,
+				PackageName:             spdxPackageName(c.Name),
 				PackageSPDXIdentifier:   eid,
 				PackageVersion:          c.Version,
 				PackageDownloadLocation: downloadLocation(c),
@@ -209,11 +237,11 @@ func writeSPDXTo(bom *cdx.BOM, w io.Writer) error {
 		}
 	}
 
-	// DESCRIBES relationship from document to root package.
-	if bom.Metadata != nil && bom.Metadata.Component != nil {
+	// DESCRIBES relationship from the document to the root package.
+	if rootSuffix != "" {
 		doc.Relationships = append(doc.Relationships, &spdx.Relationship{
 			RefA:         spdxcommon.MakeDocElementID("", "DOCUMENT"),
-			RefB:         spdxcommon.MakeDocElementID("", "DOCUMENT"),
+			RefB:         spdxcommon.MakeDocElementID("", rootSuffix),
 			Relationship: "DESCRIBES",
 		})
 	}
@@ -226,13 +254,7 @@ func writeSPDXTo(bom *cdx.BOM, w io.Writer) error {
 			}
 			refAID, ok := bomRefToElementID[dep.Ref]
 			if !ok {
-				// Try document root.
-				if bom.Metadata != nil && bom.Metadata.Component != nil &&
-					dep.Ref == bom.Metadata.Component.BOMRef {
-					refAID = spdxcommon.ElementID("DOCUMENT")
-				} else {
-					continue
-				}
+				continue
 			}
 			for _, depRef := range *dep.Dependencies {
 				refBID, ok2 := bomRefToElementID[depRef]

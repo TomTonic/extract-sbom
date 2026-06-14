@@ -19,6 +19,7 @@ import (
 // spdxJSONDoc captures the subset of SPDX 2.3 JSON fields the tests assert on.
 type spdxJSONDoc struct {
 	SPDXVersion       string `json:"spdxVersion"`
+	SPDXID            string `json:"SPDXID"`
 	Name              string `json:"name"`
 	DocumentNamespace string `json:"documentNamespace"`
 	CreationInfo      struct {
@@ -26,11 +27,14 @@ type spdxJSONDoc struct {
 	} `json:"creationInfo"`
 	Packages []struct {
 		Name    string `json:"name"`
+		SPDXID  string `json:"SPDXID"`
 		Version string `json:"versionInfo"`
 		License string `json:"licenseConcluded"`
 	} `json:"packages"`
 	Relationships []struct {
-		Type string `json:"relationshipType"`
+		Type    string `json:"relationshipType"`
+		Element string `json:"spdxElementId"`
+		Related string `json:"relatedSpdxElement"`
 	} `json:"relationships"`
 }
 
@@ -105,6 +109,92 @@ func TestWriteSBOMSPDXProducesParseableDocument(t *testing.T) {
 		if !names[want] {
 			t.Errorf("SPDX packages missing %q (got %v)", want, names)
 		}
+	}
+}
+
+// TestWriteSPDXIdentifiersAreUniqueAndDescribesRoot guards against the
+// reserved-identifier bug: the root package must not reuse SPDXRef-DOCUMENT
+// (which belongs to the document element), all SPDX identifiers must be unique,
+// and the DESCRIBES relationship must point from the document to the root
+// package rather than to itself.
+func TestWriteSPDXIdentifiersAreUniqueAndDescribesRoot(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	if err := writeSPDXTo(testSPDXBOM(), &buf); err != nil {
+		t.Fatalf("writeSPDXTo error: %v", err)
+	}
+	doc := parseSPDX(t, buf.Bytes())
+
+	if doc.SPDXID != "SPDXRef-DOCUMENT" {
+		t.Errorf("document SPDXID = %q, want %q", doc.SPDXID, "SPDXRef-DOCUMENT")
+	}
+
+	// All identifiers (document + packages) must be unique, and no package may
+	// claim the reserved document identifier.
+	seen := map[string]bool{doc.SPDXID: true}
+	rootSPDXID := ""
+	for _, p := range doc.Packages {
+		if p.SPDXID == "SPDXRef-DOCUMENT" {
+			t.Errorf("package %q reuses the reserved SPDXRef-DOCUMENT identifier", p.Name)
+		}
+		if seen[p.SPDXID] {
+			t.Errorf("duplicate SPDX identifier %q (package %q)", p.SPDXID, p.Name)
+		}
+		seen[p.SPDXID] = true
+		if p.Name == "demo-product" {
+			rootSPDXID = p.SPDXID
+		}
+	}
+	if rootSPDXID == "" {
+		t.Fatal("root package (demo-product) not found in SPDX output")
+	}
+
+	// The DESCRIBES relationship must link the document to the root package.
+	var found bool
+	for _, r := range doc.Relationships {
+		if r.Type != "DESCRIBES" {
+			continue
+		}
+		found = true
+		if r.Element != "SPDXRef-DOCUMENT" {
+			t.Errorf("DESCRIBES spdxElementId = %q, want %q", r.Element, "SPDXRef-DOCUMENT")
+		}
+		if r.Related != rootSPDXID {
+			t.Errorf("DESCRIBES relatedSpdxElement = %q, want root package %q", r.Related, rootSPDXID)
+		}
+	}
+	if !found {
+		t.Error("no DESCRIBES relationship emitted")
+	}
+}
+
+// TestRootPackageIDSuffixAvoidsReservedDocumentID verifies that a root BOMRef
+// which would otherwise sanitize to "DOCUMENT" is remapped so it cannot collide
+// with the reserved document identifier.
+func TestRootPackageIDSuffixAvoidsReservedDocumentID(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{"DOCUMENT", "document", "Document"} {
+		if got := rootPackageIDSuffix(in); strings.EqualFold(got, "DOCUMENT") {
+			t.Errorf("rootPackageIDSuffix(%q) = %q, must not equal DOCUMENT", in, got)
+		}
+	}
+	if got := rootPackageIDSuffix("root-component"); got != "root-component" {
+		t.Errorf("rootPackageIDSuffix(%q) = %q, want unchanged", "root-component", got)
+	}
+}
+
+// TestSPDXPackageNameFallsBackToNoAssertion verifies the required PackageName
+// field is never emitted empty.
+func TestSPDXPackageNameFallsBackToNoAssertion(t *testing.T) {
+	t.Parallel()
+
+	if got := spdxPackageName("  "); got != "NOASSERTION" {
+		t.Errorf("spdxPackageName(blank) = %q, want NOASSERTION", got)
+	}
+	if got := spdxPackageName("libA"); got != "libA" {
+		t.Errorf("spdxPackageName(%q) = %q, want unchanged", "libA", got)
 	}
 }
 
