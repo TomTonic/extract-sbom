@@ -50,9 +50,10 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 
 ### 1.4 Extraction Architecture: Single 7-Zip Path
 
-All archive formats (ZIP, TAR and compressed variants, CAB, MSI, 7z, RAR) are
-extracted via the external 7-Zip binary. InstallShield CAB is the only exception
-(requires `unshield`).
+Most archive formats (ZIP, TAR and compressed variants, CAB, MSI, 7z, RAR, ISO,
+CPIO) are extracted via the external 7-Zip binary. The exceptions are
+InstallShield CAB (requires `unshield`) and Squashfs/Snap images (preferred
+extractor `unsquashfs`, with 7-Zip as fallback).
 
 An earlier design used Go's `archive/zip` and `archive/tar` standard library
 packages for in-process ZIP/TAR extraction. That code was removed in favour of
@@ -96,8 +97,9 @@ These mitigations apply to all extraction paths.
 
 | Path | Format coverage | Safeguard integration |
 |---|---|---|
-| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
+| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs (fallback) | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
 | unshield (external, sandboxed) | InstallShield CAB only | Same Bubblewrap isolation + post-extraction safeguard walk. |
+| unsquashfs (external, sandboxed) | Squashfs / Snap images (preferred) | Same Bubblewrap isolation + post-extraction safeguard walk. |
 
 Post-extraction safeguard checks enforce the same invariants for every format.
 Hard security violations (path traversal, symlink escape, special files) are
@@ -758,8 +760,11 @@ func GenerateMarkdownWithEngine(data ReportData, lang string, w io.Writer, engin
 // GenerateHTML writes a self-contained HTML report.
 func GenerateHTML(data ReportData, lang string, w io.Writer) error
 
-// GenerateJSON writes a structured JSON report.
+// GenerateJSON writes a structured JSON report in the default v2 schema.
 func GenerateJSON(data ReportData, w io.Writer) error
+
+// GenerateJSONLegacy writes the deprecated v1 JSON report schema (--legacy-json).
+func GenerateJSONLegacy(data ReportData, w io.Writer) error
 
 // GenerateSARIF writes a SARIF 2.1.0 JSON report.
 func GenerateSARIF(data ReportData, w io.Writer) error
@@ -1059,25 +1064,30 @@ Hard security events therefore change the final status code and subtree
 completeness, but do not suppress final output generation when the run has
 already initialized the root processing state.
 
-### 5.4 External Binaries: 7-Zip and unshield
+### 5.4 External Binaries: 7-Zip, unshield, and unsquashfs
 
-7-Zip and unshield are the only external binary dependencies for
-extraction. Their roles are strictly partitioned:
+7-Zip, unshield, and unsquashfs are the external binary dependencies for
+extraction. Their roles are partitioned:
 
-- **7-Zip** covers all archive formats: ZIP, TAR (all compressed variants),
-  Microsoft CAB, MSI (OLE compound documents), 7z, and RAR. Passwords
-  configured via `--password`, `--password-file`, or `EXTRACT_SBOM_PASSWORDS`
-  are tried in order for any format that supports encryption.
+- **7-Zip** covers most archive formats: ZIP, TAR (all compressed variants),
+  Microsoft CAB, MSI (OLE compound documents), 7z, RAR, ISO 9660, and CPIO. It
+  is also the fallback extractor for Squashfs images. Passwords configured via
+  `--password`, `--password-file`, or `EXTRACT_SBOM_PASSWORDS` are tried in
+  order for any format that supports encryption.
 - **unshield** covers InstallShield proprietary CABs — a format that no
   other tool (including 7-Zip) can handle.
+- **unsquashfs** is the preferred extractor for Squashfs filesystem images and
+  Snap packages; 7-Zip is used as a fallback when unsquashfs is not installed.
 
-Using 7-Zip as the single extraction engine ensures a uniform security
+Using 7-Zip as the primary extraction engine ensures a uniform security
 posture: every extraction runs as an isolated subprocess under Bubblewrap
-namespace isolation and receives a post-extraction safeguard walk.
+namespace isolation and receives a post-extraction safeguard walk. The same
+sandbox + safeguard pattern applies to unshield and unsquashfs.
 
-Both external binaries are optional at runtime. If either is missing, the
-corresponding format is recorded as non-extractable in the SBOM. Both
-are always invoked through the sandbox interface when available.
+All three external binaries are optional at runtime. If a required tool is
+missing (and, for Squashfs, the 7-Zip fallback also cannot handle the image),
+the corresponding node is recorded as non-extractable/tool-missing in the SBOM.
+Each is always invoked through the sandbox interface when available.
 
 ### 5.5 Syft-First Principle
 
@@ -1096,7 +1106,7 @@ This principle has three benefits:
    are never parsed by extract-sbom's extraction code.
 
 extract-sbom only extracts "dumb" container formats (ZIP, TAR, CAB, MSI,
-7z, RAR, InstallShield CAB)
+7z, RAR, InstallShield CAB, ISO, CPIO, Squashfs/Snap)
 that Syft cannot see through, in order to present their contents to Syft.
 
 ### 5.6 Downstream Vulnerability Matching (CPE / PURL)

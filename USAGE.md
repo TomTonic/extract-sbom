@@ -471,10 +471,10 @@ Output format for the audit report.
 
 - `markdown`: Markdown file (`*.report.md`), readable for manual review.
 - `json`: JSON file (`*.report.json`), structured for tooling/CI integration. Emitted in the canonical **v2** schema by default (see `--legacy-json`).
-- `both`: both `human` + `machine` formats written.
+- `both`: both Markdown and JSON reports written.
 - `html`: standalone HTML file (`*.report.html`) with embedded CSS, severity-colored vulnerability table, and collapsible extraction log — no external dependencies, suitable for sharing with auditors.
 - `sarif`: SARIF 2.1.0 JSON file (`*.sarif.json`) — one result per vulnerability match, severity mapped to SARIF levels (`error` for critical/high, `warning` for medium, `note` for low/negligible). Use with `--grype` to populate results. Designed for GitHub/GitLab security scanning integration.
-- `all`: all three of `human`, `machine`, and `html` written simultaneously.
+- `all`: Markdown, JSON, and HTML written simultaneously (SARIF is not included; request it explicitly with `--report sarif`).
 
 **`--legacy-json` (default: false)**
 
@@ -677,7 +677,7 @@ All SBOM files include delivery traceability via component properties:
 | `*.report.json` | JSON | Downstream automation, pipeline integration |
 | `*.sarif.json` | SARIF 2.1.0 | GitHub/GitLab security scanning |
 
-All report formats contain:
+The Markdown, HTML, and JSON reports are full audit reports and contain:
 - input hashes (SHA-256, SHA-512)
 - effective configuration and limits
 - sandbox mode used
@@ -686,3 +686,8 @@ All report formats contain:
 - processing issues (if any)
 - residual risk/limitations section
 - vulnerability findings (when `--grype` is enabled)
+
+The SARIF report is intentionally findings-focused: it carries the input
+artifact (with its SHA-256 hash) and one result per vulnerability match, but not
+the full extraction tree, configuration, or residual-risk narrative. Use it as a
+security-scanning feed, not as the standalone audit record.
