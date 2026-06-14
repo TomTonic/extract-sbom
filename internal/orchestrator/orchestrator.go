@@ -8,7 +8,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -219,8 +219,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		} else {
 			// Write SBOM.
 			inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
-			sbomExt := sbomExtension(cfg.SBOMFormat)
-			sbomCandidate := filepath.Join(cfg.OutputDir, inputBase+sbomExt)
+			sbomCandidate := filepath.Join(cfg.OutputDir, inputBase+sbomExtension(cfg.SBOMFormat))
 			sbomPath = sbomCandidate
 			var writeErr error
 			if cfg.SBOMFormat == "spdx-json" {
@@ -252,9 +251,13 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	// Step 8: Generate report.
+	// Step 8: Generate report(s).
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 8/8: writing report(s)")
 	endTime := time.Now()
+	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
+	var reportPath string
+	markdownIssueCount := -1
+
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
 		rd := report.ReportData{}
@@ -290,198 +293,59 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		return rd
 	}
 
-	var markdownRenderConfig markdownRenderConfig
-	var markdownOptionsErr error
-	switch cfg.ReportSelection {
-	case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
-		markdownRenderConfig, markdownOptionsErr = markdownRenderOptionsFromConfig(cfg)
+	mdCfg, mdCfgErr := func() (markdownRenderConfig, error) {
+		switch cfg.ReportSelection {
+		case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
+			return markdownRenderOptionsFromConfig(cfg)
+		}
+		return markdownRenderConfig{}, nil
+	}()
+
+	genMarkdown := func(w io.Writer) error {
+		if mdCfgErr != nil {
+			return mdCfgErr
+		}
+		return report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, w, mdCfg.Engine, mdCfg.Template)
 	}
 
-	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
-	var reportPath string
+	// Write each requested report format. markdownPath is kept in outer scope so
+	// the rewrite (below) can reference it after other formats are written.
 	var markdownPath string
-	markdownIssueCount := -1
-
 	switch cfg.ReportSelection {
 	case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
 		markdownPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
-		f, ferr := os.Create(markdownPath)
-		if ferr != nil {
-			addIssue("create-report-markdown", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create report: %w", ferr)
-			}
-		} else {
-			if markdownOptionsErr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-markdown", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close report: %w", cerr)
-					}
-				}
-				addIssue("write-report-markdown", markdownOptionsErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write report: %w", markdownOptionsErr)
-				}
-			} else if werr := report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, f, markdownRenderConfig.Engine, markdownRenderConfig.Template); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-markdown", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close report: %w", cerr)
-					}
-				}
-				addIssue("write-report-markdown", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-markdown", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close report: %w", cerr)
-				}
-			} else {
-				reportPath = markdownPath
-				markdownIssueCount = len(issues)
-			}
+		if writeReportFile("markdown", markdownPath, &reportPath, &fatalErr, addIssue, genMarkdown) {
+			markdownIssueCount = len(issues)
 		}
 	}
 
 	switch cfg.ReportSelection {
 	case config.ReportJSON, config.ReportBoth, config.ReportAll:
-		jsonPath := filepath.Join(cfg.OutputDir, inputBase+".report.json")
-		f, ferr := os.Create(jsonPath)
-		if ferr != nil {
-			addIssue("create-report-json", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create JSON report: %w", ferr)
-			}
-		} else {
-			genJSON := report.GenerateJSON
-			if cfg.LegacyJSON {
-				genJSON = report.GenerateJSONLegacy
-			}
-			if werr := genJSON(buildReportData(), f); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-json", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close JSON report: %w", cerr)
-					}
-				}
-				addIssue("write-report-json", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write JSON report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-json", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close JSON report: %w", cerr)
-				}
-			} else if reportPath == "" {
-				reportPath = jsonPath
-			}
+		genJSON := report.GenerateJSON
+		if cfg.LegacyJSON {
+			genJSON = report.GenerateJSONLegacy
 		}
+		writeReportFile("json", filepath.Join(cfg.OutputDir, inputBase+".report.json"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return genJSON(buildReportData(), w) })
 	}
 
 	switch cfg.ReportSelection {
 	case config.ReportHTML, config.ReportAll:
-		htmlPath := filepath.Join(cfg.OutputDir, inputBase+".report.html")
-		f, ferr := os.Create(htmlPath)
-		if ferr != nil {
-			addIssue("create-report-html", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create HTML report: %w", ferr)
-			}
-		} else {
-			if werr := report.GenerateHTML(buildReportData(), cfg.Language, f); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-html", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close HTML report: %w", cerr)
-					}
-				}
-				addIssue("write-report-html", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write HTML report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-html", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close HTML report: %w", cerr)
-				}
-			} else if reportPath == "" {
-				reportPath = htmlPath
-			}
-		}
+		writeReportFile("html", filepath.Join(cfg.OutputDir, inputBase+".report.html"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return report.GenerateHTML(buildReportData(), cfg.Language, w) })
 	}
 
 	if cfg.ReportSelection == config.ReportSARIF {
-		sarifPath := filepath.Join(cfg.OutputDir, inputBase+".sarif.json")
-		f, ferr := os.Create(sarifPath)
-		if ferr != nil {
-			addIssue("create-report-sarif", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create SARIF report: %w", ferr)
-			}
-		} else {
-			if werr := report.GenerateSARIF(buildReportData(), f); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-sarif", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close SARIF report: %w", cerr)
-					}
-				}
-				addIssue("write-report-sarif", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write SARIF report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-sarif", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close SARIF report: %w", cerr)
-				}
-			} else if reportPath == "" {
-				reportPath = sarifPath
-			}
-		}
+		writeReportFile("sarif", filepath.Join(cfg.OutputDir, inputBase+".sarif.json"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return report.GenerateSARIF(buildReportData(), w) })
 	}
 
+	// If writing other formats added new issues, rewrite markdown to include them.
 	if markdownIssueCount >= 0 && len(issues) > markdownIssueCount {
-		f, rewriteErr := os.Create(markdownPath)
-		if rewriteErr != nil {
-			addIssue("rewrite-report-markdown", rewriteErr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("rewrite report: %w", rewriteErr)
-			}
-		} else {
-			if markdownOptionsErr != nil {
-				if closeErr := f.Close(); closeErr != nil {
-					addIssue("rewrite-report-markdown", closeErr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
-					}
-				}
-				addIssue("rewrite-report-markdown", markdownOptionsErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", markdownOptionsErr)
-				}
-			} else if writeErr := report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, f, markdownRenderConfig.Engine, markdownRenderConfig.Template); writeErr != nil {
-				if closeErr := f.Close(); closeErr != nil {
-					addIssue("rewrite-report-markdown", closeErr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
-					}
-				}
-				addIssue("rewrite-report-markdown", writeErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", writeErr)
-				}
-			} else if closeErr := f.Close(); closeErr != nil {
-				addIssue("rewrite-report-markdown", closeErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
-				}
-			}
-		}
+		writeReportFile("markdown", markdownPath, nil, &fatalErr, addIssue, genMarkdown)
 	}
 
 	// Step 8: Clean up temporary directories.
@@ -508,97 +372,4 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		Issues:     append([]report.ProcessingIssue(nil), issues...),
 		Error:      fatalErr,
 	}
-}
-
-// sbomExtension returns the file extension for the given SBOM format string.
-func sbomExtension(format string) string {
-	switch format {
-	case "cyclonedx-xml":
-		return ".cdx.xml"
-	case "spdx-json":
-		return ".spdx.json"
-	default:
-		return ".cdx.json"
-	}
-}
-
-// markdownRenderOptionsFromConfig resolves Markdown report renderer options from
-// runtime configuration, including optional template file loading.
-type markdownRenderConfig struct {
-	Engine   string
-	Template string
-}
-
-func markdownRenderOptionsFromConfig(cfg config.Config) (markdownRenderConfig, error) {
-	engine := strings.TrimSpace(cfg.MarkdownRenderEngine)
-	if engine == "" || engine == "writer" {
-		return markdownRenderConfig{}, nil
-	}
-
-	opts := markdownRenderConfig{}
-	switch engine {
-	case "template-wrapper":
-		opts.Engine = "template-wrapper"
-	case "template-document":
-		opts.Engine = "template-document"
-	default:
-		return markdownRenderConfig{}, fmt.Errorf("unsupported markdown render engine: %q", engine)
-	}
-
-	templateFile := strings.TrimSpace(cfg.MarkdownTemplateFile)
-	if templateFile == "" {
-		return opts, nil
-	}
-
-	raw, err := os.ReadFile(templateFile)
-	if err != nil {
-		return markdownRenderConfig{}, fmt.Errorf("read markdown template file %q: %w", templateFile, err)
-	}
-	opts.Template = string(raw)
-	return opts, nil
-}
-
-// treeHasHardSecurity reports whether any node in the extraction tree ended in
-// a hard security block state.
-func treeHasHardSecurity(node *extract.ExtractionNode) bool {
-	if node == nil {
-		return false
-	}
-	if node.Status == extract.StatusSecurityBlocked {
-		return true
-	}
-	for _, child := range node.Children {
-		if treeHasHardSecurity(child) {
-			return true
-		}
-	}
-	return false
-}
-
-// treeHasIncomplete reports whether extraction contains failed, skipped, or
-// tool-missing nodes that indicate incomplete analysis.
-func treeHasIncomplete(node *extract.ExtractionNode) bool {
-	if node == nil {
-		return false
-	}
-	switch node.Status {
-	case extract.StatusFailed, extract.StatusSkipped, extract.StatusToolMissing:
-		return true
-	}
-	for _, child := range node.Children {
-		if treeHasIncomplete(child) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasScanFailures reports whether any scan task returned an execution error.
-func hasScanFailures(scans []scan.ScanResult) bool {
-	for _, scanResult := range scans {
-		if scanResult.Error != nil {
-			return true
-		}
-	}
-	return false
 }
