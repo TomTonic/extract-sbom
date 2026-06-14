@@ -94,7 +94,7 @@ inspection: one file in, one consolidated CycloneDX SBOM and one auditable repor
 - Tries configured passwords in order for password-protected formats handled by external extractors
 - Uses Syft in library mode for component cataloging
 - Assembles one deterministic SBOM in CycloneDX 1.6 JSON (`--format cyclonedx-json`), CycloneDX XML (`--format cyclonedx-xml`), or SPDX 2.3 JSON (`--format spdx-json`)
-- Generates an auditable report in Markdown (`--report markdown`), standalone HTML (`--report html`), structured JSON (`--report json`), SARIF 2.1.0 (`--report sarif`), or all formats at once (`--report all`) — in English or German
+- Generates an auditable report in Markdown (`--report markdown`), standalone HTML (`--report html`), structured JSON (`--report json`), SARIF 2.1.0 (`--report sarif`), or Markdown + JSON + HTML together (`--report all`) — in English or German
 
 ## Encrypted Archives and Password Sources
 
@@ -155,7 +155,7 @@ extract-sbom \
 Typical outputs in `out/` (base name derived from input file):
 
 - `sample-delivery.cdx.json` (default; use `--format cyclonedx-xml` for `.cdx.xml`, `--format spdx-json` for `.spdx.json`)
-- `sample-delivery.report.md` (default; use `--report json` for `.report.json`, `--report html` for `.report.html`, `--report sarif` for `.sarif.json`, `--report all` for all formats)
+- `sample-delivery.report.md` (default; use `--report json` for `.report.json`, `--report html` for `.report.html`, `--report sarif` for `.sarif.json`, `--report all` for Markdown + JSON + HTML)
 
 ## Documentation
 
@@ -165,6 +165,7 @@ Typical outputs in `out/` (base name derived from input file):
 - [SCAN_APPROACH.md](SCAN_APPROACH.md): operator-focused explanation of how scanning works and why the result is trustworthy
 - [DESIGN.md](DESIGN.md): functional and security design
 - [MODULE_GUIDE.md](MODULE_GUIDE.md): module architecture and decisions
+- [RELEASE_NOTES.md](RELEASE_NOTES.md): notable changes in this release
 
 ## Project Status in CI
 
