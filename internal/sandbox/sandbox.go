@@ -74,6 +74,11 @@ func (b *BwrapSandbox) Name() string {
 // The input file's directory is bind-mounted read-only at /input, and the
 // output directory is bind-mounted read-write at /output. Network access,
 // IPC, and PID namespaces are all isolated.
+//
+// The tool binary is always mounted at /tool/<name> inside the sandbox,
+// regardless of where it lives on the host. This avoids the --tmpfs /tmp
+// shadow problem that would hide binaries stored under /tmp (e.g. in test
+// temp directories).
 func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, inputPath string, outputDir string) error {
 	if !b.Available() {
 		return fmt.Errorf("sandbox: bwrap is not available")
@@ -88,24 +93,22 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		return fmt.Errorf("sandbox: cannot find %s: %w", cmd, err)
 	}
 
+	// Mount the binary at /tool/<name> so it is accessible regardless of
+	// where it lives on the host (including /tmp which is shadowed by
+	// --tmpfs /tmp) and regardless of the PATH inside the sandbox.
+	toolInsideSandbox := "/tool/" + filepath.Base(cmd)
+
 	bwrapArgs := []string{
 		"--ro-bind", inputDir, "/input",
 		"--bind", outputDir, "/output",
 		"--ro-bind", "/usr", "/usr",
 		"--ro-bind", "/lib", "/lib",
 		"--symlink", "/usr/lib64", "/lib64",
-	}
-
-	// Only mount the tool's parent directory if it is NOT already visible
-	// under one of the always-mounted prefixes (/usr, /lib). This prevents
-	// accidentally exposing sensitive host directories when the tool binary
-	// lives in an unexpected location (e.g., /opt/custom/bin/).
-	cmdDir := filepath.Dir(cmdPath)
-	if !isUnderMountedPrefix(cmdDir) {
-		bwrapArgs = append(bwrapArgs, "--ro-bind", cmdPath, cmdPath)
-	}
-
-	bwrapArgs = append(bwrapArgs,
+		// /bin → /usr/bin lets shell scripts (#!/bin/sh) work inside the sandbox
+		// on merged-usr Linux distributions (Ubuntu 22.04+, Fedora 37+, etc.).
+		"--symlink", "/usr/bin", "/bin",
+		"--dir", "/tool",
+		"--ro-bind", cmdPath, toolInsideSandbox,
 		"--tmpfs", "/tmp",
 		"--proc", "/proc",
 		"--dev", "/dev",
@@ -113,8 +116,8 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		"--new-session",
 		"--die-with-parent",
 		"--",
-		cmd,
-	)
+		toolInsideSandbox,
+	}
 
 	// Replace input/output paths in args with sandbox-internal paths.
 	for _, arg := range args {

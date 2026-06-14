@@ -124,15 +124,17 @@ if command -v grype >/dev/null 2>&1; then
   [[ -f "$grype_report_md" ]]   || { echo "FAIL: missing human report with --grype";   exit 1; }
   [[ -f "$grype_report_json" ]] || { echo "FAIL: missing machine report with --grype"; exit 1; }
 
-  jq -e '.vulnerabilities.state == "completed"' "$grype_report_json" >/dev/null
-  echo "  ok: vulnerabilities.state == completed"
+  # The default JSON report is the canonical v2 schema; vulnerability
+  # provenance lives under .raw.vulnerabilitiesRaw.
+  jq -e '.raw.vulnerabilitiesRaw.state == "completed"' "$grype_report_json" >/dev/null
+  echo "  ok: vulnerabilitiesRaw.state == completed"
 
-  jq -e '(.vulnerabilities.grypeVersion | type == "string") and (.vulnerabilities.grypeVersion | length > 0)' \
+  jq -e '(.raw.vulnerabilitiesRaw.grypeVersion | type == "string") and (.raw.vulnerabilitiesRaw.grypeVersion | length > 0)' \
     "$grype_report_json" >/dev/null
   echo "  ok: grypeVersion present in machine report"
 
-  jq -e '.vulnerabilities.requested == true' "$grype_report_json" >/dev/null
-  echo "  ok: vulnerabilities.requested == true"
+  jq -e '.raw.vulnerabilitiesRaw.requested == true' "$grype_report_json" >/dev/null
+  echo "  ok: vulnerabilitiesRaw.requested == true"
 
   grep -q "Vulnerability" "$grype_report_md"
   echo "  ok: human report contains Vulnerability section"

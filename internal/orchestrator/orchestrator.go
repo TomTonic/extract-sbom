@@ -8,7 +8,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -100,18 +100,16 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	// Step 3: Resolve sandbox.
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 3/8: resolving sandbox")
+	bwrapFound := sandbox.NewBwrapSandbox().Available()
 	sb, resolveErr := sandbox.Resolve(cfg)
 	addIssue("sandbox-resolve", resolveErr)
-	sandboxInfo := report.SandboxSummary{
-		UnsafeOvr: cfg.Unsafe,
-		Name:      sb.Name(),
-		Available: sb.Available(),
-	}
-	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] sandbox: %s (available=%t)", sandboxInfo.Name, sandboxInfo.Available)
+	sandboxName := sb.Name()
+	sandboxAvailable := sb.Available()
+	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] sandbox: %s (available=%t)", sandboxName, sandboxAvailable)
 
 	// Check external tool availability early so users don't wait minutes
 	// before discovering that MSI/CAB/7z extraction will fail.
-	if !sb.Available() {
+	if !sandboxAvailable {
 		cfg.EmitProgress(config.ProgressNormal,
 			"[extract-sbom] WARNING: sandbox unavailable and --unsafe not set. "+
 				"Extraction of MSI, CAB, 7z, ISO, and InstallShield formats will be skipped. "+
@@ -129,6 +127,10 @@ func Run(ctx context.Context, cfg config.Config) Result {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] WARNING: unshield not found on PATH. InstallShield CAB extraction will fail.")
 			addIssue("tool-availability", fmt.Errorf("unshield not found on PATH"))
+		}
+		if !extract.IsToolAvailable("unsquashfs") {
+			cfg.EmitProgress(config.ProgressNormal,
+				"[extract-sbom] INFO: unsquashfs not found on PATH. SquashFS extraction will fall back to 7zz.")
 		}
 	}
 
@@ -203,8 +205,9 @@ func Run(ctx context.Context, cfg config.Config) Result {
 				}
 			}
 			cfg.EmitProgress(config.ProgressNormal,
-				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → \033[1m%d\033[0m in BOM",
-				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, weakCount, purlCount, finalBOMCount)
+				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → %s in BOM",
+				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, weakCount, purlCount,
+				scan.BoldText(fmt.Sprintf("%d", finalBOMCount)))
 		}
 		if asmErr != nil {
 			addIssue("assembly", asmErr)
@@ -216,9 +219,15 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		} else {
 			// Write SBOM.
 			inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
-			sbomCandidate := filepath.Join(cfg.OutputDir, inputBase+".cdx.json")
+			sbomCandidate := filepath.Join(cfg.OutputDir, inputBase+sbomExtension(cfg.SBOMFormat))
 			sbomPath = sbomCandidate
-			if writeErr := assembly.WriteSBOM(bom, sbomPath); writeErr != nil {
+			var writeErr error
+			if cfg.SBOMFormat == "spdx-json" {
+				writeErr = assembly.WriteSBOMSPDX(bom, sbomPath)
+			} else {
+				writeErr = assembly.WriteSBOM(bom, sbomPath, cfg.SBOMFormat)
+			}
+			if writeErr != nil {
 				addIssue("write-sbom", writeErr)
 				policyEngine.Evaluate(policy.Violation{
 					Type:     "write-sbom",
@@ -242,139 +251,101 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		}
 	}
 
-	// Step 8: Generate report.
+	// Step 8: Generate report(s).
 	cfg.EmitProgress(config.ProgressNormal, "[extract-sbom] step 8/8: writing report(s)")
 	endTime := time.Now()
-	buildReportData := func() report.ReportData {
-		processingIssues := append([]report.ProcessingIssue(nil), issues...)
-		toolVersions := report.ToolVersions{
-			SevenZip: extract.GetUsedSevenZipVersion(),
-			Unshield: extract.GetUsedUnshieldVersion(),
-		}
-		if vulnResult != nil && vulnResult.GrypeVersion != "" {
-			toolVersions.Grype = "grype " + vulnResult.GrypeVersion
-			if vulnResult.DBSchemaVersion != "" {
-				toolVersions.GrypeDB = "db: " + vulnResult.DBSchemaVersion
-				if vulnResult.DBBuilt != "" {
-					toolVersions.GrypeDB += ", built " + vulnResult.DBBuilt
-				}
-			}
-		}
-		return report.ReportData{
-			Input:            inputSummary,
-			Generator:        generatorInfo,
-			Config:           cfg,
-			Tree:             tree,
-			Scans:            scans,
-			Vulnerabilities:  vulnResult,
-			PolicyDecisions:  policyEngine.Decisions(),
-			SandboxInfo:      sandboxInfo,
-			ProcessingIssues: processingIssues,
-			StartTime:        startTime,
-			EndTime:          endTime,
-			BOM:              assembledBOM,
-			SBOMPath:         sbomPath,
-			Suppressions:     suppressions,
-			ToolVersions:     toolVersions,
-		}
-	}
-
 	inputBase := strings.TrimSuffix(filepath.Base(cfg.InputPath), filepath.Ext(cfg.InputPath))
 	var reportPath string
-	var humanPath string
-	humanIssueCount := -1
+	markdownIssueCount := -1
 
-	switch cfg.ReportMode {
-	case config.ReportHuman, config.ReportBoth:
-		humanPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
-		f, ferr := os.Create(humanPath)
-		if ferr != nil {
-			addIssue("create-report-human", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create report: %w", ferr)
+	buildReportData := func() report.ReportData {
+		processingIssues := append([]report.ProcessingIssue(nil), issues...)
+		rd := report.ReportData{}
+		rd.Input = inputSummary
+		rd.Generator = generatorInfo
+		rd.Config = cfg
+		rd.Tree = tree
+		rd.Scans = scans
+		rd.Vulnerabilities = vulnResult
+		rd.PolicyDecisions = policyEngine.Decisions()
+		rd.SandboxInfo.UnsafeOvr = cfg.Unsafe
+		rd.SandboxInfo.Name = sandboxName
+		rd.SandboxInfo.Available = sandboxAvailable
+		rd.SandboxInfo.BwrapFound = bwrapFound
+		rd.ProcessingIssues = processingIssues
+		rd.StartTime = startTime
+		rd.EndTime = endTime
+		rd.BOM = assembledBOM
+		rd.SBOMPath = sbomPath
+		rd.Suppressions = suppressions
+		rd.ToolVersions.SevenZip = extract.GetUsedSevenZipVersion()
+		rd.ToolVersions.Unshield = extract.GetUsedUnshieldVersion()
+		rd.ToolVersions.Unsquashfs = extract.GetUsedUnsquashfsVersion()
+		if vulnResult != nil && vulnResult.GrypeVersion != "" {
+			rd.ToolVersions.Grype = "grype " + vulnResult.GrypeVersion
+			if vulnResult.DBSchemaVersion != "" {
+				rd.ToolVersions.GrypeDB = "db: " + vulnResult.DBSchemaVersion
+				if vulnResult.DBBuilt != "" {
+					rd.ToolVersions.GrypeDB += ", built " + vulnResult.DBBuilt
+				}
 			}
-		} else {
-			if werr := report.GenerateHuman(buildReportData(), cfg.Language, f); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-human", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close report: %w", cerr)
-					}
-				}
-				addIssue("write-report-human", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-human", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close report: %w", cerr)
-				}
-			} else {
-				reportPath = humanPath
-				humanIssueCount = len(issues)
-			}
+		}
+		return rd
+	}
+
+	mdCfg, mdCfgErr := func() (markdownRenderConfig, error) {
+		switch cfg.ReportSelection {
+		case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
+			return markdownRenderOptionsFromConfig(cfg)
+		}
+		return markdownRenderConfig{}, nil
+	}()
+
+	genMarkdown := func(w io.Writer) error {
+		if mdCfgErr != nil {
+			return mdCfgErr
+		}
+		return report.GenerateMarkdownWithEngine(buildReportData(), cfg.Language, w, mdCfg.Engine, mdCfg.Template)
+	}
+
+	// Write each requested report format. markdownPath is kept in outer scope so
+	// the rewrite (below) can reference it after other formats are written.
+	var markdownPath string
+	switch cfg.ReportSelection {
+	case config.ReportMarkdown, config.ReportBoth, config.ReportAll:
+		markdownPath = filepath.Join(cfg.OutputDir, inputBase+".report.md")
+		if writeReportFile("markdown", markdownPath, &reportPath, &fatalErr, addIssue, genMarkdown) {
+			markdownIssueCount = len(issues)
 		}
 	}
 
-	switch cfg.ReportMode {
-	case config.ReportMachine, config.ReportBoth:
-		jsonPath := filepath.Join(cfg.OutputDir, inputBase+".report.json")
-		f, ferr := os.Create(jsonPath)
-		if ferr != nil {
-			addIssue("create-report-machine", ferr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("create JSON report: %w", ferr)
-			}
-		} else {
-			if werr := report.GenerateMachine(buildReportData(), f); werr != nil {
-				if cerr := f.Close(); cerr != nil {
-					addIssue("close-report-machine", cerr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("close JSON report: %w", cerr)
-					}
-				}
-				addIssue("write-report-machine", werr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("write JSON report: %w", werr)
-				}
-			} else if cerr := f.Close(); cerr != nil {
-				addIssue("close-report-machine", cerr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("close JSON report: %w", cerr)
-				}
-			} else if reportPath == "" {
-				reportPath = jsonPath
-			}
+	switch cfg.ReportSelection {
+	case config.ReportJSON, config.ReportBoth, config.ReportAll:
+		genJSON := report.GenerateJSON
+		if cfg.LegacyJSON {
+			genJSON = report.GenerateJSONLegacy
 		}
+		writeReportFile("json", filepath.Join(cfg.OutputDir, inputBase+".report.json"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return genJSON(buildReportData(), w) })
 	}
 
-	if humanIssueCount >= 0 && len(issues) > humanIssueCount {
-		f, rewriteErr := os.Create(humanPath)
-		if rewriteErr != nil {
-			addIssue("rewrite-report-human", rewriteErr)
-			if fatalErr == nil {
-				fatalErr = fmt.Errorf("rewrite report: %w", rewriteErr)
-			}
-		} else {
-			if writeErr := report.GenerateHuman(buildReportData(), cfg.Language, f); writeErr != nil {
-				if closeErr := f.Close(); closeErr != nil {
-					addIssue("rewrite-report-human", closeErr)
-					if fatalErr == nil {
-						fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
-					}
-				}
-				addIssue("rewrite-report-human", writeErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", writeErr)
-				}
-			} else if closeErr := f.Close(); closeErr != nil {
-				addIssue("rewrite-report-human", closeErr)
-				if fatalErr == nil {
-					fatalErr = fmt.Errorf("rewrite report: %w", closeErr)
-				}
-			}
-		}
+	switch cfg.ReportSelection {
+	case config.ReportHTML, config.ReportAll:
+		writeReportFile("html", filepath.Join(cfg.OutputDir, inputBase+".report.html"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return report.GenerateHTML(buildReportData(), cfg.Language, w) })
+	}
+
+	if cfg.ReportSelection == config.ReportSARIF {
+		writeReportFile("sarif", filepath.Join(cfg.OutputDir, inputBase+".sarif.json"),
+			&reportPath, &fatalErr, addIssue,
+			func(w io.Writer) error { return report.GenerateSARIF(buildReportData(), w) })
+	}
+
+	// If writing other formats added new issues, rewrite markdown to include them.
+	if markdownIssueCount >= 0 && len(issues) > markdownIssueCount {
+		writeReportFile("markdown", markdownPath, nil, &fatalErr, addIssue, genMarkdown)
 	}
 
 	// Step 8: Clean up temporary directories.
@@ -401,44 +372,4 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		Issues:     append([]report.ProcessingIssue(nil), issues...),
 		Error:      fatalErr,
 	}
-}
-
-func treeHasHardSecurity(node *extract.ExtractionNode) bool {
-	if node == nil {
-		return false
-	}
-	if node.Status == extract.StatusSecurityBlocked {
-		return true
-	}
-	for _, child := range node.Children {
-		if treeHasHardSecurity(child) {
-			return true
-		}
-	}
-	return false
-}
-
-func treeHasIncomplete(node *extract.ExtractionNode) bool {
-	if node == nil {
-		return false
-	}
-	switch node.Status {
-	case extract.StatusFailed, extract.StatusSkipped, extract.StatusToolMissing:
-		return true
-	}
-	for _, child := range node.Children {
-		if treeHasIncomplete(child) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasScanFailures(scans []scan.ScanResult) bool {
-	for _, scanResult := range scans {
-		if scanResult.Error != nil {
-			return true
-		}
-	}
-	return false
 }
