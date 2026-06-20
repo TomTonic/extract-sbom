@@ -161,3 +161,47 @@ Work is complete when:
 - Limits and policies are enforced and tested
 - CI passes without exceptions
 - Output is auditable, reproducible, and understandable
+
+---
+
+## 11. Release Notes
+
+Release notes are based on the last published GitHub release. Describe what
+actually changed and why it matters — not a log replay. Omit sections with
+nothing to report; never add placeholder text.
+
+### New Features
+User-visible capabilities that did not exist in the previous release. Describe
+each feature from the user's perspective: what they can do now that they
+couldn't before, and when they would use it. Avoid internal implementation
+detail unless it directly affects usage.
+
+### Changed Behavior
+Existing functionality that works differently after the upgrade. Call out
+anything that could require users to update their configuration, tooling, or
+expectations. If a change is breaking, flag it explicitly.
+
+### Architectural Changes
+Significant restructuring of the codebase that affects how components interact,
+how the project is organized, or how it is extended. Include here only changes
+that a contributor or integrator would notice. Pure internal refactors with no
+external impact may be omitted.
+
+### Source Code Updates
+Language/runtime dependency updates, including Go toolchain bumps (a new
+compiler may change runtime behavior or safety guarantees). Highlight
+security-relevant updates (CVE fixes, patched vulnerabilities) explicitly,
+even if transitive.
+
+### CI Updates
+CI pipeline changes: linter upgrades, new analysis rules, runner image updates,
+build matrix or workflow restructuring. Flag linter changes that now reject
+previously accepted patterns.
+
+### Writing Guidelines
+
+- Plain English; assume domain knowledge, not day-to-day development context.
+- Concrete names (component, flag, or file) — not "various improvements".
+- Cross-mention items that span sections (e.g. a CVE fix in Source Code Updates and Security).
+- One–two sentences per bullet; link to the relevant issue/PR when available.
+- Synthesize commits; do not restate them verbatim.
