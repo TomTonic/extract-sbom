@@ -1,12 +1,14 @@
 # Release Notes
 
+## v0.5.0
+
 This release centers on a rebuilt report layer, additional SBOM and report
 output formats, broader archive/container support, and a number of behavioral
 and architectural changes. The notes below are grouped by theme and kept
 high-level; see [USAGE.md](USAGE.md) for exact flags and
 [MODULE_GUIDE.md](MODULE_GUIDE.md) for the package layout.
 
-## Overview & Philosophy
+### Overview & Philosophy
 
 **Evidence-first reporting.** The report layer was rebuilt around a single
 principle: every component, suppression, and vulnerability claim must be
@@ -30,7 +32,7 @@ Cross-renderer ordering-contract tests lock this in.
 (Component Occurrence Index, Component Normalization, Extraction and Scan logs).
 The appendix is intentionally complete for spot-checks and evidence export.
 
-## New Features
+### New Features
 
 **SPDX 2.3 JSON output.** Alongside the existing CycloneDX JSON, the tool can
 now emit an SPDX 2.3 document (`--format spdx-json`), mapping components to SPDX
@@ -74,7 +76,17 @@ default deterministic writer, a template-wrapper, or a full template-document
 backend (`--markdown-render-engine`, `--markdown-template-file`) for custom
 framing.
 
-## Behavioral Changes
+**Progress logging.** Extraction progress is now logged incrementally so
+long-running scans of deep archive trees give continuous feedback rather than
+appearing to hang.
+
+**Report grouped by package.** The vulnerability section now groups findings by
+component/package, improving readability for deliveries with many components.
+Source and reference URLs in the vulnerability detail tables are rendered as
+Markdown links. The report summary additionally includes the versions of all
+active scanning tools (Syft, Grype, 7-Zip, etc.).
+
+### Behavioral Changes
 
 **JSON report defaults to the v2 schema.** The structured JSON report is now
 emitted in the canonical, semantically-typed v2 schema by default. The
@@ -106,7 +118,7 @@ means for coverage, instead of a single misleading line.
 shell-script shebangs), fixing cases where a tool living under `/tmp` was
 shadowed by the tmpfs mount.
 
-## Architectural Changes
+### Architectural Changes
 
 **The report monolith was dissolved.** The previously large `internal/report`
 package was split into focused internal subpackages: `model` (shared
@@ -121,10 +133,93 @@ converter, so the Markdown and HTML renderers stay textually identical and
 translations are maintained in exactly one place.
 
 **Schema-validated JSON v2.** The v2 report ships with a published JSON Schema
-and is validated against it in tests, so the machine contract cannot silently
-drift from the implementation.
+(`santhosh-tekuri/jsonschema/v6`) and is validated against it in tests, so the
+machine contract cannot silently drift from the implementation.
 
 **Extraction internals refactored.** The external-extractor path was split into
 separate error-classification and archive-metadata modules, making
 7-Zip/unshield/unsquashfs failure handling and metadata capture independently
 testable.
+
+### Source Code Updates
+
+New direct dependencies added for SPDX output and JSON Schema validation:
+
+- `github.com/spdx/tools-golang v0.5.7` — SPDX 2.3 document assembly
+- `github.com/santhosh-tekuri/jsonschema/v6 v6.0.2` — JSON Schema v2 contract validation
+- `github.com/google/uuid v1.6.0` and `github.com/mattn/go-isatty v0.0.22` promoted to direct dependencies
+
+Indirect dependency bumps:
+
+- `github.com/aws/aws-sdk-go-v2` v1.41.12 → v1.42.0 (and all aws-sdk-go-v2 sub-packages updated to match)
+- `github.com/containerd/containerd/v2` v2.3.1 → v2.3.2
+- `github.com/cyphar/filepath-securejoin` → v0.7.0
+- `github.com/docker/cli` → v29.6.0
+- `github.com/spiffe/go-spiffe/v2` → v2.8.1
+- `github.com/bitnami/go-version`, `github.com/CycloneDX/cyclonedx-go` v0.10.0 → v0.11.0, and various other indirect transitive bumps
+
+### CI Updates
+
+- `actions/checkout` updated from v6.0.3 to v7.0.0 (#22).
+- `step-security/harden-runner` updated to v2.19.3.
+
+---
+
+## v0.4.0
+
+This release adds support for password-protected archives, consolidates all
+archive extraction through a single 7-Zip path, and improves error reporting
+and security hardening.
+
+### New Features
+
+**Password-protected archive support.** Encrypted archives (ZIP, 7z, RAR,
+CAB, MSI payload paths, InstallShield via unshield) can now be unlocked at
+scan time. Passwords are supplied via `--password` (repeatable flag, tried in
+listed order), the `EXTRACT_SBOM_PASSWORDS` environment variable
+(comma-separated), or `--password-file` (one password per line). All three
+sources are merged with a deterministic precedence: CLI flags first, then
+environment, then file. The no-password attempt always comes first so
+unencrypted archives are not penalised.
+
+**Password file hardening.** Password files are bounded to 1 MiB and 10,000
+entries to prevent unbounded retry loops. On Unix systems, the file must be
+`0600` or stricter; extract-sbom refuses to read a password file with looser
+permissions to prevent credential exposure on multi-user hosts.
+
+**Extraction errors in the report.** Failed and timed-out extraction attempts
+now appear as explicitly classified entries in the audit report, so there is
+no silent gap between what was submitted and what was scanned.
+
+### Changed Behavior
+
+**Unified 7-Zip extraction path.** All formats that previously had a separate
+in-process extraction path now go through 7-Zip, leaving only InstallShield
+CABs (still handled by `unshield`) on a separate route. This reduces the
+attack surface and makes password support available uniformly across archive
+types without format-specific special-casing.
+
+**Path traversal handling clarified.** With the switch to 7-Zip as the sole
+external extractor, path-traversal containment for externally extracted
+archives is now delegated to 7-Zip's own normalization (e.g.
+`../../../etc/passwd` → `etc/passwd` within the extraction output tree) rather
+than a pre-extraction gate in extract-sbom. In `--unsafe` mode — where
+namespace isolation is intentionally disabled — containment therefore depends
+entirely on extractor behavior; the report and documentation now say so
+explicitly. Symlink escape and special-file materialization are still detected
+and blocked by extract-sbom's own safeguard pass on the materialized output tree.
+
+**Extraction timeout and error classification.** Extractions that exceed their
+time budget are now interrupted cleanly, and the resulting node in the report
+is tagged as a timeout rather than a generic failure.
+
+### Source Code Updates
+
+Indirect dependency bumps included with this release:
+
+- `google.golang.org/grpc` v1.80.0 → v1.81.0
+- `google.golang.org/api` v0.277.0 → v0.278.0
+- `google.golang.org/genproto` and `googleapis/api/rpc` updated to match
+- `github.com/go-git/go-billy/v5` v5.8.0 → v5.9.0
+- `github.com/fsnotify/fsnotify` v1.10.0 → v1.10.1
+- `modernc.org/libc` v1.72.1 → v1.72.2
