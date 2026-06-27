@@ -34,7 +34,6 @@ func TestFormatComponentCountMany(t *testing.T) {
 }
 
 func TestBoldTextTTY(t *testing.T) {
-	t.Parallel()
 	orig := stderrIsTerminal
 	stderrIsTerminal = func() bool { return true }
 	t.Cleanup(func() { stderrIsTerminal = orig })
@@ -46,7 +45,6 @@ func TestBoldTextTTY(t *testing.T) {
 }
 
 func TestBoldTextNonTTY(t *testing.T) {
-	t.Parallel()
 	orig := stderrIsTerminal
 	stderrIsTerminal = func() bool { return false }
 	t.Cleanup(func() { stderrIsTerminal = orig })
