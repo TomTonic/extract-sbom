@@ -12,16 +12,13 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.26']
     steps:
       - uses: actions/checkout@v7.0.0
 
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go
         uses: actions/setup-go@v6.5.0
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
 
       - name: Test with coverage
         run: |
@@ -55,7 +52,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6.5.0
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Install external tools for release test
         run: |
