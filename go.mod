@@ -9,7 +9,7 @@ require (
 	github.com/anchore/syft v1.46.0
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/google/uuid v1.6.0
-	github.com/mattn/go-isatty v0.0.22
+	github.com/mattn/go-isatty v0.0.23
 	github.com/richardlehane/mscfb v1.0.7
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spdx/tools-golang v0.6.0-rc4
