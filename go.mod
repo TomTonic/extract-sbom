@@ -6,7 +6,7 @@ go 1.26.5
 
 require (
 	github.com/CycloneDX/cyclonedx-go v0.11.0
-	github.com/anchore/syft v1.48.0
+	github.com/anchore/syft v1.49.0
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.23
