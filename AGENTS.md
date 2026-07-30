@@ -166,32 +166,73 @@ Work is complete when:
 
 ## 11. Release Notes
 
-Release notes are based on the last published GitHub release. Describe what
-actually changed and why it matters — not a log replay. Omit sections with
-nothing to report; never add placeholder text.
+Release notes cover everything changed since the last published git tag (i.e.
+`git log <last-tag>..HEAD`). Describe what actually changed and why it
+matters — not a log replay.
+
+Output: raw Markdown source in the chat response, ready to paste directly into
+GitHub's "Release notes" text box. Do not write a `RELEASE_NOTES_*.md` file (or
+any other file) unless explicitly asked for one.
+
+Always emit all six section headers below, in order, even when a section has
+nothing to report — never drop a header. An empty section gets a single
+italicized line, e.g. `_Nothing to report this release._`, instead of content.
 
 ### New Features
 User-visible capabilities that did not exist in the previous release. Describe
 each feature from the user's perspective: what they can do now that they
 couldn't before, and when they would use it. Avoid internal implementation
-detail unless it directly affects usage.
+detail unless it directly affects usage. Include capabilities inherited from
+an upstream update of a core functional dependency (see "Core dependency
+pass-through" below), attributed as such.
 
 ### Changed Behavior
 Existing functionality that works differently after the upgrade. Call out
 anything that could require users to update their configuration, tooling, or
-expectations. If a change is breaking, flag it explicitly.
+expectations. If a change is breaking, flag it explicitly. Include behavior
+changes inherited from a core functional dependency's own bug fixes (see
+below), attributed as such.
 
 ### Architectural Changes
 Significant restructuring of the codebase that affects how components interact,
 how the project is organized, or how it is extended. Include here only changes
 that a contributor or integrator would notice. Pure internal refactors with no
-external impact may be omitted.
+external impact may be omitted (this is the one section that may legitimately
+stay empty release after release).
 
 ### Source Code Updates
 Language/runtime dependency updates, including Go toolchain bumps (a new
-compiler may change runtime behavior or safety guarantees). Highlight
-security-relevant updates (CVE fixes, patched vulnerabilities) explicitly,
-even if transitive.
+compiler may change runtime behavior or safety guarantees), plus notable
+direct/transitive module bumps.
+
+**CVE enumeration (IDs only, no descriptions):** for every dependency bumped
+in this release, check whether the new version fixes a disclosed CVE/GHSA that
+was *not* already fixed in the version used at the last release. Verify each
+candidate against the dependency's own release notes/changelog or the
+GitHub/Go vulnerability databases — never guess or infer an identifier. List
+every ID that is newly fixed by this update batch, regardless of whether this
+project's code actually exercises the affected component — a CVE scanner run
+against this project's dependency tree would flag it either way, so it belongs
+here too. If none are newly fixed, state that explicitly (e.g. "No CVEs were
+fixed by this update batch.") rather than silently omitting the check.
+
+**Core dependency pass-through:** `github.com/anchore/syft` is this project's
+core functional dependency (it does the actual SBOM extraction), so its own
+upstream changelog matters as much as this project's commits. Whenever syft is
+bumped, read its release notes for the covered version range and surface:
+new capabilities → New Features; bug fixes/behavior changes → Changed
+Behavior; security fixes → the CVE enumeration above (same newly-fixed rule).
+Attribute each as "Inherited from the syft upgrade: ...".
+
+### Flagged Advisories (Not Applicable)
+CVE/GHSA IDs that a scanner would likely still flag against a bumped
+dependency's version number, but that do not apply to code this project
+actually exercises — e.g. an advisory in Docker Engine's buildkit component
+when this project only imports the `docker/cli` library, or an advisory
+already fixed before this project's last release baseline. List each ID with
+a very short (few-words) reason it doesn't apply, so readers cross-checking
+scanner output against this changelog aren't left wondering why it's missing
+from Source Code Updates.
 
 ### CI Updates
 CI pipeline changes: linter upgrades, new analysis rules, runner image updates,
