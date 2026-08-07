@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/richardlehane/mscfb v1.0.7
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spdx/tools-golang v0.6.0-rc4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
