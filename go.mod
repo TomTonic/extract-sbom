@@ -3,7 +3,7 @@ module github.com/TomTonic/extract-sbom
 go 1.26.6
 
 require (
-	github.com/CycloneDX/cyclonedx-go v0.11.0
+	github.com/CycloneDX/cyclonedx-go v0.12.0
 	github.com/anchore/syft v1.51.0
 	github.com/glebarez/go-sqlite v1.23.0
 	github.com/google/uuid v1.6.0
