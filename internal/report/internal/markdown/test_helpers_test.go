@@ -49,13 +49,3 @@ func normalizeHumanGeneratedTimestamp(s string) string {
 	tsPattern := regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
 	return tsPattern.ReplaceAllString(s, "<generated-at>")
 }
-
-//go:fix inline
-func floatPtr(v float64) *float64 {
-	return new(v)
-}
-
-//go:fix inline
-func boolPtr(v bool) *bool {
-	return new(v)
-}
