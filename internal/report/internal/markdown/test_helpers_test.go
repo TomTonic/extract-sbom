@@ -50,10 +50,12 @@ func normalizeHumanGeneratedTimestamp(s string) string {
 	return tsPattern.ReplaceAllString(s, "<generated-at>")
 }
 
+//go:fix inline
 func floatPtr(v float64) *float64 {
-	return &v
+	return new(v)
 }
 
+//go:fix inline
 func boolPtr(v bool) *bool {
-	return &v
+	return new(v)
 }

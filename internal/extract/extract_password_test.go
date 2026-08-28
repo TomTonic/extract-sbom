@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/TomTonic/extract-sbom/internal/config"
@@ -58,10 +59,8 @@ func TestExtract7zWithPasswords_CorrectPassword(t *testing.T) {
 		run: func(_ string, args []string, _ string, outputDir string) error {
 			calls++
 			// Check if the correct password was provided as -p<password> arg.
-			for _, a := range args {
-				if a == "-p"+correctPW {
-					return os.WriteFile(filepath.Join(outputDir, "file.txt"), []byte("data"), 0o600)
-				}
+			if slices.Contains(args, "-p"+correctPW) {
+				return os.WriteFile(filepath.Join(outputDir, "file.txt"), []byte("data"), 0o600)
 			}
 			// No matching -p arg → simulate wrong-password failure.
 			return os.ErrPermission

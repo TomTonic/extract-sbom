@@ -23,16 +23,16 @@ func TestGenerateIncludesProcessingIssues(t *testing.T) {
 		t.Fatalf("Generate error: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON report JSON: %v", err)
 	}
 
-	issues, ok := parsed["issues"].([]interface{})
+	issues, ok := parsed["issues"].([]any)
 	if !ok || len(issues) != 1 {
 		t.Fatalf("issues missing or wrong size: %#v", parsed["issues"])
 	}
-	issue, ok := issues[0].(map[string]interface{})
+	issue, ok := issues[0].(map[string]any)
 	if !ok {
 		t.Fatalf("issue entry has wrong type: %#v", issues[0])
 	}
@@ -85,7 +85,7 @@ func TestGenerateProducesValidJSON(t *testing.T) {
 		t.Fatalf("Generate error: %v", err)
 	}
 
-	var report map[string]interface{}
+	var report map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestGenerateProducesValidJSON(t *testing.T) {
 	if report["extraction"] == nil {
 		t.Error("missing 'extraction' field in JSON report")
 	}
-	generator, ok := report["generator"].(map[string]interface{})
+	generator, ok := report["generator"].(map[string]any)
 	if !ok {
 		t.Fatal("missing or invalid 'generator' field in JSON report")
 	}
@@ -121,7 +121,7 @@ func TestGenerateContainsTiming(t *testing.T) {
 		t.Fatalf("Generate error: %v", err)
 	}
 
-	var report map[string]interface{}
+	var report map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}

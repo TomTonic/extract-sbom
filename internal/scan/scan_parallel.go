@@ -116,10 +116,8 @@ func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, resu
 	var wg sync.WaitGroup
 	progressTracker := newScanProgressTracker(label)
 
-	for worker := 0; worker < numWorkers; worker++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numWorkers {
+		wg.Go(func() {
 			for {
 				select {
 				case <-ctx.Done():
@@ -172,7 +170,7 @@ func parallelScanIndices(ctx context.Context, root *extract.ExtractionNode, resu
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	for ordinal, idx := range indices {

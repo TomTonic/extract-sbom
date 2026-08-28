@@ -38,7 +38,7 @@ func captureSevenZipVersion(binary string) {
 		if err != nil {
 			return
 		}
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -63,8 +63,8 @@ func captureUnshieldVersion() {
 		}
 		s := strings.TrimSpace(string(out))
 		// "Unshield version 1.6.2. MIT License..." — keep through the version number.
-		if idx := strings.Index(s, ". "); idx != -1 {
-			unshieldVersionValue = strings.TrimSpace(s[:idx])
+		if before, _, ok := strings.Cut(s, ". "); ok {
+			unshieldVersionValue = strings.TrimSpace(before)
 		} else {
 			unshieldVersionValue = s
 		}
@@ -82,7 +82,7 @@ func captureUnsquashfsVersion() {
 		if err != nil && len(out) == 0 {
 			return
 		}
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
@@ -395,7 +395,7 @@ func execLookPath(file string) (string, error) {
 // lookPathImpl performs a minimal PATH search without shelling out.
 func lookPathImpl(file string) (string, error) {
 	path := os.Getenv("PATH")
-	for _, dir := range strings.Split(path, string(os.PathListSeparator)) {
+	for dir := range strings.SplitSeq(path, string(os.PathListSeparator)) {
 		full := filepath.Join(dir, file)
 		if info, err := os.Stat(full); err == nil && info.Mode().IsRegular() && (info.Mode()&0o111) != 0 {
 			return full, nil

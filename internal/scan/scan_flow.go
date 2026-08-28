@@ -25,10 +25,7 @@ func ScanAll(ctx context.Context, root *extract.ExtractionNode, cfg config.Confi
 		return results, nil
 	}
 
-	numWorkers := cfg.ParallelScanners
-	if numWorkers < 1 {
-		numWorkers = 1
-	}
+	numWorkers := max(cfg.ParallelScanners, 1)
 
 	extractedIndices, nativeIndices := partitionScanTargets(root, results)
 	cfg.EmitProgress(

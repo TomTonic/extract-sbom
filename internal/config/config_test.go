@@ -19,8 +19,8 @@ func TestDefaultLimitsMatchDesignSpec(t *testing.T) {
 
 	tests := []struct {
 		name string
-		got  interface{}
-		want interface{}
+		got  any
+		want any
 	}{
 		{"MaxDepth is 6", l.MaxDepth, 6},
 		{"MaxFiles is 200000", l.MaxFiles, 200000},

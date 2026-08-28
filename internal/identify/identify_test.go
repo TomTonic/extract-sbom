@@ -218,7 +218,6 @@ func TestIdentifyOLEDocumentExtensionsReturnUnknown(t *testing.T) {
 	}
 
 	for _, ext := range docExts {
-		ext := ext
 		t.Run(ext, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()

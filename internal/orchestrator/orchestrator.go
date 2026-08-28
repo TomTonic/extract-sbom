@@ -260,14 +260,14 @@ func Run(ctx context.Context, cfg config.Config) Result {
 
 	buildReportData := func() report.ReportData {
 		processingIssues := append([]report.ProcessingIssue(nil), issues...)
-		rd := report.ReportData{}
-		rd.Input = inputSummary
-		rd.Generator = generatorInfo
-		rd.Config = cfg
-		rd.Tree = tree
-		rd.Scans = scans
-		rd.Vulnerabilities = vulnResult
-		rd.PolicyDecisions = policyEngine.Decisions()
+		rd := report.ReportData{
+			Input:           inputSummary,
+			Generator:       generatorInfo,
+			Config:          cfg,
+			Tree:            tree,
+			Scans:           scans,
+			Vulnerabilities: vulnResult,
+			PolicyDecisions: policyEngine.Decisions()}
 		rd.SandboxInfo.UnsafeOvr = cfg.Unsafe
 		rd.SandboxInfo.Name = sandboxName
 		rd.SandboxInfo.Available = sandboxAvailable

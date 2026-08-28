@@ -83,22 +83,13 @@ func TestVendorSuiteDeterminism(t *testing.T) {
 	if string(j1) != string(j2) {
 		// Find the first difference for debugging.
 		s1, s2 := string(j1), string(j2)
-		minLen := len(s1)
-		if len(s2) < minLen {
-			minLen = len(s2)
-		}
+		minLen := min(len(s2), len(s1))
 		for i := 0; i < minLen; i++ {
 			if s1[i] == s2[i] {
 				continue
 			}
-			start := i - 80
-			if start < 0 {
-				start = 0
-			}
-			end := i + 80
-			if end > minLen {
-				end = minLen
-			}
+			start := max(i-80, 0)
+			end := min(i+80, minLen)
 			t.Errorf("first diff at byte %d:\n  run1: ...%s...\n  run2: ...%s...", i, s1[start:end], s2[start:end])
 			break
 		}

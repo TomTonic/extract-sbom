@@ -111,11 +111,11 @@ func writeSectionHeading(w io.Writer, title, anchor string) {
 
 func writeTableOfContents(w io.Writer, sections []reportSection) {
 	for _, section := range sections {
-		indent := ""
+		var indent strings.Builder
 		for i := 0; i < section.level; i++ {
-			indent += "  "
+			indent.WriteString("  ")
 		}
-		fmt.Fprintf(w, "%s- [%s](#%s)\n", indent, section.title, section.anchor)
+		fmt.Fprintf(w, "%s- [%s](#%s)\n", indent.String(), section.title, section.anchor)
 	}
 }
 

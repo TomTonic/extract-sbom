@@ -220,7 +220,7 @@ func TestRunExitCodeOnHardSecurityIsNonZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := zip.NewWriter(f)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		fw, wErr := w.Create(fmt.Sprintf("file%d.txt", i))
 		if wErr != nil {
 			t.Fatal(wErr)
@@ -289,7 +289,7 @@ func TestRunResourceLimitPartialModeExitsPartial(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := zip.NewWriter(f)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		fw, wErr := w.Create(filepath.Join("dir", "file"+string(rune('a'+i))+".txt"))
 		if wErr != nil {
 			t.Fatal(wErr)
@@ -331,7 +331,7 @@ func TestRunResourceLimitStrictModeExitsPartial(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := zip.NewWriter(f)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		fw, wErr := w.Create("f" + string(rune('a'+i)) + ".txt")
 		if wErr != nil {
 			t.Fatal(wErr)
@@ -452,7 +452,7 @@ func TestRunPartialPolicyReportExplainsDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := zip.NewWriter(f)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		fw, wErr := w.Create(filepath.Join("data", "f"+string(rune('a'+i))+".txt"))
 		if wErr != nil {
 			t.Fatal(wErr)
