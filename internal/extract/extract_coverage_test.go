@@ -133,7 +133,7 @@ func TestExtractRecursiveTimeoutSetsStatus(t *testing.T) {
 
 	// Create a ZIP large enough that extraction might take time.
 	entries := make(map[string][]byte)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		entries[fmt.Sprintf("file%d.txt", i)] = []byte("content")
 	}
 	zipPath := createTestZIP(t, dir, "delivery.zip", entries)

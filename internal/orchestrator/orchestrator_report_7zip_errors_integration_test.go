@@ -263,7 +263,7 @@ func runHumanReportForInput(t *testing.T, inputPath string, tweak func(*config.C
 
 func findExtractionProcessingRow(report string, location string) (extractionProcessingRow, bool) {
 	prefix := "| extraction | " + location + " |"
-	for _, line := range strings.Split(report, "\n") {
+	for line := range strings.SplitSeq(report, "\n") {
 		if !strings.HasPrefix(line, prefix) {
 			continue
 		}

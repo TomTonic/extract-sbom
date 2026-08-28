@@ -205,7 +205,7 @@ func parseMSIStringPool(poolReader, dataReader io.Reader, maxStreamSize int64) (
 	result := make([]string, 0, numStrings)
 	offset := 0
 
-	for i := 0; i < numStrings; i++ {
+	for i := range numStrings {
 		if i*4+3 >= len(poolData) {
 			break
 		}
@@ -257,7 +257,7 @@ func parseMSIPropertyTable(tableReader io.Reader, stringPool []string, maxStream
 	numRows := len(data) / rowSize
 	colBytes := numRows * colWidth // bytes occupied by one column
 
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		nameOff := i * colWidth
 		valueOff := colBytes + i*colWidth
 

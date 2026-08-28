@@ -352,10 +352,7 @@ func DefaultConfig() Config {
 // defaultParallelScanners chooses a bounded worker default derived from
 // GOMAXPROCS so scanning remains parallel without oversubscribing hosts.
 func defaultParallelScanners() int {
-	workers := runtime.GOMAXPROCS(0)
-	if workers < 1 {
-		workers = 1
-	}
+	workers := max(runtime.GOMAXPROCS(0), 1)
 	if workers > 16 {
 		workers = 16
 	}
@@ -363,7 +360,7 @@ func defaultParallelScanners() int {
 }
 
 // EmitProgress sends a progress update when the configured verbosity allows it.
-func (c Config) EmitProgress(level ProgressLevel, format string, args ...interface{}) {
+func (c Config) EmitProgress(level ProgressLevel, format string, args ...any) {
 	if c.ProgressFn == nil {
 		return
 	}

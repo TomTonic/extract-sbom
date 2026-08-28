@@ -13,10 +13,7 @@ func joinPathExamples(paths []string) string {
 	if len(paths) == 0 {
 		return "-"
 	}
-	n := len(paths)
-	if n > maxProseExamples {
-		n = maxProseExamples
-	}
+	n := min(len(paths), maxProseExamples)
 	quoted := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		quoted = append(quoted, "`"+paths[i]+"`")

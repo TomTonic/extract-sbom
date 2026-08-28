@@ -66,8 +66,8 @@ func summarizeToolError(err error) string {
 		// Strip the sandbox stderr-prefix FIRST so that section headers
 		// that appear on the first stderr line (e.g. "stderr: ERRORS:") are
 		// still recognised by the switch below.
-		if strings.HasPrefix(line, "stderr:") {
-			line = strings.TrimSpace(strings.TrimPrefix(line, "stderr:"))
+		if after, ok := strings.CutPrefix(line, "stderr:"); ok {
+			line = strings.TrimSpace(after)
 			if line == "" {
 				continue
 			}

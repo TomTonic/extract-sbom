@@ -53,7 +53,6 @@ func TestSummaryProseHasNoFormatPlaceholders(t *testing.T) {
 	t.Parallel()
 
 	for _, lang := range []string{"en", "de"} {
-		lang := lang
 		t.Run(lang, func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer

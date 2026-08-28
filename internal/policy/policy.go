@@ -181,21 +181,20 @@ func (e *Engine) HasSkip() bool {
 // isHardSecurity checks if an error is a hard security violation.
 // Uses errors.As to correctly handle wrapped errors (fmt.Errorf %w).
 func isHardSecurity(err error) bool {
-	var target *safeguard.HardSecurityError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[*safeguard.HardSecurityError](err)
+	return ok
 }
 
 // isResourceLimit checks if an error is a resource limit violation.
 // Uses errors.As to correctly handle wrapped errors (fmt.Errorf %w).
 func isResourceLimit(err error) bool {
-	var target *safeguard.ResourceLimitError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[*safeguard.ResourceLimitError](err)
+	return ok
 }
 
 // extractLimitName extracts the limit name from a ResourceLimitError.
 func extractLimitName(err error) string {
-	var rle *safeguard.ResourceLimitError
-	if errors.As(err, &rle) {
+	if rle, ok := errors.AsType[*safeguard.ResourceLimitError](err); ok {
 		return rle.Limit
 	}
 	return "unknown"

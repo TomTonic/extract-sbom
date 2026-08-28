@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"slices"
+
 	"github.com/TomTonic/extract-sbom/internal/extract"
 	"github.com/TomTonic/extract-sbom/internal/scan"
 )
@@ -14,12 +16,7 @@ func treeHasHardSecurity(node *extract.ExtractionNode) bool {
 	if node.Status == extract.StatusSecurityBlocked {
 		return true
 	}
-	for _, child := range node.Children {
-		if treeHasHardSecurity(child) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(node.Children, treeHasHardSecurity)
 }
 
 // treeHasIncomplete reports whether extraction contains failed, skipped, or
@@ -32,12 +29,7 @@ func treeHasIncomplete(node *extract.ExtractionNode) bool {
 	case extract.StatusFailed, extract.StatusSkipped, extract.StatusToolMissing:
 		return true
 	}
-	for _, child := range node.Children {
-		if treeHasIncomplete(child) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(node.Children, treeHasIncomplete)
 }
 
 // hasScanFailures reports whether any scan task returned an execution error.

@@ -1,6 +1,7 @@
 package json
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
@@ -124,9 +125,7 @@ func buildRootComponent(data ReportData) *BOMRootComponentV2 {
 	}
 	if hasProps {
 		rc.ConfigProperties = make(map[string]string, len(data.Config.RootMetadata.Properties))
-		for k, v := range data.Config.RootMetadata.Properties {
-			rc.ConfigProperties[k] = v
-		}
+		maps.Copy(rc.ConfigProperties, data.Config.RootMetadata.Properties)
 	}
 	return rc
 }

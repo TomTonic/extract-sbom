@@ -25,17 +25,17 @@ func buildNormalization(groups reportjson.SuppressionGroupsV2, t i18npkg.Bundle)
 				{t.SuppressionReasonPURLDuplicate, fmt.Sprintf("%d", len(groups.PURLDups)), t.SuppressionDescriptionPURLDuplicate},
 			},
 		},
-	}
-	s.Groups = []suppressionGroup{
-		buildSuppressionGroup(t.SuppressionReasonFSArtifact, anchorSuppressionFS, groups.FSArtifacts, t,
-			i18npkg.RenderInlineHTML(t.SuppressionOperationalFS), i18npkg.RenderInlineHTML(t.SuppressionOperationalFSFollowUp)),
-		buildSuppressionGroup(t.SuppressionReasonLowValueFile, anchorSuppressionLowValue, groups.LowValue, t,
-			i18npkg.RenderInlineHTML(t.SuppressionOperationalLowValue)),
-		buildSuppressionGroup(t.SuppressionReasonWeakDuplicate, anchorSuppressionWeakDups, groups.WeakDups, t,
-			i18npkg.RenderInlineHTML(t.SuppressionOperationalWeakDup)),
-		buildSuppressionGroup(t.SuppressionReasonPURLDuplicate, anchorSuppressionPURLDups, groups.PURLDups, t,
-			i18npkg.RenderInlineHTML(t.SuppressionOperationalPURLDup)),
-	}
+
+		Groups: []suppressionGroup{
+			buildSuppressionGroup(t.SuppressionReasonFSArtifact, anchorSuppressionFS, groups.FSArtifacts, t,
+				i18npkg.RenderInlineHTML(t.SuppressionOperationalFS), i18npkg.RenderInlineHTML(t.SuppressionOperationalFSFollowUp)),
+			buildSuppressionGroup(t.SuppressionReasonLowValueFile, anchorSuppressionLowValue, groups.LowValue, t,
+				i18npkg.RenderInlineHTML(t.SuppressionOperationalLowValue)),
+			buildSuppressionGroup(t.SuppressionReasonWeakDuplicate, anchorSuppressionWeakDups, groups.WeakDups, t,
+				i18npkg.RenderInlineHTML(t.SuppressionOperationalWeakDup)),
+			buildSuppressionGroup(t.SuppressionReasonPURLDuplicate, anchorSuppressionPURLDups, groups.PURLDups, t,
+				i18npkg.RenderInlineHTML(t.SuppressionOperationalPURLDup)),
+		}}
 	return s
 }
 

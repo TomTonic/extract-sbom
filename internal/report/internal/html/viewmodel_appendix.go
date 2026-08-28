@@ -120,10 +120,7 @@ func buildExtraction(rows []reportjson.ExtractionLogRowV2, t i18npkg.Bundle) ext
 	}
 	for i := range rows {
 		row := &rows[i]
-		depth := row.Depth
-		if depth > 5 {
-			depth = 5
-		}
+		depth := min(row.Depth, 5)
 		detail := row.Detail
 		if meta := formatExtractionArchiveMeta(row.ArchiveMeta); meta != "" {
 			if detail != "" {
@@ -133,8 +130,8 @@ func buildExtraction(rows []reportjson.ExtractionLogRowV2, t i18npkg.Bundle) ext
 			}
 		}
 		shortPath := row.Path
-		if idx := strings.LastIndex(row.Path, "/"); idx >= 0 {
-			shortPath = row.Path[idx+1:]
+		if _, after, found := strings.CutLast(row.Path, "/"); found {
+			shortPath = after
 		}
 		s.Rows = append(s.Rows, extractionRow{
 			Depth:     depth,

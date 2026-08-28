@@ -22,7 +22,6 @@ func TestRenderInlineHTML(t *testing.T) {
 		{"escape ampersand", "AT&T & co", "AT&amp;T &amp; co"},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := string(RenderInlineHTML(tc.in))
@@ -63,7 +62,6 @@ func TestRenderInlineHTMLRejectsDangerousSchemes(t *testing.T) {
 		{"fragment", "[f](#frag)", `<a href="#frag">f</a>`},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if got := string(RenderInlineHTML(tc.in)); got != tc.want {
