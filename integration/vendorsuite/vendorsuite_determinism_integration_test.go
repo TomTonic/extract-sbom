@@ -84,7 +84,7 @@ func TestVendorSuiteDeterminism(t *testing.T) {
 		// Find the first difference for debugging.
 		s1, s2 := string(j1), string(j2)
 		minLen := min(len(s2), len(s1))
-		for i := 0; i < minLen; i++ {
+		for i := range minLen {
 			if s1[i] == s2[i] {
 				continue
 			}

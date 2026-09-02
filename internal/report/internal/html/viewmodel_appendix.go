@@ -3,6 +3,7 @@ package html
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	i18npkg "github.com/TomTonic/extract-sbom/internal/report/internal/i18n"
@@ -96,7 +97,7 @@ func buildScanLog(proj reportjson.ProjectionsV2, t i18npkg.Bundle) scanLogSectio
 		case row.Error != "":
 			sr.Error = row.Error
 		case row.ComponentCount > 0:
-			sr.Count = fmt.Sprintf("%d", row.ComponentCount)
+			sr.Count = strconv.Itoa(row.ComponentCount)
 			sr.Evidence = row.EvidencePaths
 		default:
 			sr.Count = t.NoComponents

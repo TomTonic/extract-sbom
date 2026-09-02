@@ -15,7 +15,7 @@ import (
 // by the identify package.
 func FuzzIdentify(f *testing.F) {
 	// Seed with valid magic byte prefixes for each handled format.
-	seeds := [][]byte{
+	seeds := [][]byte{ //nolint:prealloc // one-time test seed setup; preallocating adds noise for no measurable benefit
 		{'P', 'K', 0x03, 0x04},                           // ZIP
 		{'P', 'K', 0x03, 0x04, 0, 0, 0, 0},               // ZIP (JAR-like)
 		{0x1F, 0x8B},                                     // Gzip

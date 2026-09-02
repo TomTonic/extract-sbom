@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 )
 
 // Default values mirrored from config.DefaultConfig() / config.DefaultLimits().
@@ -46,7 +47,7 @@ func configMarkDefault(val, def string) string {
 }
 
 func configMarkDefaultBool(val, def bool) string {
-	s := fmt.Sprintf("%v", val)
+	s := strconv.FormatBool(val)
 	if val == def {
 		return s + " (default)"
 	}
@@ -57,7 +58,7 @@ func configMarkDefaultInt(val, def int) string {
 	if val == def {
 		return fmt.Sprintf("%d (default)", val)
 	}
-	return fmt.Sprintf("%d", val)
+	return strconv.Itoa(val)
 }
 
 func configMarkDefaultBytes(val, def int64, unit string) string {

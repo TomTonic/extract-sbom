@@ -5,6 +5,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -352,10 +353,7 @@ func DefaultConfig() Config {
 // defaultParallelScanners chooses a bounded worker default derived from
 // GOMAXPROCS so scanning remains parallel without oversubscribing hosts.
 func defaultParallelScanners() int {
-	workers := max(runtime.GOMAXPROCS(0), 1)
-	if workers > 16 {
-		workers = 16
-	}
+	workers := min(max(runtime.GOMAXPROCS(0), 1), 16)
 	return workers
 }
 
@@ -376,7 +374,7 @@ func (c Config) EmitProgress(level ProgressLevel, format string, args ...any) {
 // Returns a descriptive error if any check fails.
 func (c *Config) Validate() error {
 	if c.InputPath == "" {
-		return fmt.Errorf("input path is required")
+		return errors.New("input path is required")
 	}
 
 	info, err := os.Stat(c.InputPath)
@@ -388,7 +386,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.OutputDir == "" {
-		return fmt.Errorf("output directory is required")
+		return errors.New("output directory is required")
 	}
 
 	outInfo, err := os.Stat(c.OutputDir)
@@ -403,7 +401,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.WorkDir == "" {
-		return fmt.Errorf("work directory is required")
+		return errors.New("work directory is required")
 	}
 
 	workInfo, err := os.Stat(c.WorkDir)
@@ -432,11 +430,11 @@ func (c *Config) Validate() error {
 	}
 
 	if c.MarkdownRenderEngine == "template-document" && strings.TrimSpace(c.MarkdownTemplateFile) == "" {
-		return fmt.Errorf("markdown template file is required when markdown render engine is template-document")
+		return errors.New("markdown template file is required when markdown render engine is template-document")
 	}
 	if strings.TrimSpace(c.MarkdownTemplateFile) != "" {
 		if c.MarkdownRenderEngine == "" || c.MarkdownRenderEngine == "writer" {
-			return fmt.Errorf("markdown template file requires markdown render engine template-wrapper or template-document")
+			return errors.New("markdown template file requires markdown render engine template-wrapper or template-document")
 		}
 	}
 

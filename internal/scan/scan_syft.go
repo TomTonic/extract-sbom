@@ -117,7 +117,7 @@ func convertSyftSBOMToCycloneDX(syftBOM *syftsbom.SBOM) (*cdx.BOM, error) {
 	if err := decoder.Decode(bom); err != nil {
 		bom = new(cdx.BOM)
 		if jerr := json.Unmarshal(buf.Bytes(), bom); jerr != nil {
-			return nil, fmt.Errorf("decode CycloneDX BOM: %w (json fallback: %v)", err, jerr)
+			return nil, fmt.Errorf("decode CycloneDX BOM: %w (json fallback: %w)", err, jerr)
 		}
 	}
 

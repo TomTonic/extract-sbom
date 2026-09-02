@@ -6,6 +6,7 @@ package identify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -159,7 +160,7 @@ func Identify(_ context.Context, path string) (FormatInfo, error) {
 	// Read first 262 bytes (enough for all magic byte checks).
 	header := make([]byte, 262)
 	n, err := io.ReadAtLeast(f, header, 8)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return FormatInfo{}, fmt.Errorf("identify: read header %s: %w", path, err)
 	}
 	header = header[:n]

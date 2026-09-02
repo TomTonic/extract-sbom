@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
@@ -55,7 +56,7 @@ func writeProcessingIssues(w io.Writer, proj reportjson.ProjectionsV2, t transla
 		archiveType, archiveMethod, encrypted, physicalSize := extractionArchiveCols(row)
 		detected := ""
 		if row.Depth > 0 {
-			detected = fmt.Sprintf("%d", row.Depth)
+			detected = strconv.Itoa(row.Depth)
 		}
 		fmt.Fprintf(w, "| extraction | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			escapeMarkdownCell(row.Path),

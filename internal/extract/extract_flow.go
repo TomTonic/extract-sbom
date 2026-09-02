@@ -2,6 +2,7 @@ package extract
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -160,12 +161,14 @@ func extractRecursive(ctx context.Context, node *ExtractionNode, filePath string
 				Path:    deliveryPath,
 			}
 		}
-		if _, ok := err.(*safeguard.HardSecurityError); ok {
+		hardSecurityError := &safeguard.HardSecurityError{}
+		if errors.As(err, &hardSecurityError) {
 			node.Status = StatusSecurityBlocked
 			node.StatusDetail = err.Error()
 			return err
 		}
-		if _, ok := err.(*safeguard.ResourceLimitError); ok {
+		resourceLimitError := &safeguard.ResourceLimitError{}
+		if errors.As(err, &resourceLimitError) {
 			node.Status = StatusFailed
 			node.StatusDetail = err.Error()
 			return err
@@ -217,7 +220,8 @@ func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, par
 		child := &ExtractionNode{Path: childDeliveryPath, OriginalPath: childPath}
 
 		if err := extractRecursive(ctx, child, childPath, childDeliveryPath, depth, cfg, sb); err != nil {
-			if _, ok := err.(*safeguard.HardSecurityError); ok {
+			hardSecurityError := &safeguard.HardSecurityError{}
+			if errors.As(err, &hardSecurityError) {
 				child.Status = StatusSecurityBlocked
 				child.StatusDetail = err.Error()
 				if cfg.PolicyMode == config.PolicyPartial {
@@ -227,7 +231,8 @@ func recurseIntoDir(ctx context.Context, parent *ExtractionNode, dir string, par
 				parent.Children = append(parent.Children, child)
 				return err
 			}
-			if _, ok := err.(*safeguard.ResourceLimitError); ok {
+			resourceLimitError := &safeguard.ResourceLimitError{}
+			if errors.As(err, &resourceLimitError) {
 				if cfg.PolicyMode == config.PolicyPartial {
 					parent.Children = append(parent.Children, child)
 					continue
@@ -301,7 +306,7 @@ func isSkippedExtension(filePath string, skipList []string) bool {
 func flattenCompressedTAR(ctx context.Context, node *ExtractionNode, sb sandbox.Sandbox, cfg config.Config) error {
 	entries, err := os.ReadDir(node.ExtractedDir)
 	if err != nil || len(entries) != 1 || entries[0].IsDir() {
-		return nil
+		return nil //nolint:nilerr // best-effort: outer extraction result is kept as-is on failure
 	}
 	name := entries[0].Name()
 	if !strings.HasSuffix(strings.ToLower(name), ".tar") {

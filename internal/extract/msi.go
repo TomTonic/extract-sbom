@@ -7,6 +7,7 @@ package extract
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -94,13 +95,13 @@ func findMSIStreams(doc *mscfb.Reader) (stringPool io.Reader, stringData io.Read
 	}
 
 	if spoolEntry == nil {
-		return nil, nil, nil, fmt.Errorf("msi: _StringPool stream not found")
+		return nil, nil, nil, errors.New("msi: _StringPool stream not found")
 	}
 	if sdataEntry == nil {
-		return nil, nil, nil, fmt.Errorf("msi: _StringData stream not found")
+		return nil, nil, nil, errors.New("msi: _StringData stream not found")
 	}
 	if propEntry == nil {
-		return nil, nil, nil, fmt.Errorf("msi: Property table stream not found")
+		return nil, nil, nil, errors.New("msi: Property table stream not found")
 	}
 
 	return spoolEntry, sdataEntry, propEntry, nil

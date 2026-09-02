@@ -3,6 +3,7 @@ package extract
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -190,7 +191,8 @@ func TestExtractZIPFileCountLimitPropagates(t *testing.T) {
 	if err == nil {
 		t.Error("expected ResourceLimitError to propagate from extraction")
 	}
-	if _, ok := err.(*safeguard.ResourceLimitError); !ok {
+	resourceLimitError := &safeguard.ResourceLimitError{}
+	if !errors.As(err, &resourceLimitError) {
 		t.Errorf("expected *safeguard.ResourceLimitError, got %T: %v", err, err)
 	}
 	if tree.Status != StatusFailed {

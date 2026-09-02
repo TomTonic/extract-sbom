@@ -5,6 +5,7 @@
 package safeguard
 
 import (
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -43,7 +44,8 @@ func TestValidatePathRejectsPathTraversal(t *testing.T) {
 				t.Errorf("ValidatePath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
 			}
 			if tt.wantErr && err != nil {
-				if _, ok := err.(*HardSecurityError); !ok {
+				hardSecurityError := &HardSecurityError{}
+				if !errors.As(err, &hardSecurityError) {
 					t.Errorf("expected HardSecurityError, got %T", err)
 				}
 			}
@@ -70,7 +72,8 @@ func TestValidateEntryRejectsSymlinks(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for symlink")
 	}
-	if _, ok := err.(*HardSecurityError); !ok {
+	hardSecurityError := &HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
 		t.Errorf("expected HardSecurityError, got %T", err)
 	}
 }
@@ -93,7 +96,8 @@ func TestValidateEntryRejectsSpecialFiles(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for special file")
 	}
-	if _, ok := err.(*HardSecurityError); !ok {
+	hardSecurityError := &HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
 		t.Errorf("expected HardSecurityError, got %T", err)
 	}
 }
@@ -147,7 +151,8 @@ func TestValidateEntryRejectsOversizedEntry(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for oversized entry")
 	}
-	if _, ok := err.(*ResourceLimitError); !ok {
+	resourceLimitError := &ResourceLimitError{}
+	if !errors.As(err, &resourceLimitError) {
 		t.Errorf("expected ResourceLimitError, got %T", err)
 	}
 }
@@ -173,7 +178,8 @@ func TestValidateEntryRejectsHighCompressionRatio(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for high compression ratio")
 	}
-	if _, ok := err.(*ResourceLimitError); !ok {
+	resourceLimitError := &ResourceLimitError{}
+	if !errors.As(err, &resourceLimitError) {
 		t.Errorf("expected ResourceLimitError, got %T", err)
 	}
 }
@@ -198,7 +204,8 @@ func TestValidateEntryRejectsExcessiveFileCount(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for excessive file count")
 	}
-	if _, ok := err.(*ResourceLimitError); !ok {
+	resourceLimitError := &ResourceLimitError{}
+	if !errors.As(err, &resourceLimitError) {
 		t.Errorf("expected ResourceLimitError, got %T", err)
 	}
 }
@@ -223,7 +230,8 @@ func TestValidateEntryRejectsExcessiveTotalSize(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for excessive total size")
 	}
-	if _, ok := err.(*ResourceLimitError); !ok {
+	resourceLimitError := &ResourceLimitError{}
+	if !errors.As(err, &resourceLimitError) {
 		t.Errorf("expected ResourceLimitError, got %T", err)
 	}
 }
@@ -247,7 +255,8 @@ func TestValidateEntryRejectsOverflowingFileCount(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for overflowing file count")
 	}
-	limitErr, ok := err.(*ResourceLimitError)
+	limitErr := &ResourceLimitError{}
+	ok := errors.As(err, &limitErr)
 	if !ok {
 		t.Fatalf("expected ResourceLimitError, got %T", err)
 	}
@@ -275,7 +284,8 @@ func TestValidateEntryRejectsOverflowingTotalSize(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for overflowing total size")
 	}
-	limitErr, ok := err.(*ResourceLimitError)
+	limitErr := &ResourceLimitError{}
+	ok := errors.As(err, &limitErr)
 	if !ok {
 		t.Fatalf("expected ResourceLimitError, got %T", err)
 	}
@@ -377,7 +387,8 @@ func TestValidateEntryRejectsNegativeUncompressedSize(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative uncompressed size")
 	}
-	if _, ok := err.(*HardSecurityError); !ok {
+	hardSecurityError := &HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
 		t.Errorf("expected HardSecurityError, got %T: %v", err, err)
 	}
 }
@@ -402,7 +413,8 @@ func TestValidateEntryRejectsNegativeCompressedSize(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for negative compressed size")
 	}
-	if _, ok := err.(*HardSecurityError); !ok {
+	hardSecurityError := &HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
 		t.Errorf("expected HardSecurityError, got %T: %v", err, err)
 	}
 }
@@ -459,7 +471,8 @@ func TestValidateEntryRejectsNearBoundaryCompressionRatio(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for near-boundary compression ratio (10.9 > MaxRatio 10)")
 	}
-	if rle, ok := err.(*ResourceLimitError); !ok {
+	rle := &ResourceLimitError{}
+	if !errors.As(err, &rle) {
 		t.Errorf("expected ResourceLimitError, got %T: %v", err, err)
 	} else if rle.Limit != "max-ratio" {
 		t.Errorf("Limit = %q, want %q", rle.Limit, "max-ratio")

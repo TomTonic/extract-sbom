@@ -165,14 +165,14 @@ func toRawScanV2(scanResult scan.ScanResult) rawScanV2 {
 
 // runIDFromInput creates a deterministic run identifier from immutable run inputs.
 func runIDFromInput(data ReportData) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%d|%s|%s|%s|%s",
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s|%d|%s|%s|%s|%s",
 		data.Input.Filename,
 		data.Input.Size,
 		data.Input.SHA256,
 		data.Input.SHA512,
 		data.StartTime.UTC().Format(time.RFC3339Nano),
 		data.EndTime.UTC().Format(time.RFC3339Nano),
-	)))
+	))
 	return "run:" + hex.EncodeToString(sum[:12])
 }
 
