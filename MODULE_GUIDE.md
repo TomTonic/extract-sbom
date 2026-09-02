@@ -35,7 +35,7 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 | **unshield** | Extract InstallShield CAB files (`data1.cab` + `data1.hdr`) | InstallShield uses a proprietary cabinet format incompatible with Microsoft CABs. `unshield` (MIT, actively maintained, v1.6.2) is the only tool capable of extracting these. Available via Linux package managers and Homebrew. |
 | **unsquashfs** | Extract Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`) | Preferred extractor for Squashfs; 7-Zip is the fallback when `unsquashfs` is not installed. Part of the `squashfs-tools` package on Debian/Ubuntu and Homebrew. |
 | **Grype** (`grype`) | Optional vulnerability scan of the generated SBOM (`--grype`) | Grype provides stable JSON output with per-match package identity and vulnerability source metadata. Using the generated SBOM as input preserves deterministic component identities and avoids rescanning the extracted filesystem. |
-| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`, `unsquashfs`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, IPC, UTS, and user namespace isolation without requiring root or Docker (network namespace is intentionally shared with the host, see §3.5 design decisions). |
+| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`, `unsquashfs`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
 
 ### 1.3 Tool Availability Strategy
 
@@ -97,7 +97,7 @@ These mitigations apply to all extraction paths.
 
 | Path | Format coverage | Safeguard integration |
 |---|---|---|
-| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs (fallback) | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind; network namespace shared with host). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
+| 7-Zip (external, sandboxed) | ZIP, TAR (+all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs (fallback) | Extraction runs under Bubblewrap namespace isolation (read-only input bind, write-only output bind, no network). After extraction completes, `safeguard` walks the output directory and validates all resulting paths and file types. |
 | unshield (external, sandboxed) | InstallShield CAB only | Same Bubblewrap isolation + post-extraction safeguard walk. |
 | unsquashfs (external, sandboxed) | Squashfs / Snap images (preferred) | Same Bubblewrap isolation + post-extraction safeguard walk. |
 
@@ -426,7 +426,7 @@ bwrap \
   --tmpfs /tmp \
   --proc /proc \
   --dev /dev \
-  --unshare-user --unshare-ipc --unshare-pid --unshare-uts --unshare-cgroup \
+  --unshare-all \
   --new-session \
   --die-with-parent \
   -- 7zz x /input/<filename> -o/output
@@ -434,15 +434,19 @@ bwrap \
 
 **Design decisions:**
 
-- Unshares mount, PID, IPC, UTS, and user namespaces. The network namespace
-  is deliberately *not* unshared (no `--unshare-net`, so no `--unshare-all`):
-  bringing up the sandbox's loopback interface requires a netlink capability
-  that restricted/nested container environments (observed on GitHub Actions'
-  hosted runners) deny outright, which makes bwrap abort before running the
-  tool at all. The extraction tools (7-Zip, unshield, unsquashfs) have no
-  legitimate need for network access, and this only gives up network
-  isolation — filesystem/PID/IPC isolation, the actual defense against
-  zip-slip and path-traversal payloads, is unaffected.
+- `--unshare-all` creates new mount, PID, IPC, UTS, network, and user namespaces.
+- Ubuntu 24.04+ restricts unprivileged user-namespace creation via AppArmor
+  by default (`kernel.apparmor_restrict_unprivileged_userns=1`), which makes
+  bwrap fail outright (`setting up uid map: Permission denied`, or a
+  namespace-specific failure such as the loopback/netlink setup for
+  `--unshare-net`) even though bwrap itself is installed and otherwise
+  usable. This is a CI/container-runner policy, not a property of bwrap or
+  of extract-sbom; the project's own CI (`.github/workflows/tests.yml`)
+  disables that restriction for its test job with
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` before
+  running sandbox tests. A real deployment hitting the same restriction
+  needs the same sysctl (or an AppArmor profile permitting bwrap) for the
+  sandbox to be usable at all.
 - `--die-with-parent` ensures cleanup if the parent (extract-sbom) crashes.
 - `--new-session` mitigates `TIOCSTI` injection.
 - `Resolve()` checks `Available()` on the bwrap sandbox; if unavailable and
