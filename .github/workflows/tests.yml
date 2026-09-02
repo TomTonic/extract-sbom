@@ -25,6 +25,15 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bubblewrap
 
+      - name: Allow unprivileged user namespaces for bwrap
+        # Ubuntu 24.04 restricts unprivileged user-namespace creation via
+        # AppArmor by default (kernel.apparmor_restrict_unprivileged_userns=1),
+        # which makes bwrap fail with "setting up uid map: Permission denied"
+        # (or an equivalent failure later in its namespace setup) even though
+        # bwrap itself is installed and otherwise usable. This is a CI-runner
+        # policy, not a property of the sandboxed tool being tested.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Test with coverage
         run: |
           COVER_PKGS=$(go list ./... | grep -v '^github.com/TomTonic/extract-sbom/integration/releasetest$')
