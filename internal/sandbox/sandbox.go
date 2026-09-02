@@ -134,11 +134,14 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		toolInsideSandbox,
 	}
 
-	// Replace input/output paths in args with sandbox-internal paths.
+	// Replace input/output paths in args with sandbox-internal paths. This
+	// must find the path even when it is not the whole argument — callers
+	// like 7-Zip's "-o<dir>" flag concatenate the path directly onto a flag
+	// with no separator.
 	for _, arg := range args {
 		sandboxArg := arg
-		sandboxArg = replacePrefix(sandboxArg, inputPath, "/input/"+inputName)
-		sandboxArg = replacePrefix(sandboxArg, outputDir, "/output")
+		sandboxArg = replacePathOccurrence(sandboxArg, inputPath, "/input/"+inputName)
+		sandboxArg = replacePathOccurrence(sandboxArg, outputDir, "/output")
 		bwrapArgs = append(bwrapArgs, sandboxArg)
 	}
 
@@ -165,15 +168,23 @@ func isUnderMountedPrefix(dir string) bool {
 	return false
 }
 
-// replacePrefix replaces a path prefix in a string.
-func replacePrefix(s, prefix, replacement string) string {
-	if s == prefix {
-		return replacement
+// replacePathOccurrence replaces the first occurrence of a path anywhere in
+// s — not just when it is the whole string or a leading prefix — with
+// replacement. This is required because some tools (7-Zip's "-o<dir>")
+// concatenate a flag directly onto the path with no separator, so the path
+// does not start at s[0]. The match must still land on a full path segment:
+// what follows it in s must be either the end of the string or a '/', so
+// "/tmp/out" does not falsely match inside "/tmp/out2".
+func replacePathOccurrence(s, path, replacement string) string {
+	idx := strings.Index(s, path)
+	if idx == -1 {
+		return s
 	}
-	if len(s) > len(prefix) && s[:len(prefix)] == prefix && s[len(prefix)] == '/' {
-		return replacement + s[len(prefix):]
+	end := idx + len(path)
+	if end != len(s) && s[end] != '/' {
+		return s
 	}
-	return s
+	return s[:idx] + replacement + s[end:]
 }
 
 // PassthroughSandbox implements Sandbox without any isolation.

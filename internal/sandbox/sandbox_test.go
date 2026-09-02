@@ -213,42 +213,63 @@ func TestDeniedSandboxRunErrorIncludesGuidance(t *testing.T) {
 	}
 }
 
-// TestReplacePrefixExact verifies prefix replacement with exact match.
-func TestReplacePrefixExact(t *testing.T) {
+// TestReplacePathOccurrence verifies path replacement both when the path is
+// the whole argument (or a leading prefix of it) and when it is embedded
+// inside a larger argument with no separator — the exact shape of 7-Zip's
+// "-o<dir>" flag, which is what extract7z passes through Run(). A regression
+// here silently breaks sandboxed extraction: the tool would write into the
+// sandbox's own throwaway /tmp instead of the bind-mounted output directory,
+// exit 0, and leave the real output empty.
+func TestReplacePathOccurrence(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name        string
 		input       string
-		prefix      string
+		path        string
 		replacement string
 		want        string
 	}{
 		{
 			name: "exact match", input: "/path/to/file",
-			prefix: "/path/to/file", replacement: "/new/path", want: "/new/path",
+			path: "/path/to/file", replacement: "/new/path", want: "/new/path",
 		},
 		{
 			name: "prefix with trailing path", input: "/path/to/file/sub/dir",
-			prefix: "/path/to/file", replacement: "/new/path", want: "/new/path/sub/dir",
+			path: "/path/to/file", replacement: "/new/path", want: "/new/path/sub/dir",
 		},
 		{
 			name: "no match", input: "/other/path",
-			prefix: "/path/to/file", replacement: "/new/path", want: "/other/path",
+			path: "/path/to/file", replacement: "/new/path", want: "/other/path",
 		},
 		{
 			name: "empty strings", input: "",
-			prefix: "", replacement: "", want: "",
+			path: "", replacement: "", want: "",
+		},
+		{
+			name:  "path embedded after a flag with no separator (7-Zip -o<dir>)",
+			input: "-o/tmp/extract-sbom-7z-abc123", path: "/tmp/extract-sbom-7z-abc123",
+			replacement: "/output", want: "-o/output",
+		},
+		{
+			name:  "path embedded after a flag, with trailing subpath",
+			input: "-o/tmp/extract-sbom-7z-abc123/nested", path: "/tmp/extract-sbom-7z-abc123",
+			replacement: "/output", want: "-o/output/nested",
+		},
+		{
+			name:  "does not match a longer sibling directory sharing the prefix",
+			input: "-o/tmp/extract-sbom-7z-abc1234", path: "/tmp/extract-sbom-7z-abc123",
+			replacement: "/output", want: "-o/tmp/extract-sbom-7z-abc1234",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := replacePrefix(tt.input, tt.prefix, tt.replacement)
+			got := replacePathOccurrence(tt.input, tt.path, tt.replacement)
 			if got != tt.want {
-				t.Errorf("replacePrefix(%q, %q, %q) = %q, want %q",
-					tt.input, tt.prefix, tt.replacement, got, tt.want)
+				t.Errorf("replacePathOccurrence(%q, %q, %q) = %q, want %q",
+					tt.input, tt.path, tt.replacement, got, tt.want)
 			}
 		})
 	}
