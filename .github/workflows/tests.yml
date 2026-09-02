@@ -20,6 +20,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install bubblewrap for sandbox tests
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bubblewrap
+
       - name: Test with coverage
         run: |
           COVER_PKGS=$(go list ./... | grep -v '^github.com/TomTonic/extract-sbom/integration/releasetest$')
