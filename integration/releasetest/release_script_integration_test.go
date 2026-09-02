@@ -3,6 +3,7 @@ package releasetest
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,7 +148,8 @@ func TestReleaseGrypeRoundtrip(t *testing.T) {
 	cmd.Stderr = &combined
 
 	if err := cmd.Run(); err != nil {
-		exitErr, ok := err.(*exec.ExitError)
+		exitErr := &exec.ExitError{}
+		ok := errors.As(err, &exitErr)
 		if !ok || exitErr.ExitCode() != 1 {
 			t.Fatalf("extract-sbom --grype failed: %v\n%s", err, combined.String())
 		}

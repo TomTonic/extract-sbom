@@ -22,7 +22,7 @@ func TestExtract7zMarksToolMissingWhenUnavailable(t *testing.T) {
 
 	originalLookPath := lookPath
 	lookPath = func(string) (string, error) {
-		return "", fmt.Errorf("missing")
+		return "", errors.New("missing")
 	}
 	t.Cleanup(func() {
 		lookPath = originalLookPath
@@ -147,7 +147,8 @@ func TestExtract7zRejectsUnsafePostExtractionOutput(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected hard security error, got nil")
 	}
-	if _, ok := err.(*safeguard.HardSecurityError); !ok {
+	hardSecurityError := &safeguard.HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
 		t.Fatalf("error = %T, want *safeguard.HardSecurityError", err)
 	}
 	if node.ExtractedDir != "" {
@@ -163,7 +164,7 @@ func TestExtract7zToolMissingRecordsStatusCorrectly(t *testing.T) {
 
 	savedLookPath := lookPath
 	lookPath = func(string) (string, error) {
-		return "", fmt.Errorf("executable not found")
+		return "", errors.New("executable not found")
 	}
 	defer func() { lookPath = savedLookPath }()
 
@@ -203,7 +204,7 @@ func TestExtractInstallShieldToolMissingRecordsStatusCorrectly(t *testing.T) {
 
 	savedLookPath := lookPath
 	lookPath = func(string) (string, error) {
-		return "", fmt.Errorf("executable not found")
+		return "", errors.New("executable not found")
 	}
 	defer func() { lookPath = savedLookPath }()
 

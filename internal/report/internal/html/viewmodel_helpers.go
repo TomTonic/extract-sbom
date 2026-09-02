@@ -15,7 +15,7 @@ func joinPathExamples(paths []string) string {
 	}
 	n := min(len(paths), maxProseExamples)
 	quoted := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		quoted = append(quoted, "`"+paths[i]+"`")
 	}
 	out := strings.Join(quoted, ", ")

@@ -2,6 +2,7 @@ package extract
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func TestIsToolAvailableUsesLookPath(t *testing.T) {
 		if name == "existing-tool" {
 			return "/usr/bin/existing-tool", nil
 		}
-		return "", fmt.Errorf("not found")
+		return "", errors.New("not found")
 	}
 
 	if !IsToolAvailable("existing-tool") {
@@ -89,7 +90,7 @@ func TestExtract7zSandboxRunFailure(t *testing.T) {
 	defer func() { lookPath = saved }()
 
 	sb := &recordingSandbox{run: func(string, []string, string, string) error {
-		return fmt.Errorf("sandbox execution failed")
+		return errors.New("sandbox execution failed")
 	}}
 
 	node := &ExtractionNode{}
@@ -111,7 +112,7 @@ func TestExtractUnshieldSandboxRunFailure(t *testing.T) {
 	defer func() { lookPath = saved }()
 
 	sb := &recordingSandbox{run: func(string, []string, string, string) error {
-		return fmt.Errorf("unshield execution failed")
+		return errors.New("unshield execution failed")
 	}}
 
 	node := &ExtractionNode{}

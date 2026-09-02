@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -84,7 +85,7 @@ func GenerateMarkdownWithOptions(data ReportData, lang string, w io.Writer, opts
 		return templateWrapperMarkdownRenderer{wrapperTemplate: opts.WrapperTemplate}.Render(w, vm)
 	case RenderEngineTemplateDocument:
 		if opts.DocumentTemplate == "" {
-			return fmt.Errorf("report: document template must not be empty")
+			return errors.New("report: document template must not be empty")
 		}
 		model := buildMarkdownTemplateDocumentModel(vm)
 		return executeMarkdownDocumentTemplate(w, model, opts.DocumentTemplate)

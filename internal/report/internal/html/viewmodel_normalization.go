@@ -3,6 +3,7 @@ package html
 import (
 	"fmt"
 	htmltmpl "html/template"
+	"strconv"
 
 	i18npkg "github.com/TomTonic/extract-sbom/internal/report/internal/i18n"
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
@@ -19,10 +20,10 @@ func buildNormalization(groups reportjson.SuppressionGroupsV2, t i18npkg.Bundle)
 		SummaryTable: normalizationSummaryTable{
 			Headers: []string{t.ReasonLabel, t.CountLabel, t.DescriptionLabel},
 			Rows: []normalizationSummaryRow{
-				{t.SuppressionReasonFSArtifact, fmt.Sprintf("%d", len(groups.FSArtifacts)), t.SuppressionDescriptionFSArtifact},
-				{t.SuppressionReasonLowValueFile, fmt.Sprintf("%d", len(groups.LowValue)), t.SuppressionDescriptionLowValueFile},
-				{t.SuppressionReasonWeakDuplicate, fmt.Sprintf("%d", len(groups.WeakDups)), t.SuppressionDescriptionWeakDuplicate},
-				{t.SuppressionReasonPURLDuplicate, fmt.Sprintf("%d", len(groups.PURLDups)), t.SuppressionDescriptionPURLDuplicate},
+				{t.SuppressionReasonFSArtifact, strconv.Itoa(len(groups.FSArtifacts)), t.SuppressionDescriptionFSArtifact},
+				{t.SuppressionReasonLowValueFile, strconv.Itoa(len(groups.LowValue)), t.SuppressionDescriptionLowValueFile},
+				{t.SuppressionReasonWeakDuplicate, strconv.Itoa(len(groups.WeakDups)), t.SuppressionDescriptionWeakDuplicate},
+				{t.SuppressionReasonPURLDuplicate, strconv.Itoa(len(groups.PURLDups)), t.SuppressionDescriptionPURLDuplicate},
 			},
 		},
 

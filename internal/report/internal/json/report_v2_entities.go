@@ -3,6 +3,7 @@ package json
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -99,7 +100,7 @@ func buildComponentEntities(bom *cdx.BOM, out *[]componentEntityV2, index entity
 
 // appendComponentEntity appends one component and updates reverse lookup indexes.
 func appendComponentEntity(component cdx.Component, out *[]componentEntityV2, index entityIndexV2, order int) {
-	id := stableID("comp", component.BOMRef, component.PackageURL, component.Name, component.Version, string(component.Type), fmt.Sprintf("%d", order))
+	id := stableID("comp", component.BOMRef, component.PackageURL, component.Name, component.Version, string(component.Type), strconv.Itoa(order))
 	entity := componentEntityV2{
 		ID:      id,
 		BOMRef:  component.BOMRef,
@@ -170,7 +171,7 @@ func buildScanTaskEntities(scans []scan.ScanResult, index entityIndexV2, out *[]
 		sort.Strings(componentIDs)
 
 		item := scanTaskEntityV2{
-			ID:           stableID("scan", scans[i].NodePath, fmt.Sprintf("%d", i)),
+			ID:           stableID("scan", scans[i].NodePath, strconv.Itoa(i)),
 			NodePath:     scans[i].NodePath,
 			NodeID:       index.nodeByPath[scans[i].NodePath],
 			ComponentIDs: domain.SortedUniqueStrings(componentIDs),
@@ -203,7 +204,7 @@ func buildVulnerabilityEntities(vulns *vulnscan.Result, index entityIndexV2, out
 				vulnID = "unknown"
 			}
 			*out = append(*out, vulnerabilityEntityV2{
-				ID:              stableID("vuln", vulnID, componentID, ref, fmt.Sprintf("%d", i)),
+				ID:              stableID("vuln", vulnID, componentID, ref, strconv.Itoa(i)),
 				VulnerabilityID: vulnID,
 				ComponentID:     componentID,
 				Severity:        matches[i].Severity,
@@ -228,7 +229,7 @@ func buildSuppressionEntities(records []assembly.SuppressionRecord, index entity
 		keptID := index.componentByName[componentNameKey(records[i].KeptName, "")]
 
 		item := suppressionEntityV2{
-			ID:                     stableID("sup", records[i].Reason, records[i].Component.BOMRef, records[i].Component.Name, records[i].KeptName, fmt.Sprintf("%d", i)),
+			ID:                     stableID("sup", records[i].Reason, records[i].Component.BOMRef, records[i].Component.Name, records[i].KeptName, strconv.Itoa(i)),
 			Reason:                 records[i].Reason,
 			SuppressedComponentRef: suppressedRef,
 			SuppressedComponentID:  suppressedID,

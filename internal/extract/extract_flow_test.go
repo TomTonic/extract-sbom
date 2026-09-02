@@ -2,6 +2,7 @@ package extract
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -87,7 +88,8 @@ func TestExtractRespectsDepthLimit(t *testing.T) {
 	}
 
 	if err != nil {
-		if _, ok := err.(*safeguard.ResourceLimitError); !ok {
+		resourceLimitError := &safeguard.ResourceLimitError{}
+		if !errors.As(err, &resourceLimitError) {
 			t.Errorf("expected ResourceLimitError, got %T: %v", err, err)
 		}
 	}

@@ -3,6 +3,7 @@ package html
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	i18npkg "github.com/TomTonic/extract-sbom/internal/report/internal/i18n"
@@ -21,7 +22,7 @@ func configMarkDefault(val, def string) string {
 }
 
 func configMarkDefaultBool(val, def bool) string {
-	s := fmt.Sprintf("%v", val)
+	s := strconv.FormatBool(val)
 	if val == def {
 		return s + " (default)"
 	}
@@ -32,7 +33,7 @@ func configMarkDefaultInt(val, def int) string {
 	if val == def {
 		return fmt.Sprintf("%d (default)", val)
 	}
-	return fmt.Sprintf("%d", val)
+	return strconv.Itoa(val)
 }
 
 func configMarkDefaultBytes(val, def int64, unit string) string {
@@ -64,7 +65,7 @@ func buildConfigRows(report reportjson.ReportV2, t i18npkg.Bundle) []kv {
 		{"report-selection", configMarkDefault(cfg.ReportSelection, configDefaultReportSelection)},
 		{"grype", configMarkDefaultBool(cfg.GrypeEnabled, false)},
 		{"unsafe", configMarkDefaultBool(cfg.Unsafe, false)},
-		{"parallel-scanners", fmt.Sprintf("%d", cfg.ParallelScanners)},
+		{"parallel-scanners", strconv.Itoa(cfg.ParallelScanners)},
 		{t.MaxDepth, configMarkDefaultInt(cfg.Limits.MaxDepth, configDefaultMaxDepth)},
 		{t.MaxFiles, configMarkDefaultInt(cfg.Limits.MaxFiles, configDefaultMaxFiles)},
 		{t.MaxTotalSize, configMarkDefaultBytes(cfg.Limits.MaxTotalSize, configDefaultMaxTotalSize, t.UnitBytes)},

@@ -295,7 +295,7 @@ func loadConfig(cmd *cobra.Command, args []string) (config.Config, error) {
 	if timeoutValue != "" {
 		dur, err := time.ParseDuration(timeoutValue)
 		if err != nil {
-			return config.Config{}, fmt.Errorf("invalid timeout: %v", err)
+			return config.Config{}, fmt.Errorf("invalid timeout: %w", err)
 		}
 		cfg.Limits.Timeout = dur
 	}

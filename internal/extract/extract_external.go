@@ -187,7 +187,8 @@ func extract7zWithPasswords(ctx context.Context, node *ExtractionNode, filePath 
 		password string
 		useFlag  bool // false → omit -p entirely
 	}
-	candidates := []attempt{{password: "", useFlag: false}}
+	candidates := make([]attempt, 0, 1+len(passwords))
+	candidates = append(candidates, attempt{password: "", useFlag: false})
 	for _, pw := range passwords {
 		candidates = append(candidates, attempt{password: pw, useFlag: true})
 	}
@@ -260,7 +261,8 @@ func extractUnshield(ctx context.Context, node *ExtractionNode, filePath string,
 		password string
 		useFlag  bool
 	}
-	candidates := []attempt{{password: "", useFlag: false}}
+	candidates := make([]attempt, 0, 1+len(passwords))
+	candidates = append(candidates, attempt{password: "", useFlag: false})
 	for _, pw := range passwords {
 		candidates = append(candidates, attempt{password: pw, useFlag: true})
 	}

@@ -3,6 +3,7 @@ package html
 import (
 	"fmt"
 	htmltmpl "html/template"
+	"strconv"
 
 	i18npkg "github.com/TomTonic/extract-sbom/internal/report/internal/i18n"
 	reportjson "github.com/TomTonic/extract-sbom/internal/report/internal/json"
@@ -41,7 +42,7 @@ func buildSandbox(report reportjson.ReportV2, t i18npkg.Bundle) sandboxSection {
 	case sb.BwrapFound:
 		s := sandboxSection{Rows: []kv{
 			{t.SandboxName, sb.Name},
-			{t.SandboxAvail, fmt.Sprintf("%v", sb.Available)},
+			{t.SandboxAvail, strconv.FormatBool(sb.Available)},
 			{t.SandboxIsolationLabel, t.SandboxActiveValue},
 		}}
 		if sb.UnsafeOverride {
@@ -106,7 +107,7 @@ func buildProcessing(proj reportjson.ProjectionsV2, t i18npkg.Bundle) processing
 		at, am, enc, ps := extractionArchiveCols(row)
 		detected := ""
 		if row.Depth > 0 {
-			detected = fmt.Sprintf("%d", row.Depth)
+			detected = strconv.Itoa(row.Depth)
 		}
 		s.Rows = append(s.Rows, []string{
 			"extraction", row.Path, class, row.ResolutionStatus, detected, row.Tool, at, am, enc, ps, row.Detail,

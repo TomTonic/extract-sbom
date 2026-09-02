@@ -1,10 +1,10 @@
 package assembly
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,7 +107,7 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 						{Name: "extract-sbom:build", Value: generatorInfo.String()},
 						{Name: "extract-sbom:vcs-revision", Value: generatorInfo.Revision},
 						{Name: "extract-sbom:vcs-time", Value: generatorInfo.Time},
-						{Name: "extract-sbom:vcs-modified", Value: fmt.Sprintf("%t", generatorInfo.Modified)},
+						{Name: "extract-sbom:vcs-modified", Value: strconv.FormatBool(generatorInfo.Modified)},
 					},
 				},
 				{
@@ -176,12 +176,12 @@ func Assemble(tree *extract.ExtractionNode, scans []scan.ScanResult, cfg config.
 	bom.Metadata.Component = &rootComponent
 
 	var components []cdx.Component
-	var dependencies []cdx.Dependency
+	var dependencies []cdx.Dependency //nolint:prealloc // grown recursively inside processNode; the linter only sees the later single-element append
 	var compositions []cdx.Composition
 
 	rootDep := cdx.Dependency{Ref: rootRef}
 
-	var suppressions []SuppressionRecord
+	var suppressions []SuppressionRecord //nolint:prealloc // grown recursively inside processNode; the linter only sees the later globalSuppressions append
 	processNode(tree, &components, &dependencies, &rootDep, &compositions, scanMap, refAssigner, true, &suppressions)
 
 	dependencies = append(dependencies, rootDep)

@@ -1,7 +1,7 @@
 package orchestrator
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/TomTonic/extract-sbom/internal/extract"
@@ -118,7 +118,7 @@ func TestHasScanFailuresWithError(t *testing.T) {
 	t.Parallel()
 	scans := []scan.ScanResult{
 		{NodePath: "a.zip"},
-		{NodePath: "b.zip", Error: fmt.Errorf("scan failed")},
+		{NodePath: "b.zip", Error: errors.New("scan failed")},
 	}
 	if !hasScanFailures(scans) {
 		t.Error("hasScanFailures(with error) = false, want true")

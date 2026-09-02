@@ -7,9 +7,11 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,7 +120,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		if binary, found := extract.Resolve7zBinary(); !found {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] WARNING: 7zz not found on PATH. Extraction of MSI, CAB, 7z, and ISO archives will fail.")
-			addIssue("tool-availability", fmt.Errorf("7zz not found on PATH"))
+			addIssue("tool-availability", errors.New("7zz not found on PATH"))
 		} else {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] 7-Zip binary: %s", binary)
@@ -126,7 +128,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 		if !extract.IsToolAvailable("unshield") {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] WARNING: unshield not found on PATH. InstallShield CAB extraction will fail.")
-			addIssue("tool-availability", fmt.Errorf("unshield not found on PATH"))
+			addIssue("tool-availability", errors.New("unshield not found on PATH"))
 		}
 		if !extract.IsToolAvailable("unsquashfs") {
 			cfg.EmitProgress(config.ProgressNormal,
@@ -207,7 +209,7 @@ func Run(ctx context.Context, cfg config.Config) Result {
 			cfg.EmitProgress(config.ProgressNormal,
 				"[extract-sbom] components: %d raw → removed %d (fs-artifacts=%d, low-value=%d, weak-duplicates=%d, purl-duplicates=%d) → %s in BOM",
 				totalScannedComponents, len(asmSuppressions), fsCount, lvCount, weakCount, purlCount,
-				scan.BoldText(fmt.Sprintf("%d", finalBOMCount)))
+				scan.BoldText(strconv.Itoa(finalBOMCount)))
 		}
 		if asmErr != nil {
 			addIssue("assembly", asmErr)

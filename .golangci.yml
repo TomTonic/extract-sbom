@@ -7,18 +7,28 @@ linters:
   default: none
   enable:
     - bodyclose
+    - contextcheck
+    - copyloopvar
     - errcheck
+    - errorlint
     - gocritic
     - gosec
     - govet
     - ineffassign
+    - makezero
     - misspell
+    - modernize
     - nakedret
+    - nilerr
+    - perfsprint
+    - prealloc
+    - predeclared
     - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
+    - wastedassign
     - whitespace
   settings:
     govet:

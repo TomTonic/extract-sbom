@@ -7,6 +7,7 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -81,7 +82,7 @@ func (b *BwrapSandbox) Name() string {
 // temp directories).
 func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, inputPath string, outputDir string) error {
 	if !b.Available() {
-		return fmt.Errorf("sandbox: bwrap is not available")
+		return errors.New("sandbox: bwrap is not available")
 	}
 
 	inputDir := filepath.Dir(inputPath)
@@ -263,5 +264,5 @@ func Resolve(cfg config.Config) (Sandbox, error) {
 		return NewPassthroughSandbox(), nil
 	}
 
-	return NewDeniedSandbox(), fmt.Errorf("sandbox: bwrap is not available and --unsafe was not specified")
+	return NewDeniedSandbox(), errors.New("sandbox: bwrap is not available and --unsafe was not specified")
 }
