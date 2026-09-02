@@ -45,8 +45,9 @@ type Sandbox interface {
 }
 
 // BwrapSandbox implements Sandbox using Bubblewrap (bwrap) for Linux
-// namespace isolation. It creates new mount, PID, IPC, UTS, network, and
-// user namespaces for each invocation.
+// namespace isolation. It creates new mount, PID, IPC, UTS, and user
+// namespaces for each invocation. The network namespace is deliberately
+// left shared with the host — see the note on bwrapArgs in Run.
 type BwrapSandbox struct {
 	bwrapPath string
 }
@@ -73,8 +74,9 @@ func (b *BwrapSandbox) Name() string {
 
 // Run executes the command under Bubblewrap namespace isolation.
 // The input file's directory is bind-mounted read-only at /input, and the
-// output directory is bind-mounted read-write at /output. Network access,
-// IPC, and PID namespaces are all isolated.
+// output directory is bind-mounted read-write at /output. IPC, PID, UTS,
+// and user namespaces are isolated; the network namespace is not (see
+// bwrapArgs below).
 //
 // The tool binary is always mounted at /tool/<name> inside the sandbox,
 // regardless of where it lives on the host. This avoids the --tmpfs /tmp
@@ -113,7 +115,19 @@ func (b *BwrapSandbox) Run(ctx context.Context, cmd string, args []string, input
 		"--tmpfs", "/tmp",
 		"--proc", "/proc",
 		"--dev", "/dev",
-		"--unshare-all",
+		// Unshare every namespace except network. --unshare-net (bundled in
+		// --unshare-all) makes bwrap bring up the sandbox's loopback interface
+		// via netlink, which requires a capability that restricted/nested
+		// container environments (observed on GitHub Actions' hosted runners)
+		// deny outright — bwrap then aborts before running the tool at all.
+		// The extraction tools here (7-Zip, unshield) have no legitimate need
+		// for network access, and filesystem/PID/IPC isolation — the actual
+		// defense against zip-slip and path-traversal payloads — is unaffected.
+		"--unshare-user",
+		"--unshare-ipc",
+		"--unshare-pid",
+		"--unshare-uts",
+		"--unshare-cgroup",
 		"--new-session",
 		"--die-with-parent",
 		"--",
