@@ -393,3 +393,52 @@ func TestIsToolNoiseLine(t *testing.T) {
 		})
 	}
 }
+
+// TestExtract7zWithRealBwrapSandboxWritesToRealOutputDir is a regression
+// test against a real bwrap sandbox (skipped everywhere else) for a bug
+// where sandboxed 7-Zip extraction silently produced zero entries: 7-Zip's
+// "-o<dir>" flag concatenates the output path directly onto the flag with
+// no separator, and the sandbox's host-to-container path rewriting only
+// matched paths starting at index 0 of the argument. The unrewritten host
+// path fell inside the sandbox's own throwaway --tmpfs /tmp, so 7-Zip exited
+// 0 having "extracted" into a location nobody ever reads, leaving the real
+// (bind-mounted) output directory empty.
+func TestExtract7zWithRealBwrapSandboxWritesToRealOutputDir(t *testing.T) {
+	t.Parallel()
+
+	sb := sandbox.NewBwrapSandbox()
+	if !sb.Available() {
+		t.Skip("bwrap not available on this system")
+	}
+
+	dir := t.TempDir()
+	const content = "hello from a real sandboxed 7-Zip run"
+	archivePath := createTestZIP(t, dir, "real.zip", map[string][]byte{
+		"hello.txt": []byte(content),
+	})
+
+	node := &ExtractionNode{Format: identify.FormatInfo{Format: identify.ZIP}}
+	err := extract7zWithPasswords(context.Background(), node, archivePath, sb, dir, config.DefaultLimits(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if node.Status == StatusToolMissing {
+		t.Skip("7-Zip is not installed on this system")
+	}
+	if node.Status != StatusExtracted {
+		t.Fatalf("status = %v, detail = %q, want %v", node.Status, node.StatusDetail, StatusExtracted)
+	}
+	if node.EntriesCount != 1 {
+		t.Fatalf("EntriesCount = %d, want 1 (sandboxed 7-Zip wrote to the wrong, unmounted location)", node.EntriesCount)
+	}
+
+	got, err := os.ReadFile(filepath.Join(node.ExtractedDir, "hello.txt"))
+	if err != nil {
+		t.Fatalf("extracted file not found in the real (bind-mounted) output dir: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("content = %q, want %q", got, content)
+	}
+
+	CleanupNode(node)
+}
