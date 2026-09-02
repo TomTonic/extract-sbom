@@ -651,8 +651,9 @@ isolation is intentionally disabled.
   Linux with `bwrap` available).
 
 On Linux with `bwrap` available and without `--unsafe`, extraction runs in an
-isolated namespace (restricted access to filesystem, network, IPC). This is
-the secure default on Linux.
+isolated namespace (restricted access to filesystem, PID, IPC; the network
+namespace is shared with the host, see MODULE_GUIDE.md). This is the secure
+default on Linux.
 
 ## Reading the Outputs
 
