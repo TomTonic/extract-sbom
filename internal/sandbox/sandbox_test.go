@@ -5,6 +5,8 @@ package sandbox
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -260,6 +262,76 @@ func TestSandboxInterfaceCompliance(t *testing.T) {
 	var _ Sandbox = (*BwrapSandbox)(nil)
 	var _ Sandbox = (*PassthroughSandbox)(nil)
 	var _ Sandbox = (*DeniedSandbox)(nil)
+}
+
+// TestBwrapSandboxRunCopiesFileThroughMounts exercises the real Bubblewrap
+// execution path end-to-end: it invokes an actual bwrap-namespaced process
+// that reads the bind-mounted input and writes to the bind-mounted output,
+// proving that mount setup and host-to-sandbox path rewriting both work.
+// This only runs where bwrap is installed (Linux CI); everywhere else it is
+// skipped, since Run's real body is otherwise never exercised by any test.
+func TestBwrapSandboxRunCopiesFileThroughMounts(t *testing.T) {
+	t.Parallel()
+
+	sb := NewBwrapSandbox()
+	if !sb.Available() {
+		t.Skip("bwrap not available on this system")
+	}
+
+	inputDir := t.TempDir()
+	inputFile := filepath.Join(inputDir, "input.txt")
+	const content = "hello from the host"
+	if err := os.WriteFile(inputFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("write input file: %v", err)
+	}
+
+	outputDir := t.TempDir()
+	outputFile := filepath.Join(outputDir, "copy.txt")
+
+	err := sb.Run(context.Background(), "cp", []string{inputFile, outputFile}, inputFile, outputDir)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	got, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("output file was not created by the sandboxed command: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("output content = %q, want %q", got, content)
+	}
+}
+
+// TestBwrapSandboxRunCannotAccessFilesOutsideMounts verifies the core
+// isolation guarantee: a file that lives outside the input/output bind
+// mounts must not be visible inside the sandbox. This is the actual
+// security property the whole package exists to provide, and it can only
+// be verified by actually running bwrap.
+func TestBwrapSandboxRunCannotAccessFilesOutsideMounts(t *testing.T) {
+	t.Parallel()
+
+	sb := NewBwrapSandbox()
+	if !sb.Available() {
+		t.Skip("bwrap not available on this system")
+	}
+
+	secretDir := t.TempDir()
+	secretPath := filepath.Join(secretDir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("top-secret"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+
+	inputDir := t.TempDir()
+	inputFile := filepath.Join(inputDir, "input.txt")
+	if err := os.WriteFile(inputFile, []byte("hello"), 0o600); err != nil {
+		t.Fatalf("write input file: %v", err)
+	}
+	outputDir := t.TempDir()
+
+	err := sb.Run(context.Background(), "cat", []string{secretPath}, inputFile, outputDir)
+	if err == nil {
+		t.Fatal("expected cat of a file outside the sandbox mounts to fail, but it succeeded — sandbox isolation is broken")
+	}
 }
 
 // TestIsUnderMountedPrefixRecognizesStandardPaths verifies that the

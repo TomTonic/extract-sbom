@@ -69,6 +69,68 @@ func TestApplyCoverage(t *testing.T) {
 	}
 }
 
+// TestApplyUnavailableCoverage verifies that every bom-ref is marked
+// CoverageNotAssessable when Grype could not be executed, regardless of
+// whether the component carries a PURL/CPE.
+func TestApplyUnavailableCoverage(t *testing.T) {
+	t.Parallel()
+	bom := &cdx.BOM{Components: &[]cdx.Component{
+		{BOMRef: "a", PackageURL: "pkg:maven/a/a@1.0.0"},
+		{BOMRef: "b", CPE: "cpe:2.3:a:vendor:prod:1.0:*:*:*:*:*:*:*"},
+		{BOMRef: "c"},
+	}}
+	res := &Result{CoverageByBOMRef: map[string]CoverageState{}}
+
+	applyUnavailableCoverage(res, bom)
+
+	for _, ref := range []string{"a", "b", "c"} {
+		if got := res.CoverageByBOMRef[ref]; got != CoverageNotAssessable {
+			t.Errorf("coverage %s=%s want %s", ref, got, CoverageNotAssessable)
+		}
+	}
+}
+
+// TestSeverityRank verifies the sort-key ordering used to rank the
+// vulnerability table by severity, including case-insensitivity and the
+// unknown-severity fallback.
+func TestSeverityRank(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"Critical", 0},
+		{"HIGH", 1},
+		{"medium", 2},
+		{"low", 3},
+		{"negligible", 4},
+		{"unknown", 5},
+		{"", 5},
+		{"something-unrecognized", 5},
+	}
+	for _, tc := range cases {
+		if got := severityRank(tc.in); got != tc.want {
+			t.Errorf("severityRank(%q)=%d want %d", tc.in, got, tc.want)
+		}
+	}
+
+	if severityRank("critical") >= severityRank("high") {
+		t.Error("critical must rank before high")
+	}
+	if severityRank("high") >= severityRank("medium") {
+		t.Error("high must rank before medium")
+	}
+	if severityRank("medium") >= severityRank("low") {
+		t.Error("medium must rank before low")
+	}
+	if severityRank("low") >= severityRank("negligible") {
+		t.Error("low must rank before negligible")
+	}
+	if severityRank("negligible") >= severityRank("unknown") {
+		t.Error("negligible must rank before unknown")
+	}
+}
+
 // TestRunNotRequested verifies that Run returns a non-nil result with
 // StateNotRequested and Requested=false when enabled is false.
 func TestRunNotRequested(t *testing.T) {

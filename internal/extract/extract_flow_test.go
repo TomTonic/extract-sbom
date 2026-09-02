@@ -249,3 +249,133 @@ func TestCleanupNodeRemovesTemporaryDirectories(t *testing.T) {
 		t.Error("child temp dir still exists after cleanup")
 	}
 }
+
+// TestExtractClassifiesSecurityViolationAsSecurityBlocked is a regression
+// test for extractRecursive's security-error classification: it must use
+// errors.As (not a raw type assertion) to recognize a *safeguard.HardSecurityError
+// returned by the extraction pipeline, so that node.Status becomes
+// StatusSecurityBlocked rather than being downgraded to a generic StatusFailed.
+// A raw type assertion silently breaks this classification the moment the
+// error gets wrapped anywhere between safeguard and extractRecursive.
+func TestExtractClassifiesSecurityViolationAsSecurityBlocked(t *testing.T) {
+	lookPathMu.Lock()
+	defer lookPathMu.Unlock()
+
+	originalLookPath := lookPath
+	lookPath = func(string) (string, error) {
+		return "/usr/bin/fake-7zz", nil
+	}
+	t.Cleanup(func() { lookPath = originalLookPath })
+
+	dir := t.TempDir()
+	archivePath := createTestZIP(t, dir, "evil.zip", map[string][]byte{
+		"payload.txt": []byte("payload"),
+	})
+
+	// Simulate 7-Zip producing a symlink that escapes the extraction
+	// directory; safeguard.ValidatePostExtraction rejects this as a hard
+	// security violation.
+	sb := &recordingSandbox{run: func(_ string, _ []string, _ string, outputDir string) error {
+		return os.Symlink("/etc/passwd", filepath.Join(outputDir, "escape-link"))
+	}}
+
+	cfg := config.DefaultConfig()
+	cfg.InputPath = archivePath
+	cfg.OutputDir = dir
+	cfg.Unsafe = true
+
+	tree, err := Extract(context.Background(), archivePath, cfg, sb)
+	if err == nil {
+		t.Fatal("expected a security error to propagate from Extract")
+	}
+
+	hardSecurityError := &safeguard.HardSecurityError{}
+	if !errors.As(err, &hardSecurityError) {
+		t.Fatalf("error = %T, want *safeguard.HardSecurityError", err)
+	}
+
+	if tree.Status != StatusSecurityBlocked {
+		t.Errorf("tree.Status = %v, want %v (detail: %s)", tree.Status, StatusSecurityBlocked, tree.StatusDetail)
+	}
+}
+
+// TestFlattenCompressedTARIsBestEffortOnReadDirFailure locks in the
+// intentional behavior behind flattenCompressedTAR's //nolint:nilerr: when
+// the extracted directory cannot be read, flattening is silently skipped and
+// the outer extraction result is kept as-is (nil error), rather than failing
+// the whole extraction over a cosmetic path-flattening step.
+func TestFlattenCompressedTARIsBestEffortOnReadDirFailure(t *testing.T) {
+	t.Parallel()
+
+	node := &ExtractionNode{
+		ExtractedDir: filepath.Join(t.TempDir(), "does-not-exist"),
+		Status:       StatusExtracted,
+		EntriesCount: 3,
+		TotalSize:    123,
+	}
+
+	err := flattenCompressedTAR(context.Background(), node, sandbox.NewPassthroughSandbox(), config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("flattenCompressedTAR() = %v, want nil (best-effort)", err)
+	}
+	if node.EntriesCount != 3 || node.TotalSize != 123 {
+		t.Errorf("node was mutated on ReadDir failure: entries=%d total=%d", node.EntriesCount, node.TotalSize)
+	}
+}
+
+// TestFlattenCompressedTARSkipsWhenNotSingleTarFile verifies flattening is
+// skipped (nil error, node unchanged) whenever the extracted directory does
+// not contain exactly one .tar file — multiple entries, a directory entry,
+// or a single non-.tar file all leave the outer result untouched.
+func TestFlattenCompressedTARSkipsWhenNotSingleTarFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, dir string)
+	}{
+		{"multiple entries", func(t *testing.T, dir string) {
+			t.Helper()
+			mustWriteFile(t, filepath.Join(dir, "a.tar"), "a")
+			mustWriteFile(t, filepath.Join(dir, "b.tar"), "b")
+		}},
+		{"single directory entry", func(t *testing.T, dir string) {
+			t.Helper()
+			if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"single non-tar file", func(t *testing.T, dir string) {
+			t.Helper()
+			mustWriteFile(t, filepath.Join(dir, "readme.txt"), "not a tar")
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			extractedDir := t.TempDir()
+			tt.setup(t, extractedDir)
+
+			node := &ExtractionNode{ExtractedDir: extractedDir, Status: StatusExtracted, EntriesCount: 7}
+
+			err := flattenCompressedTAR(context.Background(), node, sandbox.NewPassthroughSandbox(), config.DefaultConfig())
+			if err != nil {
+				t.Fatalf("flattenCompressedTAR() = %v, want nil", err)
+			}
+			if node.ExtractedDir != extractedDir {
+				t.Errorf("ExtractedDir changed to %q, want unchanged %q", node.ExtractedDir, extractedDir)
+			}
+			if node.EntriesCount != 7 {
+				t.Errorf("EntriesCount = %d, want unchanged 7", node.EntriesCount)
+			}
+		})
+	}
+}
+
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
