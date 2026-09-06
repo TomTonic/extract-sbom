@@ -45,6 +45,33 @@ goreleaser release --snapshot --clean
 
 Artifacts appear in `dist/`.
 
+## Cutting a release
+
+Pushing a `v*` tag runs [release.yml](.github/workflows/release.yml), which
+runs GoReleaser and publishes everything except one step.
+
+**Credentials.** GoReleaser writes to two repositories outside this one -
+`TomTonic/homebrew-tap` (the cask) and `TomTonic/winget-pkgs` (the WinGet
+manifest). Both pushes go over SSH using a per-repository **deploy key**,
+held in the repository secrets `HOMEBREW_TAP_DEPLOY_KEY` and
+`WINGET_FORK_DEPLOY_KEY`. Deploy keys are used deliberately instead of a
+personal access token: each is valid for exactly one repository and can be
+revoked on its own, whereas any PAT able to write to the tap would be an
+account-wide credential. The keys are passphrase-less because the workflow
+runs unattended - GoReleaser rejects passphrase-protected keys outright.
+Rotating one means generating a new key pair, replacing the deploy key on
+the target repository, and updating the secret here.
+
+**The one manual step: the WinGet pull request.** GoReleaser pushes the
+generated manifests to a branch `extract-sbom-<version>` on our fork
+`TomTonic/winget-pkgs` and stops there - over SSH it has no API token, so it
+cannot open the pull request. After the release, open a PR from that branch
+against `microsoft/winget-pkgs` (branch `master`) yourself and respond to the
+validation bot. This is intentional: automating it would require a token that
+can write to a fork of a Microsoft repository and open pull requests under
+this account, which is far broader than pushing a single branch - and every
+`winget-pkgs` submission is human-reviewed anyway.
+
 ## Running Tests
 
 ```bash
