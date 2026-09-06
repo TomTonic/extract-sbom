@@ -210,7 +210,7 @@ environments when external tools are needed; see
 The binary itself has no external Go runtime dependencies. Certain input formats,
 however, require external tools at runtime:
 
-- `7zz` (7-Zip): required for CAB, 7z, MSI payload, RAR, ISO, CPIO, TAR XZ/Zstd, and encrypted ZIP fallback extraction; also the Squashfs fallback extractor
+- 7-Zip (invoked as `7zz`, `7za` or `7z`, whichever is on `PATH` first): required for CAB, 7z, MSI payload, RAR, ISO, CPIO, TAR XZ/Zstd, and encrypted ZIP fallback extraction; also the Squashfs fallback extractor
 - `unshield`: required for InstallShield CAB extraction
 - `unsquashfs` (squashfs-tools): preferred extractor for Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`); 7-Zip is used as a fallback when it is absent
 - `bwrap` (Bubblewrap, Linux only): required for sandboxed external extraction unless `--unsafe` is used
@@ -234,11 +234,17 @@ extract-sbom --version
 Dependency checks:
 
 ```bash
-command -v 7zz || echo "7zz missing"
+command -v 7zz || command -v 7za || command -v 7z || echo "7-Zip missing"
 command -v unshield || echo "unshield missing"
-command -v unsquashfs || echo "unsquashfs missing (Squashfs/Snap; 7zz is the fallback)"
+command -v unsquashfs || echo "unsquashfs missing (Squashfs/Snap; 7-Zip is the fallback)"
 command -v bwrap || echo "bwrap missing (Linux sandbox mode)"
 ```
+
+Note that the 7-Zip binary is named differently across distributions:
+extract-sbom tries `7zz`, then `7za`, then `7z`, and uses whichever it
+finds first. Only Alpine's `p7zip` installs it as `7zz`; Debian/Ubuntu,
+Fedora and Arch ship it as `7z`/`7za` - so checking only for `7zz` would
+wrongly report it as missing on most distributions.
 
 ## 6. How Missing Dependencies Show Up
 
@@ -253,12 +259,15 @@ Fix:
 - create directory and set permissions
 - pass explicit `--output-dir` / `--work-dir`
 
-### 6.2 Missing 7zz
+### 6.2 Missing 7-Zip
 
-When input requires 7-Zip-backed extraction (e.g., CAB, 7z, MSI, RAR, encrypted ZIP):
+When input requires 7-Zip-backed extraction (e.g., CAB, 7z, MSI, RAR, encrypted ZIP)
+and none of `7zz`, `7za`, `7z` is on `PATH`:
 
 - extraction node status becomes `tool-missing`
-- status detail mentions `7zz (7-Zip) is not installed`
+- status detail mentions `7zz (7-Zip) is not installed` - `7zz` is the
+  canonical name used in messages, not necessarily the one your distribution
+  installs
 - run may become partial (exit code 1) depending on policy/results
 
 ### 6.3 Missing unshield
@@ -303,9 +312,9 @@ sudo apt-get update
 sudo apt-get install -y p7zip-full unshield squashfs-tools bubblewrap
 ```
 
-On newer releases (e.g. Ubuntu 24.04+) where `p7zip-full` is no longer
-packaged, install the `7zip` package instead (it provides the `7zz` binary
-directly).
+On newer releases (e.g. Debian 13+ and Ubuntu 24.04+) `p7zip-full` is only
+a transitional package - install `7zip` instead, which provides the current
+7-Zip as `7z`/`7za`.
 
 ### 7.3 Fedora / RHEL-like
 
