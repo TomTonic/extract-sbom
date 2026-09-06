@@ -45,6 +45,37 @@ goreleaser release --snapshot --clean
 
 Artifacts appear in `dist/`.
 
+## Cutting a release
+
+Pushing a `v*` tag runs [release.yml](.github/workflows/release.yml), which
+runs GoReleaser and publishes everything in one go - no manual follow-up.
+
+**Credentials.** GoReleaser writes to exactly one repository outside this one:
+`TomTonic/homebrew-tap`, where the cask lives. That push goes over SSH using a
+**deploy key**, held in the repository secret `HOMEBREW_TAP_DEPLOY_KEY`. A
+deploy key is used deliberately instead of a personal access token: it is
+valid for that one repository and can be revoked on its own, whereas any PAT
+able to write to the tap would be an account-wide credential. The key is
+passphrase-less because the workflow runs unattended - GoReleaser rejects
+passphrase-protected keys outright. Rotating it means generating a new key
+pair, replacing the deploy key on the tap, and updating the secret here.
+
+**Windows distribution.** Windows ships as the plain `.zip` release asset
+only - no WinGet manifest, no Chocolatey package, no Microsoft Store listing.
+That is a deliberate choice, not an omission. Every third-party index pins the
+installer URL and its SHA-256 permanently, and none of them lets the publisher
+withdraw a version once it is accepted: `winget-pkgs` needs a pull request to
+Microsoft to remove one, and Chocolatey states plainly that "once approved,
+there is no reject". Since withdrawing a bad release has to stay possible for a
+security tool, this project only publishes through channels it controls
+end-to-end: the Homebrew tap, and the package repository at
+[pkg.tomtonic.de](https://pkg.tomtonic.de) for Linux.
+
+The corollary is a rule worth stating: **published release assets are never
+deleted or replaced, only superseded by a new version.** The Homebrew cask and
+the Linux repository both reference assets by URL and checksum, so removing
+one breaks installs that already point at it.
+
 ## Running Tests
 
 ```bash

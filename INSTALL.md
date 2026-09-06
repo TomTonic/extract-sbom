@@ -176,25 +176,34 @@ the dialog, or clear the quarantine flag yourself:
 xattr -d com.apple.quarantine extract-sbom
 ```
 
-## Windows: WinGet (recommended - auto-updating)
+## Windows: download
 
-```powershell
-winget install TomTonic.extract-sbom
-```
-
-`winget upgrade` picks up new releases automatically. This installs a
-portable `extract-sbom.exe` (no system-wide installer, no registry changes)
-and adds it to your `PATH` via WinGet's app-execution-alias mechanism.
-
-## Windows: manual download
-
-Every [release](https://github.com/TomTonic/extract-sbom/releases) also ships
-`extract-sbom_<version>_windows_<amd64|arm64>.zip` directly, for anyone who'd
-rather not use WinGet:
+Windows is distributed as a plain portable archive - there is no WinGet
+manifest, Chocolatey package or Microsoft Store listing, and no installer.
+Every [release](https://github.com/TomTonic/extract-sbom/releases) ships
+`extract-sbom_<version>_windows_<amd64|arm64>.zip`:
 
 ```powershell
 Expand-Archive extract-sbom_<version>_windows_amd64.zip
 ```
+
+Move `extract-sbom.exe` anywhere on your `PATH`. Nothing is written to the
+registry and nothing is installed system-wide, so removing it is a matter of
+deleting the file. There is no automatic update mechanism on Windows - watch
+the [releases page](https://github.com/TomTonic/extract-sbom/releases)
+(GitHub can notify you: **Watch** -> **Custom** -> **Releases**), or verify
+the version you have with `extract-sbom --version`.
+
+This is a deliberate choice. Every third-party Windows package index pins the
+installer URL and its checksum permanently, and none of them lets a publisher
+withdraw a version once it has been accepted. A tool used for supply-chain
+inspection has to be able to pull a release that turns out to be wrong, so
+extract-sbom publishes only through channels it controls end to end -
+[pkg.tomtonic.de](https://pkg.tomtonic.de) for Linux and its own Homebrew tap
+for macOS. Verifying the download against `checksums.txt` - which covers the
+Windows archives too, see
+[Linux / macOS: manual tar.gz download](#linux--macos-manual-targz-download) -
+gives you the same integrity guarantee those indexes would.
 
 Since the binary isn't code-signed, Windows SmartScreen will warn on first
 run: click **More info** -> **Run anyway** (or right-click the file ->

@@ -91,7 +91,15 @@ homebrew_casks:
       owner: TomTonic
       name: homebrew-tap
       branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      # Pushed over SSH with a deploy key rather than through the API with a
+      # personal access token. A deploy key is valid for exactly this one
+      # repository and can be revoked on its own; a PAT that can write to the
+      # tap would necessarily be an account-wide credential. GoReleaser takes
+      # the key material itself here, not a path, and refuses a
+      # passphrase-protected key (it runs unattended).
+      git:
+        url: git@github.com:TomTonic/homebrew-tap.git
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
     commit_author:
       name: Tom Tonic
       email: tom@tomtonic.de
@@ -105,37 +113,6 @@ homebrew_casks:
     binaries:
       - extract-sbom
     caveats: Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need external tools that are not bundled - see https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
-
-winget:
-  - name: extract-sbom
-    publisher: TomTonic
-    publisher_url: https://github.com/TomTonic
-    publisher_support_url: https://github.com/TomTonic/extract-sbom/issues
-    license: BSD-3-Clause
-    license_url: https://github.com/TomTonic/extract-sbom/blob/main/LICENSE
-    homepage: https://github.com/TomTonic/extract-sbom
-    short_description: Standardized incoming inspection for software deliveries
-    description: |
-      extract-sbom performs standardized incoming inspection for software
-      deliveries. Given one input file, it recursively unpacks nested
-      archive/installer/container formats and produces one consolidated SBOM
-      (CycloneDX JSON, CycloneDX XML, or SPDX JSON) plus one auditable report
-      (Markdown, HTML, JSON, SARIF, or any combination).
-    tags:
-      - sbom
-      - security
-      - supply-chain
-    repository:
-      owner: TomTonic
-      name: winget-pkgs
-      branch: "extract-sbom-{{ .Version }}"
-      token: "{{ .Env.WINGET_GITHUB_TOKEN }}"
-      pull_request:
-        enabled: true
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: master
 
 checksum:
   name_template: checksums.txt
