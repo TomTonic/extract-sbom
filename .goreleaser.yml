@@ -18,6 +18,7 @@ builds:
     goos:
       - linux
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
@@ -25,12 +26,117 @@ builds:
       - -s -w
       - -X github.com/TomTonic/extract-sbom/internal/buildinfo.ReleaseVersion={{.Version}}
 
+nfpms:
+  - package_name: extract-sbom
+    vendor: TomTonic
+    homepage: https://github.com/TomTonic/extract-sbom
+    maintainer: Tom Tonic <tom@tomtonic.de>
+    description: |
+      Standardized incoming inspection for software deliveries. Given one input
+      file (archive, installer, or container), extract-sbom recursively unpacks
+      nested formats and produces one consolidated SBOM (CycloneDX JSON,
+      CycloneDX XML, or SPDX JSON) plus one auditable report (Markdown, HTML,
+      JSON, SARIF, or any combination).
+    license: BSD-3-Clause
+    section: admin
+    priority: optional
+    formats:
+      - deb
+      - rpm
+      - apk
+      - archlinux
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/extract-sbom/README.md
+      - src: ./LICENSE
+        dst: /usr/share/doc/extract-sbom/LICENSE
+    overrides:
+      deb:
+        recommends:
+          - 7zip
+          - p7zip-full
+          - unshield
+          - squashfs-tools
+          - bubblewrap
+      rpm:
+        recommends:
+          - p7zip
+          - p7zip-plugins
+          - unshield
+          - squashfs-tools
+          - bubblewrap
+      apk:
+        dependencies:
+          - p7zip
+          - unshield
+          - squashfs-tools
+          - bubblewrap
+      archlinux:
+        dependencies:
+          - p7zip
+          - unshield
+          - squashfs-tools
+          - bubblewrap
+
 archives:
   - formats: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         formats: zip
+
+homebrew_casks:
+  - name: extract-sbom
+    repository:
+      owner: TomTonic
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: Tom Tonic
+      email: tom@tomtonic.de
+    homepage: https://github.com/TomTonic/extract-sbom
+    description: |
+      Standardized incoming inspection for software deliveries - recursively
+      unpacks nested archive/installer formats and produces a consolidated
+      SBOM plus an auditable report.
+    binaries:
+      - extract-sbom
+    caveats: |
+      Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need
+      external tools not bundled here - see
+      https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
+
+winget:
+  - name: extract-sbom
+    publisher: TomTonic
+    publisher_url: https://github.com/TomTonic
+    publisher_support_url: https://github.com/TomTonic/extract-sbom/issues
+    license: BSD-3-Clause
+    license_url: https://github.com/TomTonic/extract-sbom/blob/main/LICENSE
+    homepage: https://github.com/TomTonic/extract-sbom
+    short_description: Standardized incoming inspection for software deliveries
+    description: |
+      extract-sbom performs standardized incoming inspection for software
+      deliveries. Given one input file, it recursively unpacks nested
+      archive/installer/container formats and produces one consolidated SBOM
+      (CycloneDX JSON, CycloneDX XML, or SPDX JSON) plus one auditable report
+      (Markdown, HTML, JSON, SARIF, or any combination).
+    tags:
+      - sbom
+      - security
+      - supply-chain
+    repository:
+      owner: TomTonic
+      name: winget-pkgs
+      branch: "extract-sbom-{{ .Version }}"
+      token: "{{ .Env.WINGET_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
 
 checksum:
   name_template: checksums.txt
