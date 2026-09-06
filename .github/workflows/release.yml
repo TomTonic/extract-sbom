@@ -59,7 +59,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Deploy keys, not PATs - each is write-scoped to exactly the one
-          # repository GoReleaser pushes to, and revocable on its own.
+          # A deploy key, not a PAT: write-scoped to exactly the one repository
+          # GoReleaser pushes to (the Homebrew tap), and revocable on its own.
           HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-          WINGET_FORK_DEPLOY_KEY: ${{ secrets.WINGET_FORK_DEPLOY_KEY }}

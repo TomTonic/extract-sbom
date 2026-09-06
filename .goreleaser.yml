@@ -114,40 +114,6 @@ homebrew_casks:
       - extract-sbom
     caveats: Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need external tools that are not bundled - see https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
 
-winget:
-  - name: extract-sbom
-    publisher: TomTonic
-    publisher_url: https://github.com/TomTonic
-    publisher_support_url: https://github.com/TomTonic/extract-sbom/issues
-    license: BSD-3-Clause
-    license_url: https://github.com/TomTonic/extract-sbom/blob/main/LICENSE
-    homepage: https://github.com/TomTonic/extract-sbom
-    short_description: Standardized incoming inspection for software deliveries
-    description: |
-      extract-sbom performs standardized incoming inspection for software
-      deliveries. Given one input file, it recursively unpacks nested
-      archive/installer/container formats and produces one consolidated SBOM
-      (CycloneDX JSON, CycloneDX XML, or SPDX JSON) plus one auditable report
-      (Markdown, HTML, JSON, SARIF, or any combination).
-    tags:
-      - sbom
-      - security
-      - supply-chain
-    repository:
-      owner: TomTonic
-      name: winget-pkgs
-      branch: "extract-sbom-{{ .Version }}"
-      # Same deploy-key reasoning as the cask above. The trade-off here is
-      # that GoReleaser's SSH path returns right after pushing the manifest
-      # branch to our fork, so it does NOT open the pull request against
-      # microsoft/winget-pkgs - that step is manual (see INSTALL.md /
-      # RELEASING.md). Automating it would need a token that can write to a
-      # fork of a Microsoft repository and open PRs under this account, which
-      # is a much broader credential than pushing one branch.
-      git:
-        url: git@github.com:TomTonic/winget-pkgs.git
-        private_key: "{{ .Env.WINGET_FORK_DEPLOY_KEY }}"
-
 checksum:
   name_template: checksums.txt
 
