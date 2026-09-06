@@ -9,7 +9,7 @@ For building from source or for development, see [BUILD.md](BUILD.md).
 ## Linux: package repository (recommended - auto-updating)
 
 extract-sbom is available through the
-[acmelab package repository](https://pkg.acmelab.de), a signed
+[TomTonic package repository](https://pkg.tomtonic.de), a signed
 `apt`/`dnf`/`zypper`/`pacman`/`apk` repository built directly from this
 project's own GitHub Releases (see
 [TomTonic/pkg-repo](https://github.com/TomTonic/pkg-repo) for how it's
@@ -20,16 +20,16 @@ releases automatically - no manual downloads needed.
 * **Debian / Ubuntu** (and derivatives such as Linux Mint, Pop!_OS, Raspberry Pi OS):
 
   ```bash
-  curl -fsSL https://pkg.acmelab.de/pubkey.gpg | sudo tee /etc/apt/keyrings/acmelab.asc
-  echo "deb [signed-by=/etc/apt/keyrings/acmelab.asc] https://pkg.acmelab.de/apt stable main" | \
-    sudo tee /etc/apt/sources.list.d/acmelab.list
+  curl -fsSL https://pkg.tomtonic.de/pubkey.gpg | sudo tee /etc/apt/keyrings/tomtonic.asc
+  echo "deb [signed-by=/etc/apt/keyrings/tomtonic.asc] https://pkg.tomtonic.de/apt stable main" | \
+    sudo tee /etc/apt/sources.list.d/tomtonic.list
   sudo apt update && sudo apt install extract-sbom
   ```
 
 * **Fedora / RHEL / CentOS / Rocky / AlmaLinux / openSUSE / SLES**:
 
   ```bash
-  sudo curl -fsSL -o /etc/yum.repos.d/acmelab.repo https://pkg.acmelab.de/rpm/acmelab.repo
+  sudo curl -fsSL -o /etc/yum.repos.d/tomtonic.repo https://pkg.tomtonic.de/rpm/tomtonic.repo
   sudo dnf install extract-sbom   # or: sudo zypper install extract-sbom
   ```
 
@@ -37,19 +37,19 @@ releases automatically - no manual downloads needed.
 
   ```bash
   # add to /etc/pacman.conf:
-  #   [acmelab]
+  #   [tomtonic]
   #   SigLevel = Optional TrustedOnly DatabaseRequired
-  #   Server = https://pkg.acmelab.de/pacman/$arch
-  curl -fsSL https://pkg.acmelab.de/pubkey.gpg | sudo pacman-key --add -
-  sudo pacman-key --lsign-key 284B3557CDC44D25509DA0A3B9C061B9627E9BB0
+  #   Server = https://pkg.tomtonic.de/pacman/$arch
+  curl -fsSL https://pkg.tomtonic.de/pubkey.gpg | sudo pacman-key --add -
+  sudo pacman-key --lsign-key AA9C6D63B7B6C0BC18A89693E3725F71EDDAEC03
   sudo pacman -Sy extract-sbom
   ```
 
 * **Alpine Linux**:
 
   ```bash
-  sudo curl -fsSL -o /etc/apk/keys/acmelab.rsa.pub https://pkg.acmelab.de/alpine/acmelab.rsa.pub
-  echo "https://pkg.acmelab.de/apk" | sudo tee -a /etc/apk/repositories
+  sudo curl -fsSL -o /etc/apk/keys/tomtonic.rsa.pub https://pkg.tomtonic.de/alpine/tomtonic.rsa.pub
+  echo "https://pkg.tomtonic.de/apk" | sudo tee -a /etc/apk/repositories
   sudo apk update && sudo apk add extract-sbom
   ```
 
@@ -111,8 +111,8 @@ so it is immediately available on your `PATH`.
 ## macOS: Homebrew (recommended - auto-updating)
 
 extract-sbom is available via a [Homebrew tap](https://github.com/TomTonic/homebrew-tap)
-maintained in this project's own GitHub organization (not homebrew-core), published
-automatically by each release:
+maintained alongside this project (not homebrew-core), published automatically
+by each release:
 
 ```bash
 brew install TomTonic/tap/extract-sbom

@@ -30,7 +30,7 @@ nfpms:
   - package_name: extract-sbom
     vendor: TomTonic
     homepage: https://github.com/TomTonic/extract-sbom
-    maintainer: Tom Gelhausen <tom@acmelab.de>
+    maintainer: Tom Tonic <tom@tomtonic.de>
     description: |
       Standardized incoming inspection for software deliveries. Given one input
       file (archive, installer, or container), extract-sbom recursively unpacks
@@ -93,8 +93,8 @@ homebrew_casks:
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     commit_author:
-      name: Tom Gelhausen
-      email: tom@acmelab.de
+      name: Tom Tonic
+      email: tom@tomtonic.de
     homepage: https://github.com/TomTonic/extract-sbom
     description: |
       Standardized incoming inspection for software deliveries - recursively
