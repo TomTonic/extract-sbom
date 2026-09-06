@@ -34,3 +34,6 @@ go.work.sum
 .DS_Store
 local/
 .claude/
+
+# GoReleaser build output (also produced by `goreleaser release --snapshot`)
+dist/

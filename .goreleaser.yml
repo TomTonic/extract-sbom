@@ -96,16 +96,15 @@ homebrew_casks:
       name: Tom Tonic
       email: tom@tomtonic.de
     homepage: https://github.com/TomTonic/extract-sbom
-    description: |
-      Standardized incoming inspection for software deliveries - recursively
-      unpacks nested archive/installer formats and produces a consolidated
-      SBOM plus an auditable report.
+    # Both of these must stay single-line. GoReleaser emits `desc` as one Ruby
+    # string literal (Homebrew expects a one-liner there anyway) and renders
+    # each line of `caveats` as its own literal inside the caveats block - so
+    # in a multi-line caveat only the last line would be the block's return
+    # value and everything above it would silently vanish from `brew info`.
+    description: Recursively unpacks software deliveries into one SBOM and audit report
     binaries:
       - extract-sbom
-    caveats: |
-      Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need
-      external tools not bundled here - see
-      https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
+    caveats: Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need external tools that are not bundled - see https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
 
 winget:
   - name: extract-sbom
