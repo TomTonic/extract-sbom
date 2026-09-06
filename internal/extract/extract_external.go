@@ -14,10 +14,22 @@ import (
 	"github.com/TomTonic/extract-sbom/internal/sandbox"
 )
 
-// sevenZipCandidates lists the binary names tried in priority order.
-// 7zz is the official 7-Zip binary (package: 7zip on Debian/Ubuntu ≥22.04).
-// 7za and 7z are provided by p7zip-full and are CLI-compatible for extraction.
-var sevenZipCandidates = []string{"7zz", "7za", "7z"}
+// sevenZipCandidates lists the binary names tried in priority order. The order
+// follows how common each name actually is, measured by installing the
+// dependency our own packages declare and listing what landed in PATH:
+//
+//	                            7z   7za  7zz
+//	Debian 13, Ubuntu 24.04     yes  yes  -
+//	Fedora 41                   yes  yes  -
+//	Arch                        yes  yes  -
+//	Alpine 3.22/3.23/edge       yes  -    yes
+//	macOS (sevenzip + p7zip)    yes  yes  yes
+//
+// 7z is present everywhere, so it is tried first. 7zz is next because Alpine
+// is the one platform that ships it instead of 7za. 7za comes last: it is the
+// "standalone" build with a reduced codec set, so it is the least capable of
+// the three and is only worth reaching when neither of the others exists.
+var sevenZipCandidates = []string{"7z", "7zz", "7za"}
 
 // lazily captured tool versions — populated on first successful use.
 var (
@@ -106,15 +118,16 @@ func GetUsedUnshieldVersion() string { return unshieldVersionValue }
 func GetUsedUnsquashfsVersion() string { return unsquashfsVersionValue }
 
 // resolve7zBinary returns the first available 7-Zip binary name and true,
-// or ("7zz", false) if none is found (7zz is used as the canonical name in
-// tool-missing diagnostics).
+// or ("7z", false) if none is found (7z is used as the canonical name in
+// tool-missing diagnostics, since it is the name available on every platform
+// this tool targets).
 func resolve7zBinary() (string, bool) {
 	for _, name := range sevenZipCandidates {
 		if _, err := lookPath(name); err == nil {
 			return name, true
 		}
 	}
-	return "7zz", false
+	return "7z", false
 }
 
 // extract7z extracts CAB, MSI, 7z, RAR files using 7-Zip via the sandbox.
@@ -381,7 +394,7 @@ func IsToolAvailable(tool string) bool {
 }
 
 // Resolve7zBinary returns the first available 7-Zip binary name and true,
-// or ("7zz", false) if none of the known candidates (7zz, 7za, 7z) is found.
+// or ("7z", false) if none of the known candidates (7z, 7zz, 7za) is found.
 func Resolve7zBinary() (string, bool) {
 	return resolve7zBinary()
 }

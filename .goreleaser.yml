@@ -72,8 +72,11 @@ nfpms:
           - squashfs-tools
           - bubblewrap
       archlinux:
+        # 7zip, not p7zip: Arch dropped p7zip and the current package both
+        # provides and replaces it. Depending on the name that actually
+        # exists avoids relying on a legacy alias that can be retired.
         dependencies:
-          - p7zip
+          - 7zip
           - unshield
           - squashfs-tools
           - bubblewrap
@@ -113,6 +116,32 @@ homebrew_casks:
     binaries:
       - extract-sbom
     caveats: Some input formats (CAB, 7z, MSI, RAR, InstallShield, Squashfs) need external tools that are not bundled - see https://github.com/TomTonic/extract-sbom/blob/main/INSTALL.md
+
+    # The Linux packages declare these as dependencies, so the cask does too -
+    # otherwise `brew install` leaves a tool that cannot open half the formats
+    # it advertises. Homebrew has no weak-dependency mechanism, so unlike the
+    # deb/rpm `Recommends:` these are hard requirements; that matches what the
+    # Arch and Alpine packages already do. bubblewrap is deliberately absent:
+    # the sandbox is Linux-only.
+    dependencies:
+      - formula: sevenzip
+      - formula: unshield
+      - formula: squashfs
+    hooks:
+      post:
+        # Homebrew Cask sets com.apple.quarantine on everything it stages.
+        # These binaries are ad-hoc (linker) signed rather than Developer ID
+        # signed and notarized, so Gatekeeper does not just warn - it SIGKILLs
+        # the process, and `extract-sbom --version` dies with exit 137 and no
+        # output at all. Clearing the attribute is what makes the cask usable.
+        # The integrity guarantee does not rest on Apple here: Homebrew has
+        # already verified the download against the sha256 pinned above.
+        # must_succeed: false because xattr exits non-zero when the attribute
+        # is not present, which is the case on re-installs.
+        install: |
+          system_command "/usr/bin/xattr",
+                         args: ["-dr", "com.apple.quarantine", "#{staged_path}/extract-sbom"],
+                         must_succeed: false
 
 checksum:
   name_template: checksums.txt

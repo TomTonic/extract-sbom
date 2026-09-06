@@ -26,7 +26,7 @@ texts copied into [third_party_licenses](third_party_licenses):
 ## Validation Target
 
 The release workflow runs the built candidate in a Docker container with
-`7zz` and `unshield` installed and verifies:
+`7z` and `unshield` installed and verifies:
 
 - a valid CycloneDX SBOM is produced
 - required delivery-path entries exist in the SBOM

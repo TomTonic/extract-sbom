@@ -127,24 +127,24 @@ identifies the format first, then acts.
 
 | Node | Tool | Status after Phase 1 |
 |---|---|---|
-| `vendor-suite-3.2.zip` | `7zz` (sandboxed) | `extracted` |
+| `vendor-suite-3.2.zip` | `7z` (sandboxed) | `extracted` |
 | `linux/server-3.2.rpm` | — | `syft-native` — RPM is a Syft-native format |
 | `linux/libssl1.1_1.1.1n-0_amd64.deb` | — | `syft-native` — DEB is a Syft-native format |
-| `linux/apache-tomcat-9.0.98.tar.gz` | `7zz` (sandboxed) | `extracted` |
+| `linux/apache-tomcat-9.0.98.tar.gz` | `7z` (sandboxed) | `extracted` |
 | `lib/catalina.jar` | — | `syft-native` |
 | `lib/tomcat-embed-core-9.0.98.jar` | — | `syft-native` |
 | `lib/servlet-api.jar` | — | `syft-native` |
 | `webapps/vendor-app.ear` | — | `syft-native` |
-| `linux/resources.tgz` | `7zz` (sandboxed) | `extracted` |
+| `linux/resources.tgz` | `7z` (sandboxed) | `extracted` |
 | `translations/de.properties` | — | `skipped` — plain file |
 | `translations/en.properties` | — | `skipped` — plain file |
-| `windows/client-setup.msi` | extract-sbom reads MSI Property table; `7zz` (sandboxed) extracts payload | `extracted`; MSI product metadata recorded |
+| `windows/client-setup.msi` | extract-sbom reads MSI Property table; `7z` (sandboxed) extracts payload | `extracted`; MSI product metadata recorded |
 | `Program Files/.../client.exe` | — | `skipped` — plain file |
 | `Program Files/.../sign-plugin.ocx` | — | `skipped` — plain file |
-| `windows/prereqs/vcredist.cab` | `7zz` (sandboxed) — Microsoft CAB | `extracted` |
+| `windows/prereqs/vcredist.cab` | `7z` (sandboxed) — Microsoft CAB | `extracted` |
 | `windows/legacy-addon/data1.cab` | `unshield` (sandboxed) — InstallShield cabinet | `extracted` |
 | `windows/legacy-addon/data1.hdr` | — | `skipped` — InstallShield header file, not itself a container |
-| `web/webapp-patch-1.2.1.7z` | `7zz` (sandboxed) | `extracted` |
+| `web/webapp-patch-1.2.1.7z` | `7z` (sandboxed) | `extracted` |
 | `webapp/index.js` | — | `skipped` — plain file, no package manifest |
 | `webapp/node_modules/minimist/package.json` | — | `skipped` — plain file, covered by parent directory scan |
 | `webapp/node_modules/minimist/index.js` | — | `skipped` — plain file, covered by parent directory scan |
@@ -156,7 +156,7 @@ Statuses are final after Phase 1. Phase 2 does not change them.
 InstallShield format is not compatible with Microsoft CAB even though both use
 the `.cab` extension. extract-sbom identifies the pair by the `ISc(` magic bytes
 at offset 0 and the `data*.cab` + `data*.hdr` naming pattern, then uses
-`unshield` instead of `7zz`.
+`unshield` instead of `7z`.
 
 ### 4.3 Phase 2: Who Scans What
 
@@ -269,7 +269,7 @@ each file is:
 | `skipped` | Not pursued further. | Not a direct scan target. May still be covered by a parent directory scan. |
 | `failed` | Extraction was attempted but did not finish. | Not a scan target. Subtree is marked incomplete in the report. |
 | `security-blocked` | A hard safety rule stopped processing. | Not a scan target. Incident is documented in the report. |
-| `tool-missing` | Required helper binary not installed. | Not a scan target. Node is visible in the report. For MSI files, product metadata is still recorded because it is read directly from the MSI Property table, independently of `7zz`. |
+| `tool-missing` | Required helper binary not installed. | Not a scan target. Node is visible in the report. For MSI files, product metadata is still recorded because it is read directly from the MSI Property table, independently of `7z`. |
 
 Only `extracted` and `syft-native` become scan targets.
 

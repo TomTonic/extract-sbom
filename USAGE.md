@@ -172,7 +172,7 @@ mkdir -p out
 Environment expectation:
 
 - Linux host with `bwrap` available
-- required external tools (`7zz`, `unshield`) installed based on format usage
+- required external tools (`7z`, `unshield`) installed based on format usage
 
 Expected outputs:
 
@@ -318,16 +318,16 @@ The delivery file to analyze. Supported formats:
 
 | Format | Detection | Extraction tool |
 |---|---|---|
-| ZIP | Magic `PK\x03\x04` | 7zz |
-| TAR / GzipTAR / Bzip2TAR / XzTAR / ZstdTAR | Magic bytes / extension | 7zz |
-| CAB (Microsoft) | Magic `MSCF` | 7zz |
-| MSI / OLE compound doc | Magic `D0 CF 11 E0` | 7zz (metadata read directly) |
-| 7z | Magic `7z\xBC\xAF` | 7zz |
-| RAR | Magic `Rar!` | 7zz |
+| ZIP | Magic `PK\x03\x04` | 7z |
+| TAR / GzipTAR / Bzip2TAR / XzTAR / ZstdTAR | Magic bytes / extension | 7z |
+| CAB (Microsoft) | Magic `MSCF` | 7z |
+| MSI / OLE compound doc | Magic `D0 CF 11 E0` | 7z (metadata read directly) |
+| 7z | Magic `7z\xBC\xAF` | 7z |
+| RAR | Magic `Rar!` | 7z |
 | InstallShield CAB | Magic `ISc(` / naming `data*.cab` | unshield |
-| ISO 9660 | `.iso` extension | 7zz |
-| CPIO | Magic `070701`/`070702`/binary | 7zz |
-| Squashfs / Snap (`.snap`, `.squashfs`) | Magic `hsqs`/`sqsh` | unsquashfs (7zz fallback) |
+| ISO 9660 | `.iso` extension | 7z |
+| CPIO | Magic `070701`/`070702`/binary | 7z |
+| Squashfs / Snap (`.snap`, `.squashfs`) | Magic `hsqs`/`sqsh` | unsquashfs (7z fallback) |
 | AppImage | ELF + `AI` marker at offset 8 | not yet supported |
 
 Syft-native formats (JAR, WAR, EAR, RPM, DEB, APK, wheel, gem, crate, nupkg)
@@ -627,7 +627,7 @@ malicious or accidentally complex archives in CI.
 
 **`--unsafe`**
 
-Disable external extractor sandboxing. External tools (`7zz`, `unshield`, `unsquashfs`) run
+Disable external extractor sandboxing. External tools (`7z`, `unshield`, `unsquashfs`) run
 without isolation constraints.
 
 In this mode, containment relies on extractor behavior (for example 7-Zip path
