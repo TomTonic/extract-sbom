@@ -125,7 +125,7 @@ the Arch and Alpine packages. Homebrew has no weak-dependency mechanism, so
 unlike the `Recommends:` in the deb/rpm packages these are hard requirements.
 
 The cask also clears the `com.apple.quarantine` attribute that Homebrew Cask
-sets on everything it stages. Without that, macOS does not merely warn about
+sets on everything it stages (via a `postflight_steps` install step). Without that, macOS does not merely warn about
 the un-notarized binary - Gatekeeper kills it outright, and `extract-sbom
 --version` exits with code 137 and prints nothing at all. Integrity is not
 weakened by this: Homebrew has already verified the download against the

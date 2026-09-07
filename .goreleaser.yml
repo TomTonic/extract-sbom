@@ -127,21 +127,34 @@ homebrew_casks:
       - formula: sevenzip
       - formula: unshield
       - formula: squashfs
-    hooks:
-      post:
-        # Homebrew Cask sets com.apple.quarantine on everything it stages.
-        # These binaries are ad-hoc (linker) signed rather than Developer ID
-        # signed and notarized, so Gatekeeper does not just warn - it SIGKILLs
-        # the process, and `extract-sbom --version` dies with exit 137 and no
-        # output at all. Clearing the attribute is what makes the cask usable.
-        # The integrity guarantee does not rest on Apple here: Homebrew has
-        # already verified the download against the sha256 pinned above.
-        # must_succeed: false because xattr exits non-zero when the attribute
-        # is not present, which is the case on re-installs.
-        install: |
-          system_command "/usr/bin/xattr",
-                         args: ["-dr", "com.apple.quarantine", "#{staged_path}/extract-sbom"],
-                         must_succeed: false
+    # GoReleaser's `hooks:` emits Homebrew's `postflight` stanza, which brew
+    # now warns about on every single install ("Calling `postflight` is
+    # deprecated! Use `postflight_steps` instead") and will eventually refuse.
+    # No GoReleaser release emits the new stanza yet - v2.18.1 has no mention
+    # of it at all - so it is written out here verbatim instead.
+    #
+    # What it does: Homebrew Cask stamps com.apple.quarantine on everything it
+    # stages. These binaries are ad-hoc (linker) signed rather than Developer
+    # ID signed and notarized, so Gatekeeper does not warn about them - it
+    # SIGKILLs the process, and `extract-sbom --version` dies with exit 137
+    # and no output whatsoever. Clearing the attribute is what makes the cask
+    # usable at all.
+    #
+    # Integrity does not rest on Apple here: Homebrew has already checked the
+    # download against the sha256 pinned in this cask before the step runs.
+    # Paths are relative to the staged path (the install-steps DSL bases them
+    # there by default), `chdir: "."` puts xattr in that directory,
+    # writable_paths grants the sandboxed step write access to the one file it
+    # touches, and must_succeed: false covers the re-install case where the
+    # attribute is not present and xattr exits non-zero.
+    custom_block: |
+      postflight_steps do
+        run "/usr/bin/xattr",
+            args: ["-dr", "com.apple.quarantine", "extract-sbom"],
+            chdir: ".",
+            must_succeed: false,
+            writable_paths: ["extract-sbom"]
+      end
 
 checksum:
   name_template: checksums.txt
