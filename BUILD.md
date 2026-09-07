@@ -97,9 +97,11 @@ sibling project.
 | Homebrew cask | [`TomTonic/homebrew-tap`](https://github.com/TomTonic/homebrew-tap) | GoReleaser, pushing over SSH | during the tag run | `brew install TomTonic/tap/extract-sbom` |
 | apt / dnf / zypper / pacman / apk indices | [pkg.tomtonic.de](https://pkg.tomtonic.de) | [`TomTonic/pkg-repo`](https://github.com/TomTonic/pkg-repo), separately | within the hour | `apt install extract-sbom` etc. |
 
-The GitHub Release is the single source of truth. Everything else - the cask,
-every Linux index - points back at those assets by URL and SHA-256. Nothing
-re-builds the binary downstream.
+The GitHub Release is the single source of truth: nothing re-builds the binary
+downstream. How the two channels consume it differs, and that difference
+matters when withdrawing a release (see below) - the cask *links* to the
+release assets by URL and SHA-256, while `pkg-repo` *downloads* them and
+serves its own copies from `pkg.tomtonic.de`.
 
 ### How the Linux repository picks it up
 
@@ -154,15 +156,35 @@ there is no reject". Since withdrawing a bad release has to stay possible for a
 security tool, this project only publishes through channels it controls
 end-to-end.
 
-### The rule that follows from all of this
+### Withdrawing a release
 
-**Published release assets are never deleted or replaced, only superseded by a
-new version.** The cask and all five Linux indices reference assets by URL and
-checksum; removing one breaks every install that already points at it. If a
-release turns out to be wrong, tag a new one, and - if the bad version must be
-taken out of circulation - mark the old GitHub release as a prerelease, which
-makes `fetch-releases.sh` skip it on the next hourly run without breaking
-anything that already resolved it.
+**Mark it as a prerelease. Do not delete its assets.**
+
+Marking a GitHub release as a prerelease is enough to take it out of
+circulation: `fetch-releases.sh` in `pkg-repo` selects the two most recent
+non-draft, non-prerelease releases, so the next hourly rebuild drops it from
+every Linux index, and GitHub stops showing it as "latest". Add a note to the
+release body saying what was wrong and which version supersedes it.
+
+Deleting the assets is a separate act, and it is only actually dangerous in one
+place - but it is never useful, so don't:
+
+| Channel | References the GitHub assets? |
+|---|---|
+| `pkg.tomtonic.de` | **No.** `fetch-releases.sh` downloads each package and the site serves its own copy (`Filename: pool/…deb`), so the indices do not depend on the assets continuing to exist. |
+| Homebrew cask | **Yes, but only for the current version.** The tap holds exactly one `Casks/extract-sbom.rb`, rewritten by each release, pinning that version's URL and SHA-256. Deleting the assets of the release the tap currently points at breaks `brew install` until the next release; older releases are not referenced. |
+| Direct links | Yes - anything in docs, issues or a user's script that names an asset URL 404s. |
+
+The stronger reason to keep them is auditability rather than availability. This
+tool produces SBOMs and audit reports that people archive; being able to
+re-fetch the exact binary that produced a report, and check it against the
+`checksums.txt` recorded alongside it, is part of what makes those reports
+worth anything later.
+
+This is also why the project publishes nowhere that *forces* the opposite
+trade-off: on WinGet, Chocolatey or the Microsoft Store an accepted version
+cannot be withdrawn at all, so a bad release would stay installable no matter
+what is done here.
 
 ## Running Tests
 
