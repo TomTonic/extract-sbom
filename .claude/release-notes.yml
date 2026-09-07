@@ -1,0 +1,3 @@
+core_dependency:
+  module: github.com/anchore/syft
+  name: syft
