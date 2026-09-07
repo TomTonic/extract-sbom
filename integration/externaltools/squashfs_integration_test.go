@@ -96,7 +96,7 @@ func TestUnsquashfsIntegrationFallsBackTo7zWhenUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Only a fake 7zz is provided — `unsquashfs` is intentionally absent.
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 41
 outarg="$3"
 case "$outarg" in
@@ -122,8 +122,9 @@ printf 'payload' > "$outdir/extracted.bin"
 	if tree.Status != extract.StatusExtracted {
 		t.Fatalf("status = %v (%s), want %v", tree.Status, tree.StatusDetail, extract.StatusExtracted)
 	}
-	if tree.Tool != "7zz" {
-		t.Errorf("tool = %q, want %q (7-Zip fallback)", tree.Tool, "7zz")
+	wantTool, _ := extract.Resolve7zBinary()
+	if tree.Tool != wantTool {
+		t.Errorf("tool = %q, want %q (7-Zip fallback)", tree.Tool, wantTool)
 	}
 }
 

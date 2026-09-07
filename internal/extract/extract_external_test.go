@@ -36,8 +36,9 @@ func TestExtract7zMarksToolMissingWhenUnavailable(t *testing.T) {
 	if node.Status != StatusToolMissing {
 		t.Fatalf("status = %v, want %v", node.Status, StatusToolMissing)
 	}
-	if node.Tool != "7zz" {
-		t.Fatalf("tool = %q, want %q", node.Tool, "7zz")
+	wantTool, _ := resolve7zBinary()
+	if node.Tool != wantTool {
+		t.Fatalf("tool = %q, want %q", node.Tool, wantTool)
 	}
 }
 
@@ -71,8 +72,9 @@ func TestExtract7zUsesSandboxOutputAndSummarizesFiles(t *testing.T) {
 	if len(sb.calls) != 1 {
 		t.Fatalf("calls = %d, want 1", len(sb.calls))
 	}
-	if sb.calls[0].cmd != "7zz" {
-		t.Fatalf("cmd = %q, want %q", sb.calls[0].cmd, "7zz")
+	wantCmd, _ := resolve7zBinary()
+	if sb.calls[0].cmd != wantCmd {
+		t.Fatalf("cmd = %q, want %q", sb.calls[0].cmd, wantCmd)
 	}
 	if node.Status != StatusExtracted {
 		t.Fatalf("status = %v, want %v", node.Status, StatusExtracted)
@@ -191,8 +193,9 @@ func TestExtract7zToolMissingRecordsStatusCorrectly(t *testing.T) {
 	if tree.Status != StatusToolMissing {
 		t.Errorf("status = %v, want StatusToolMissing", tree.Status)
 	}
-	if tree.Tool != "7zz" {
-		t.Errorf("Tool = %q, want 7zz", tree.Tool)
+	wantTool, _ := resolve7zBinary()
+	if tree.Tool != wantTool {
+		t.Errorf("Tool = %q, want %q", tree.Tool, wantTool)
 	}
 }
 

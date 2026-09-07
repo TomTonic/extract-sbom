@@ -34,6 +34,18 @@ func prependPath(t *testing.T, dir string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+orig)
 }
 
+// writeFake7Zip installs the same stub under every name the resolver looks
+// for. The fake directory is only prepended to PATH, so a real 7-Zip further
+// down the PATH would otherwise win whenever it happens to carry the name the
+// resolver tries first - which is exactly what made these tests silently
+// exercise the host's 7-Zip when the candidate order changed.
+func writeFake7Zip(t *testing.T, dir, scriptBody string) {
+	t.Helper()
+	for _, name := range []string{"7z", "7zz", "7za"} {
+		writeExecutable(t, dir, name, scriptBody)
+	}
+}
+
 func createCABInput(t *testing.T, dir string) string {
 	t.Helper()
 	path := filepath.Join(dir, "input.cab")
@@ -71,7 +83,7 @@ func Test7zzIntegrationMaxFilesLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 41
 outarg="$3"
 case "$outarg" in
@@ -112,7 +124,7 @@ func Test7zzIntegrationMaxEntrySizeLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 51
 outarg="$3"
 case "$outarg" in
@@ -151,7 +163,7 @@ func Test7zzIntegrationSymlinkBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 61
 outarg="$3"
 case "$outarg" in
@@ -189,7 +201,7 @@ func Test7zzIntegrationSpecialFileBlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 71
 outarg="$3"
 case "$outarg" in
@@ -238,8 +250,9 @@ func Test7zzIntegrationToolMissingRecorded(t *testing.T) {
 	if tree.Status != extract.StatusToolMissing {
 		t.Fatalf("status = %v, want %v", tree.Status, extract.StatusToolMissing)
 	}
-	if tree.Tool != "7zz" {
-		t.Fatalf("tool = %q, want %q", tree.Tool, "7zz")
+	wantTool, _ := extract.Resolve7zBinary()
+	if tree.Tool != wantTool {
+		t.Fatalf("tool = %q, want %q", tree.Tool, wantTool)
 	}
 }
 
@@ -253,7 +266,7 @@ func TestIsolationDeniedSandboxIsDetectable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 [ "$1" = "x" ] || exit 81
 outarg="$3"
 outdir="${outarg#-o}"
@@ -397,7 +410,7 @@ func TestExternalToolCLIContractValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 echo "unexpected args: $*" >&2
 exit 64
 `)
@@ -413,7 +426,8 @@ exit 64
 	if tree.Status != extract.StatusFailed {
 		t.Fatalf("status = %v, want %v", tree.Status, extract.StatusFailed)
 	}
-	if !strings.Contains(tree.StatusDetail, "7zz extraction failed") {
+	sevenZip, _ := extract.Resolve7zBinary()
+	if !strings.Contains(tree.StatusDetail, sevenZip+" extraction failed") {
 		t.Fatalf("status detail = %q, want extraction failure marker", tree.StatusDetail)
 	}
 	if !strings.Contains(tree.StatusDetail, "unexpected args") {
@@ -431,7 +445,7 @@ func TestExternalToolHardCrashIsRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeExecutable(t, binDir, "7zz", `
+	writeFake7Zip(t, binDir, `
 echo "intentional crash" >&2
 kill -9 $$
 `)
@@ -447,7 +461,8 @@ kill -9 $$
 	if tree.Status != extract.StatusFailed {
 		t.Fatalf("status = %v, want %v", tree.Status, extract.StatusFailed)
 	}
-	if !strings.Contains(tree.StatusDetail, "7zz extraction failed") {
+	sevenZip, _ := extract.Resolve7zBinary()
+	if !strings.Contains(tree.StatusDetail, sevenZip+" extraction failed") {
 		t.Fatalf("status detail = %q, want extraction failure marker", tree.StatusDetail)
 	}
 	if !strings.Contains(tree.StatusDetail, "intentional crash") {

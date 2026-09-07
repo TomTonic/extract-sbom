@@ -118,10 +118,18 @@ by each release:
 brew install TomTonic/tap/extract-sbom
 ```
 
-`brew upgrade` picks up new releases automatically. This cask does not declare
-the optional external tools as Homebrew dependencies (to avoid pulling in tools
-most users won't need) - install them yourself if needed, see
-[section 7.1](#71-macos-homebrew).
+`brew upgrade` picks up new releases automatically. The cask pulls in the
+external tools (`sevenzip`, `unshield`, `squashfs`) as Homebrew dependencies,
+so the formats that need them work right after install - the same behaviour as
+the Arch and Alpine packages. Homebrew has no weak-dependency mechanism, so
+unlike the `Recommends:` in the deb/rpm packages these are hard requirements.
+
+The cask also clears the `com.apple.quarantine` attribute that Homebrew Cask
+sets on everything it stages. Without that, macOS does not merely warn about
+the un-notarized binary - Gatekeeper kills it outright, and `extract-sbom
+--version` exits with code 137 and prints nothing at all. Integrity is not
+weakened by this: Homebrew has already verified the download against the
+SHA-256 pinned in the cask before the attribute is removed.
 
 ## Linux / macOS: manual tar.gz download
 
@@ -219,7 +227,7 @@ environments when external tools are needed; see
 The binary itself has no external Go runtime dependencies. Certain input formats,
 however, require external tools at runtime:
 
-- 7-Zip (invoked as `7zz`, `7za` or `7z`, whichever is on `PATH` first): required for CAB, 7z, MSI payload, RAR, ISO, CPIO, TAR XZ/Zstd, and encrypted ZIP fallback extraction; also the Squashfs fallback extractor
+- 7-Zip (invoked as `7z`, `7zz` or `7za`, whichever is on `PATH` first): required for CAB, 7z, MSI payload, RAR, ISO, CPIO, TAR XZ/Zstd, and encrypted ZIP fallback extraction; also the Squashfs fallback extractor
 - `unshield`: required for InstallShield CAB extraction
 - `unsquashfs` (squashfs-tools): preferred extractor for Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`); 7-Zip is used as a fallback when it is absent
 - `bwrap` (Bubblewrap, Linux only): required for sandboxed external extraction unless `--unsafe` is used
@@ -243,17 +251,31 @@ extract-sbom --version
 Dependency checks:
 
 ```bash
-command -v 7zz || command -v 7za || command -v 7z || echo "7-Zip missing"
+command -v 7z || command -v 7zz || command -v 7za || echo "7-Zip missing"
 command -v unshield || echo "unshield missing"
 command -v unsquashfs || echo "unsquashfs missing (Squashfs/Snap; 7-Zip is the fallback)"
 command -v bwrap || echo "bwrap missing (Linux sandbox mode)"
 ```
 
-Note that the 7-Zip binary is named differently across distributions:
-extract-sbom tries `7zz`, then `7za`, then `7z`, and uses whichever it
-finds first. Only Alpine's `p7zip` installs it as `7zz`; Debian/Ubuntu,
-Fedora and Arch ship it as `7z`/`7za` - so checking only for `7zz` would
-wrongly report it as missing on most distributions.
+Note that the 7-Zip binary is named differently across distributions.
+extract-sbom tries `7z`, then `7zz`, then `7za`, and uses whichever it
+finds first. That order follows what is actually installed after pulling in
+the dependency these packages declare:
+
+| Platform | `7z` | `7za` | `7zz` |
+|---|---|---|---|
+| Debian 13, Ubuntu 24.04 | yes | yes | - |
+| Fedora 41 | yes | yes | - |
+| Arch | yes | yes | - |
+| Alpine 3.22 / 3.23 / edge | yes | - | yes |
+| macOS (`sevenzip` + `p7zip`) | yes | yes | yes |
+
+`7z` is present everywhere, which is why it is tried first. Alpine is the one
+platform that ships `7zz` instead of `7za`. `7za` is checked last because it
+is the "standalone" build with a reduced codec set - the least capable of the
+three, and worth reaching for only when neither of the others exists.
+Checking only for `7zz` would wrongly report 7-Zip as missing on every
+platform except Alpine.
 
 ## 6. How Missing Dependencies Show Up
 
@@ -271,10 +293,10 @@ Fix:
 ### 6.2 Missing 7-Zip
 
 When input requires 7-Zip-backed extraction (e.g., CAB, 7z, MSI, RAR, encrypted ZIP)
-and none of `7zz`, `7za`, `7z` is on `PATH`:
+and none of `7z`, `7zz`, `7za` is on `PATH`:
 
 - extraction node status becomes `tool-missing`
-- status detail mentions `7zz (7-Zip) is not installed` - `7zz` is the
+- status detail mentions `7z (7-Zip) is not installed` - `7z` is the
   canonical name used in messages, not necessarily the one your distribution
   installs
 - run may become partial (exit code 1) depending on policy/results
@@ -307,7 +329,7 @@ If you pass `--unsafe`, extract-sbom will run external tools unsandboxed and pri
 ### 7.1 macOS (Homebrew)
 
 ```bash
-brew install p7zip unshield squashfs
+brew install sevenzip unshield squashfs
 ```
 
 Sandbox note:
@@ -337,7 +359,7 @@ If a package is not found, search for the equivalent `7zip`, `unshield`, `squash
 ### 7.4 Arch Linux
 
 ```bash
-sudo pacman -S p7zip unshield squashfs-tools bubblewrap
+sudo pacman -S 7zip unshield squashfs-tools bubblewrap
 ```
 
 ### 7.5 Alpine Linux

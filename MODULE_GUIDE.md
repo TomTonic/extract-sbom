@@ -31,20 +31,20 @@ Additional Go compression modules (only if the corresponding TAR variant must be
 
 | Binary | Purpose | Rationale |
 |---|---|---|
-| **7-Zip** (`7zz`) | Extract ZIP, TAR (all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO; Squashfs fallback | 7-Zip is the single extraction engine for all archive formats. No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. Using 7-Zip for all formats ensures a uniform security posture (sandboxed, post-extraction safeguard walk). |
+| **7-Zip** (`7z`) | Extract ZIP, TAR (all compressed variants), CAB, MSI, 7z, RAR, ISO, CPIO; Squashfs fallback | 7-Zip is the single extraction engine for all archive formats. No viable pure-Go library exists for Microsoft CAB or MSI (OLE compound document) formats. Using 7-Zip for all formats ensures a uniform security posture (sandboxed, post-extraction safeguard walk). |
 | **unshield** | Extract InstallShield CAB files (`data1.cab` + `data1.hdr`) | InstallShield uses a proprietary cabinet format incompatible with Microsoft CABs. `unshield` (MIT, actively maintained, v1.6.2) is the only tool capable of extracting these. Available via Linux package managers and Homebrew. |
 | **unsquashfs** | Extract Squashfs filesystem images and Snap packages (`.snap`, `.squashfs`) | Preferred extractor for Squashfs; 7-Zip is the fallback when `unsquashfs` is not installed. Part of the `squashfs-tools` package on Debian/Ubuntu and Homebrew. |
 | **Grype** (`grype`) | Optional vulnerability scan of the generated SBOM (`--grype`) | Grype provides stable JSON output with per-match package identity and vulnerability source metadata. Using the generated SBOM as input preserves deterministic component identities and avoids rescanning the extracted filesystem. |
-| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7zz`, `unshield`, `unsquashfs`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
+| **Bubblewrap** (`bwrap`) | Sandbox for all external binary invocations (`7z`, `unshield`, `unsquashfs`) | Lightweight Linux namespace sandbox (LGPL-2.1). Used by Flatpak. Provides mount, PID, network, and IPC namespace isolation without requiring root or Docker. |
 
 ### 1.3 Tool Availability Strategy
 
 | Mechanism | Available | Not Available |
 |---|---|---|
-| `bwrap` | All external binary invocations (`7zz`, `unshield`, `unsquashfs`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
-| `7zz` | All archive extraction (ZIP, TAR, CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs fallback) proceeds normally. | All archives that require 7zz are recorded as non-extractable. MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
+| `bwrap` | All external binary invocations (`7z`, `unshield`, `unsquashfs`) are sandboxed | User must pass `--unsafe` flag; extraction runs unsandboxed. Prominently flagged in report. |
+| `7z` | All archive extraction (ZIP, TAR, CAB, MSI, 7z, RAR, ISO, CPIO, Squashfs fallback) proceeds normally. | All archives that require 7z are recorded as non-extractable. MSI container metadata is still read directly from the MSI database and added to the SBOM. Audit report notes missing tool. |
 | `unshield` | InstallShield CAB extraction proceeds normally. | InstallShield CABs are recorded as non-extractable components in the SBOM. Audit report notes missing tool. |
-| `unsquashfs` | Squashfs/Snap extraction proceeds normally. | Extraction falls back to 7zz; if 7zz also cannot handle the image, the node is recorded as tool-missing. |
+| `unsquashfs` | Squashfs/Snap extraction proceeds normally. | Extraction falls back to 7z; if 7z also cannot handle the image, the node is recorded as tool-missing. |
 | `grype` (only if `--grype`) | SBOM is scanned and vulnerability matches are correlated to component BOM refs in the report. | SBOM and report are still produced; report marks vulnerability enrichment as unavailable and includes root-cause metadata (tool missing, execution error, or DB issue). |
 | Syft (library) | Required | Fatal error. |
 
@@ -326,7 +326,7 @@ type FormatInfo struct {
     MIMEType   string
     Extension  string
     SyftNative bool     // true if Syft already understands this format (JAR, RPM, DEB, etc.)
-    Extractable bool   // true if we can extract it (7zz, unshield, or unsquashfs)
+    Extractable bool   // true if we can extract it (7z, unshield, or unsquashfs)
 }
 
 func Identify(ctx context.Context, path string) (FormatInfo, error)
@@ -429,7 +429,7 @@ bwrap \
   --unshare-all \
   --new-session \
   --die-with-parent \
-  -- 7zz x /input/<filename> -o/output
+  -- 7z x /input/<filename> -o/output
 ```
 
 **Design decisions:**
@@ -454,7 +454,7 @@ bwrap \
 - If unavailable and `cfg.Unsafe == false`, `Resolve()` returns
   `DeniedSandbox` plus a non-nil error so the condition is explicit and
   deterministic in reports.
-- The same sandbox interface is used for both `7zz` and `unshield` invocations.
+- The same sandbox interface is used for both `7z` and `unshield` invocations.
 - Every invocation is logged with the sandbox name for the audit trail.
 
 ---
@@ -480,7 +480,7 @@ type ExtractionNode struct {
     Children      []*ExtractionNode
     Metadata      *ContainerMetadata // non-nil for formats with structured metadata (MSI)
     InstallerHint string         // installer-semantic enrichment hint (when available)
-    Tool          string         // "7zz" | "unshield" | "syft"
+    Tool          string         // "7z" | "unshield" | "syft"
     SandboxUsed   string         // sandbox mechanism used for external tools
     Duration      time.Duration
     EntriesCount  int
@@ -509,7 +509,7 @@ func Extract(ctx context.Context, inputPath string, cfg config.Config, sandbox s
 - `extract.go`: package-level extraction model overview
 - `types.go`: extraction statuses and node metadata structures
 - `extract_flow.go`: recursive traversal, status assignment order, policy handling
-- `extract_external.go`: sandboxed `7zz`/`unshield` integration and tool lookup
+- `extract_external.go`: sandboxed `7z`/`unshield` integration and tool lookup
 - `msi.go`: direct MSI metadata parsing (`_StringPool`, `_StringData`, `Property`)
 
 **Syft-first dispatch logic:**
@@ -526,11 +526,11 @@ For each file encountered:
      → do NOT extract
   4. If SyftNative == false AND file is a recognized container format:
      → extract:
-        ├─ ZIP, TAR, compressed TAR → 7zz via sandbox (post-extraction safeguard walk,
+        ├─ ZIP, TAR, compressed TAR → 7z via sandbox (post-extraction safeguard walk,
         │                             password attempts: none, then configured list)
-        ├─ CAB, MSI, 7z, RAR,  → 7zz via sandbox (post-extraction safeguard walk,
+        ├─ CAB, MSI, 7z, RAR,  → 7z via sandbox (post-extraction safeguard walk,
         │  ISO, CPIO              password attempts: none, then configured list)
-        ├─ Squashfs / Snap     → unsquashfs via sandbox; 7zz fallback if unsquashfs absent
+        ├─ Squashfs / Snap     → unsquashfs via sandbox; 7z fallback if unsquashfs absent
         ├─ AppImage            → tool-missing (extraction not yet supported)
         ├─ InstallShield CAB   → unshield via sandbox (post-extraction safeguard walk,
         │                         password attempts: none, then configured list)
@@ -542,10 +542,10 @@ For each file encountered:
 
 **Example:** A delivery ZIP contains a DLL, a JAR, and a nested MSI.
 
-- ZIP → extracted with 7zz via sandbox
+- ZIP → extracted with 7z via sandbox
 - DLL → plain leaf, cataloged when Syft scans the extracted directory
 - JAR → SyftNative (Syft's Java cataloger handles it directly)
-- MSI → Property table read directly from the original file → extracted with 7zz via sandbox
+- MSI → Property table read directly from the original file → extracted with 7z via sandbox
   when available → produces internal CABs → recurse
 
 **Design decisions:**
@@ -1265,7 +1265,7 @@ delivery without re-extracting it.
 2. `config`: types, defaults, `Validate()`
 3. `identify`: ZIP/TAR/GzipTAR detection via file magic bytes + Syft-native format list
 4. `safeguard`: path validation, symlink check, ratio check
-5. `extract`: single-level extraction for ZIP/TAR via `7zz` (external, sandboxed)
+5. `extract`: single-level extraction for ZIP/TAR via `7z` (external, sandboxed)
 6. `scan`: Syft library-mode integration (Syft-first: native leaves + extracted dirs)
 7. `assembly`: minimal unified BOM with root component, deterministic BOMRefs,
   baseline `extract-sbom:delivery-path` properties for all produced components,
