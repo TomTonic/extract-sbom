@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/CycloneDX/cyclonedx-go v0.12.0
-	github.com/anchore/syft v1.51.1
+	github.com/anchore/syft v1.52.0
 	github.com/glebarez/go-sqlite v1.23.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.24
@@ -51,10 +51,10 @@ require (
 	github.com/anchore/go-macholibre v0.1.1 // indirect
 	github.com/anchore/go-rpmdb v0.2.0 // indirect
 	github.com/anchore/go-struct-converter v0.2.1 // indirect
-	github.com/anchore/go-sync v0.1.1 // indirect
+	github.com/anchore/go-sync v0.1.2 // indirect
 	github.com/anchore/go-version v1.2.2-0.20200701162849-18adb9c92b9b // indirect
 	github.com/anchore/packageurl-go v0.2.0 // indirect
-	github.com/anchore/stereoscope v0.3.1 // indirect
+	github.com/anchore/stereoscope v0.3.2 // indirect
 	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/apparentlymart/go-textseg/v17 v17.0.1 // indirect
@@ -262,14 +262,14 @@ require (
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
-	golang.org/x/mod v0.40.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
