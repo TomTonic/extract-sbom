@@ -1,3 +1,5 @@
 core_dependencies:
   - module: github.com/anchore/syft
     name: syft
+  - module: github.com/richardlehane/mscfb
+    name: mscfb
