@@ -7,7 +7,4 @@ changelog_sources:
   - module: github.com/anchore/syft
     url: https://github.com/anchore/syft/releases
 known_not_applicable:
-  # Reported by grype for golang.org/x/crypto; govulncheck shows the vulnerable
-  # code is never called by extract-sbom.
-  - id: GO-2026-5932
-    reason: x/crypto vulnerable code is not called per govulncheck
+
