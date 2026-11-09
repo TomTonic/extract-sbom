@@ -32,11 +32,12 @@ Existing SBOM tools cover the development and build side of the supply chain wel
 but none address the inspection of an already-packaged, opaque vendor delivery:
 
 - **[Syft](https://github.com/anchore/syft)** generates SBOMs from container images,
-  source directories, and simple archive formats. It does not recursively unpack
-  deeply nested archives or installer formats (MSI, CAB, InstallShield), produces no
-  auditable report, and provides no sandboxing for untrusted inputs. extract-sbom uses
-  Syft internally as a component cataloging engine, but Syft alone cannot handle the
-  delivery inspection workflow.
+  source directories, and simple archive formats. It can optionally recurse into nested
+  ZIP and TAR archives (disabled by default, no password support), but does not unpack
+  installer formats (MSI, CAB, InstallShield), other archive formats (7zip, RAR, etc.),
+  produces no auditable report, and provides no sandboxing for untrusted inputs.
+  extract-sbom uses Syft internally as a component cataloging engine, but Syft alone
+  cannot handle the delivery inspection workflow.
 
 - **[cyclonedx-cli](https://github.com/CycloneDX/cyclonedx-cli)** is a BOM
   manipulation tool for converting, merging, diffing, validating, and signing existing
@@ -62,7 +63,7 @@ inspection: one file in, one consolidated CycloneDX SBOM and one auditable repor
 | Feature | extract-sbom | Syft | cyclonedx-cli | microsoft/sbom-tool | jimmykarily/sbom-extractor |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Designed for incoming delivery inspection | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Recursive nested archive extraction | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Recursive nested archive extraction | ✓ | ~ (ZIP/TAR only, opt-in) | ✗ | ✗ | ✗ |
 | MSI / CAB / InstallShield / ISO / CPIO / Squashfs support | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Single delivery file in → consolidated SBOM out | ✓ | ✗ | ✗ | ✗ | ✗ |
 | Auditable extraction report (Markdown / HTML / JSON / SARIF) | ✓ | ✗ | ✗ | ✗ | ✗ |

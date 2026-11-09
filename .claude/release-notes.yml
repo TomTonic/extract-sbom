@@ -6,5 +6,13 @@ core_dependencies:
 changelog_sources:
   - module: github.com/anchore/syft
     url: https://github.com/anchore/syft/releases
+  - module: github.com/spf13/pflag
+    url: https://github.com/spf13/pflag/releases
 known_not_applicable:
-
+  - id: GO-2026-6905
+    reason: >-
+      github.com/blakesmith/ar (transitive via Syft's Debian cataloger) panics on
+      a negative member size. extract-sbom never calls ar directly (the
+      govulncheck trace through identify.go is interface-dispatch noise), and
+      Syft's generic cataloger recovers parser panics and records the file as
+      an unknown, so a hostile .deb costs that one file's package data, not the run.
