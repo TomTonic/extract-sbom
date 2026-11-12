@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/CycloneDX/cyclonedx-go v0.12.0
-	github.com/anchore/syft v1.57.0
+	github.com/anchore/syft v1.57.1
 	github.com/glebarez/go-sqlite v1.23.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.24
