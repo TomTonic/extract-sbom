@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/CycloneDX/cyclonedx-go v0.12.0
-	github.com/anchore/syft v1.57.1
+	github.com/anchore/syft v1.57.2
 	github.com/glebarez/go-sqlite v1.23.0
 	github.com/google/uuid v1.6.0
 	github.com/mattn/go-isatty v0.0.24
@@ -56,7 +56,7 @@ require (
 	github.com/anchore/go-sync v0.1.2 // indirect
 	github.com/anchore/go-version v1.2.2-0.20200701162849-18adb9c92b9b // indirect
 	github.com/anchore/packageurl-go v0.2.0 // indirect
-	github.com/anchore/stereoscope v0.4.1 // indirect
+	github.com/anchore/stereoscope v0.4.2 // indirect
 	github.com/andybalholm/brotli v1.3.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/apparentlymart/go-textseg/v17 v17.0.1 // indirect
@@ -64,8 +64,8 @@ require (
 	github.com/aquasecurity/go-version v0.0.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.48.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.27 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.33.18 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.21.0 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.33.19 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.21.1 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.12 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.12 // indirect
@@ -120,7 +120,7 @@ require (
 	github.com/deitch/magic v1.0.0 // indirect
 	github.com/diskfs/go-diskfs v1.9.4 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v29.9.3+incompatible // indirect
+	github.com/docker/cli v29.10.0+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.13 // indirect
 	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -236,7 +236,7 @@ require (
 	github.com/sassoftware/go-rpmutils v0.4.0 // indirect
 	github.com/scylladb/go-set v1.0.3-0.20200225121959-cc7b2070d91e // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.1 // indirect
-	github.com/sergi/go-diff v1.4.0 // indirect
+	github.com/sergi/go-diff v1.4.5 // indirect
 	github.com/shopspring/decimal v1.6.0 // indirect
 	github.com/sigstore/fulcio v1.10.1 // indirect
 	github.com/sigstore/protobuf-specs v0.5.2 // indirect
@@ -300,9 +300,9 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/api v0.315.0 // indirect
-	google.golang.org/genproto v0.0.0-20261110000943-09e21b237f2c // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20261110000943-09e21b237f2c // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261110000943-09e21b237f2c // indirect
+	google.golang.org/genproto v0.0.0-20261116203732-fd2c7689a808 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20261116203732-fd2c7689a808 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261116203732-fd2c7689a808 // indirect
 	google.golang.org/grpc v1.86.0-dev // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
